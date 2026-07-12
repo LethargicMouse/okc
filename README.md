@@ -9,3 +9,5 @@ That's all there is to it.
 
 ## Roadmap
 - [x] lex `resources/empty.ok`
+- [ ] parse `resources/empty.ok`
+- [ ] codegen for `resources/empty.ok`
