@@ -23,6 +23,20 @@ pub enum Lexeme<'a> {
     Eof,
     Error,
 }
+impl<'a> Lexeme<'a> {
+    pub fn describe(&self) -> &'a str {
+        match self {
+            Name(n) => n,
+            ParL => "(",
+            ParR => ")",
+            CurL => "{",
+            CurR => "}",
+            Semicolon => ";",
+            Eof => "<eof>",
+            _ => unreachable!(),
+        }
+    }
+}
 
 struct Lexer<'a> {
     code: &'a str,
