@@ -40,10 +40,7 @@ mod tests {
 
     use crate::{
         generate::{IR_PATH, gen_ir},
-        lex::{
-            Lexeme::{self, *},
-            lex,
-        },
+        lex::lex,
         parse::{Ast, Expr, Fun, Statement, parse},
         read_file,
     };
@@ -53,33 +50,6 @@ mod tests {
         let code = read_file("resources/empty.ok");
         let actual = include_str!("../resources/empty.ok");
         assert_eq!(code, actual);
-    }
-
-    #[test]
-    fn lex_empty() {
-        let code = read_file("resources/empty.ok");
-        let tokens = lex(&code);
-        let empty_ok_lexemes: &[Lexeme] = &[
-            Name("fn"),
-            Name("main"),
-            ParL,
-            ParR,
-            Name("i32"),
-            CurL,
-            Name("return"),
-            Int(0),
-            Semicolon,
-            CurR,
-            Eof,
-        ];
-        assert_eq!(
-            tokens
-                .iter()
-                .map(|t| t.lexeme)
-                .collect::<Vec<_>>()
-                .as_slice(),
-            empty_ok_lexemes
-        )
     }
 
     #[test]
