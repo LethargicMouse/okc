@@ -1,10 +1,10 @@
-use std::{cmp::Ordering, process::exit};
+use std::{cmp::Ordering, fmt::Display};
 
 use crate::{
     RED, RESET,
     lex::{
         Lexeme::{self, *},
-        Token,
+        Location, Token,
     },
 };
 
@@ -29,9 +29,9 @@ pub enum Expr {
     Int(i64),
 }
 
-pub fn parse(tokens: Vec<Token>) -> Ast {
+pub fn parse<'a>(tokens: Vec<Token<'a>>) -> Result<Ast<'a>, ParseError<'a>> {
     let mut parser = Parser::new(tokens);
-    parser.ast().unwrap_or_else(|_| parser.die())
+    parser.ast().map_err(|_| parser.error())
 }
 
 #[derive(Default)]
@@ -143,11 +143,123 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn die(&self) -> ! {
-        eprintln!(
-            "{RED}error: parser failed: {} {:?}{RESET}",
-            self.err_cursor, self.err_msgs
-        );
-        exit(1)
+    fn error(&self) -> ParseError<'a> {
+        ParseError {
+            location: self.tokens[self.err_cursor].location,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        lex::{Meta, Pos, lex},
+        read_file,
+    };
+
+    #[test]
+    fn parse_empty() {
+        let code = read_file("resources/empty.ok");
+        let meta = Meta {
+            name: "resources/empty.ok",
+            lines: code.lines().collect(),
+        };
+        let tokens = lex(&code, &meta);
+        let ast = parse(tokens);
+        let empty_ast = Ok(Ast {
+            funs: vec![Fun {
+                name: "main",
+                body: vec![Statement::Return(Expr::Int(0))],
+            }],
+        });
+        assert_eq!(ast, empty_ast);
+    }
+
+    #[test]
+    fn parse_two_funs() {
+        let code = read_file("resources/two_funs.ok");
+        let meta = Meta {
+            name: "two_funs.ok",
+            lines: code.lines().collect(),
+        };
+        let tokens = lex(&code, &meta);
+        let expected = Ok(Ast {
+            funs: vec![
+                Fun {
+                    name: "fun_1",
+                    body: vec![Statement::Return(Expr::Int(123))],
+                },
+                Fun {
+                    name: "__fun_n2_",
+                    body: vec![
+                        Statement::Return(Expr::Int(321)),
+                        Statement::Return(Expr::Int(444)),
+                    ],
+                },
+            ],
+        });
+        let found = parse(tokens);
+        assert_eq!(expected, found)
+    }
+
+    #[test]
+    fn parse_fun_wrong_missing() {
+        let code = read_file("resources/fun_wrong_missing.ok");
+        let meta = Meta {
+            name: "resources/fun_wrong_missing.ok",
+            lines: code.lines().collect(),
+        };
+        let tokens = lex(&code, &meta);
+        let expected = Err(ParseError {
+            location: Location {
+                start: Pos { line: 2, symbol: 3 },
+                end: Pos { line: 2, symbol: 9 },
+                meta: &meta,
+            },
+        });
+        let found = parse(tokens);
+        assert_eq!(expected, found)
+    }
+
+    #[test]
+    fn parse_fun_wrong_extra() {
+        let code = read_file("resources/fun_wrong_extra.ok");
+        let meta = Meta {
+            name: "resources",
+            lines: code.lines().collect(),
+        };
+        let tokens = lex(&code, &meta);
+        let expected = Err(ParseError {
+            location: Location {
+                start: Pos {
+                    line: 1,
+                    symbol: 10,
+                },
+                end: Pos {
+                    line: 1,
+                    symbol: 11,
+                },
+                meta: &meta,
+            },
+        });
+        let found = parse(tokens);
+        assert_eq!(expected, found)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ParseError<'a> {
+    location: Location<'a>,
+}
+
+impl Display for ParseError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{RED}error:{RESET} failed to parse {}\n  expected:",
+            self.location
+        )?;
+        Ok(())
     }
 }

@@ -4,7 +4,11 @@ mod parse;
 
 use std::{env::args, fs::File, io::Read, process::exit};
 
-use crate::{generate::gen_ir, lex::lex, parse::parse};
+use crate::{
+    generate::gen_ir,
+    lex::{Meta, lex},
+    parse::parse,
+};
 
 fn main() {
     let mut args = args();
@@ -13,8 +17,15 @@ fn main() {
     match args.next() {
         Some(path) => {
             let code = read_file(&path);
-            let tokens = lex(&code);
-            let ast = parse(tokens);
+            let meta = Meta {
+                name: &path,
+                lines: code.lines().collect(),
+            };
+            let tokens = lex(&code, &meta);
+            let ast = parse(tokens).unwrap_or_else(|e| {
+                eprintln!("{e}");
+                exit(1)
+            });
             gen_ir(ast);
         }
         None => {
@@ -40,8 +51,8 @@ mod tests {
 
     use crate::{
         generate::{IR_PATH, gen_ir},
-        lex::lex,
-        parse::{Ast, Expr, Fun, Statement, parse},
+        lex::{Meta, lex},
+        parse::parse,
         read_file,
     };
 
@@ -53,24 +64,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_empty() {
-        let code = read_file("resources/empty.ok");
-        let tokens = lex(&code);
-        let ast = parse(tokens);
-        let empty_ast = Ast {
-            funs: vec![Fun {
-                name: "main",
-                body: vec![Statement::Return(Expr::Int(0))],
-            }],
-        };
-        assert_eq!(ast, empty_ast);
-    }
-
-    #[test]
     fn generate_empty() {
         let code = read_file("resources/empty.ok");
-        let tokens = lex(&code);
-        let ast = parse(tokens);
+        let meta = Meta {
+            name: "resources/empty.ok",
+            lines: code.lines().collect(),
+        };
+        let tokens = lex(&code, &meta);
+        let ast = parse(tokens).unwrap_or_else(|e| panic!("{e}"));
         create_dir_all("build").unwrap();
         gen_ir(ast);
         let generated = read_file(IR_PATH);
