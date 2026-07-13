@@ -3,7 +3,7 @@ mod lex;
 mod parse;
 mod source;
 
-use std::{env::args, fs::File, io::Read, process::exit};
+use std::{env::args, fmt::Display, fs::File, io::Read, process::exit};
 
 use crate::{
     codegen::{IR_PATH, gen_ir},
@@ -17,21 +17,22 @@ fn main() {
     // skip exec name
     args.next();
     match args.next() {
-        Some(path) => {
-            let code = read_file(&path);
-            let meta = meta(&path, &code);
-            let tokens = lex(&code, &meta);
-            let ast = parse(tokens).unwrap_or_else(|e| {
-                eprintln!("{e}");
-                exit(1)
-            });
-            gen_ir(ast, IR_PATH);
-        }
-        None => {
-            eprintln!("{RED}error:{RESET} no source path given");
-            exit(1)
-        }
+        Some(path) => compile(&path),
+        None => die("{RED}error:{RESET} no source path given"),
     }
+}
+
+fn compile(path: &str) {
+    let code = read_file(path);
+    let meta = meta(path, &code);
+    let tokens = lex(&code, &meta);
+    let ast = parse(tokens).unwrap_or_else(|e| die(e));
+    gen_ir(ast, IR_PATH);
+}
+
+fn die(e: impl Display) -> ! {
+    eprintln!("{e}");
+    exit(1)
 }
 
 const RED: &str = "\x1b[0;31m";
