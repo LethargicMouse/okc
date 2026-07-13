@@ -55,10 +55,12 @@ fn gen_expr<T: Write>(out: &mut T, expr: Expr) -> io::Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::{lex::lex, parse::parse, read_file, source::Meta};
     use std::fs::create_dir_all;
+
+    pub const EMPTY_IR: &str = "\ndefine i32 @main() {\nentry:\nret i32 0\n}";
 
     #[test]
     fn generate_empty() {
@@ -72,7 +74,7 @@ mod tests {
         create_dir_all("build").unwrap();
         gen_ir(ast, "build/test_empty.ll");
         let generated = read_file("build/test_empty.ll");
-        let expected = "\ndefine i32 @main() {\nentry:\nret i32 0\n}";
+        let expected = EMPTY_IR;
         assert_eq!(generated, expected);
     }
 

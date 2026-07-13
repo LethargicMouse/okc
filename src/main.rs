@@ -13,6 +13,7 @@ use crate::{
     source::meta,
 };
 
+// tested
 fn main() {
     let mut args = args();
     // skip exec name
@@ -23,6 +24,7 @@ fn main() {
     }
 }
 
+// tested
 fn compile(path: &str) {
     let code = read_file(path);
     let meta = meta(path, &code);
@@ -31,6 +33,7 @@ fn compile(path: &str) {
     gen_ir(ast, IR_PATH);
 }
 
+// untestable lol
 fn die(e: impl Display) -> ! {
     eprintln!("{e}");
     exit(1)
@@ -39,6 +42,7 @@ fn die(e: impl Display) -> ! {
 const RED: &str = "\x1b[0;31m";
 const RESET: &str = "\x1b[0m";
 
+// tested
 fn read_file(path: &str) -> String {
     let mut file = File::open(path).unwrap();
     let mut res = String::new();
@@ -49,11 +53,18 @@ fn read_file(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::codegen::tests::EMPTY_IR;
 
     #[test]
-    fn read_empty() {
+    fn test_read_empty() {
         let code = read_file("resources/empty.ok");
         let actual = include_str!("../resources/empty.ok");
         assert_eq!(code, actual);
+    }
+
+    #[test]
+    fn test_compile() {
+        compile("resources/empty.ok");
+        assert_eq!(EMPTY_IR, read_file(IR_PATH))
     }
 }
