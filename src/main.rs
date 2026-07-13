@@ -13,16 +13,7 @@ use crate::{
     parse::parse,
 };
 
-fn main() {
-    let code = read_file("resources/empty.ok");
-    let tokens = lex(&code);
-    let ast = parse(tokens);
-    create_dir_all("build").unwrap();
-    gen_ir(ast);
-    let generated = read_file(IR_PATH);
-    let expected = "define i32 @main() {\nentry:\nret i32 0\n}";
-    assert_eq!(generated, expected);
-}
+fn main() {}
 
 const RED: &str = "\x1b[0;31m";
 const RESET: &str = "\x1b[0m";
@@ -36,7 +27,10 @@ fn read_file(path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::create_dir_all;
+
     use crate::{
+        generate::{IR_PATH, gen_ir},
         lex::{
             Lexeme::{self, *},
             lex,
@@ -91,5 +85,17 @@ mod tests {
             }],
         };
         assert_eq!(ast, empty_ast);
+    }
+
+    #[test]
+    fn generate_empty() {
+        let code = read_file("resources/empty.ok");
+        let tokens = lex(&code);
+        let ast = parse(tokens);
+        create_dir_all("build").unwrap();
+        gen_ir(ast);
+        let generated = read_file(IR_PATH);
+        let expected = "define i32 @main() {\nentry:\nret i32 0\n}";
+        assert_eq!(generated, expected);
     }
 }
