@@ -1,4 +1,4 @@
-mod generate;
+mod codegen;
 mod lex;
 mod parse;
 mod source;
@@ -6,7 +6,7 @@ mod source;
 use std::{env::args, fs::File, io::Read, process::exit};
 
 use crate::{
-    generate::{IR_PATH, gen_ir},
+    codegen::{IR_PATH, gen_ir},
     lex::lex,
     parse::parse,
     source::meta,
