@@ -44,12 +44,15 @@ pub enum Lexeme<'a> {
 impl<'a> Lexeme<'a> {
     pub fn describe(&self) -> &'a str {
         match self {
-            Name(n) => n,
-            ParL => "(",
-            ParR => ")",
-            CurL => "{",
-            CurR => "}",
-            Semicolon => ";",
+            Name("fn") => "`fn`",
+            // FIXME should not be here, gotta fix the parser msgs
+            Name("return") => "`return`",
+            Name("i32") => "`i32`",
+            ParL => "`(`",
+            ParR => "`)`",
+            CurL => "`{`",
+            CurR => "`}`",
+            Semicolon => "`;`",
             Eof => "<eof>",
             _ => unreachable!(),
         }

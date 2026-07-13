@@ -144,9 +144,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn error(&self) -> ParseError<'a> {
+    fn error(self) -> ParseError<'a> {
         ParseError {
             location: self.tokens[self.err_cursor].location,
+            msgs: self.err_msgs,
         }
     }
 }
@@ -213,6 +214,7 @@ mod tests {
                 end: Pos { line: 2, symbol: 9 },
                 meta: &meta,
             },
+            msgs: vec!["`{`"],
         });
         let found = parse(tokens);
         assert_eq!(expected, found)
@@ -236,6 +238,7 @@ mod tests {
                 },
                 meta: &meta,
             },
+            msgs: vec!["`i32`"],
         });
         let found = parse(tokens);
         assert_eq!(expected, found)
@@ -245,6 +248,7 @@ mod tests {
 #[derive(Debug, PartialEq)]
 pub struct ParseError<'a> {
     location: Location<'a>,
+    msgs: Vec<&'a str>,
 }
 
 impl Display for ParseError<'_> {
@@ -254,6 +258,9 @@ impl Display for ParseError<'_> {
             "{RED}error:{RESET} failed to parse {}\n  expected:",
             self.location
         )?;
+        for msg in &self.msgs {
+            write!(f, "\n    {msg}")?;
+        }
         Ok(())
     }
 }
