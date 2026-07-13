@@ -6,9 +6,3 @@
 - It's like Rust but it's **not crazed with memory safety**.
 
 That's all there is to it.
-
-## Roadmap
-- [x] lex `resources/empty.ok`
-- [x] parse `resources/empty.ok`
-- [ ] codegen for `resources/empty.ok`
-- [ ] cli working for `resources/empty.ok`

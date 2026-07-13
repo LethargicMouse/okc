@@ -1,14 +1,24 @@
+mod generate;
 mod lex;
 mod parse;
 
-use std::{fs::File, io::Read};
-
-use crate::{
-    lex::lex,
-    parse::{Ast, Expr, Fun, Statement, parse},
+use std::{
+    fs::{File, create_dir_all},
+    io::Read,
 };
 
-fn main() {}
+use crate::{generate::gen_ir, lex::lex, parse::parse};
+
+fn main() {
+    let code = read_file("resources/empty.ok");
+    let tokens = lex(&code);
+    let ast = parse(tokens);
+    create_dir_all("build").unwrap();
+    gen_ir(ast);
+    let generated = read_file("build/out.ll");
+    let expected = "define i32 @main() {\nentry:\nret i32 0\n}";
+    assert_eq!(generated, expected);
+}
 
 const RED: &str = "\x1b[0;31m";
 const RESET: &str = "\x1b[0m";
