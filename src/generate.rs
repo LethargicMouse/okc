@@ -40,11 +40,7 @@ fn try_gen_ir(ast: Ast, path: &str) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        lex::{Meta, lex},
-        parse::parse,
-        read_file,
-    };
+    use crate::{lex::lex, parse::parse, read_file, source::Meta};
     use std::fs::create_dir_all;
 
     #[test]

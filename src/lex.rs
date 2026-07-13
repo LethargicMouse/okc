@@ -1,20 +1,24 @@
-use std::fmt::{Debug, Display};
-
 use Lexeme::*;
+
+use crate::source::{Location, Meta, Pos};
 
 pub fn lex<'a>(code: &'a str, meta: &'a Meta<'a>) -> Vec<Token<'a>> {
     let mut res = Vec::new();
-    let poses = make_poses(code);
-    let mut lexer = Lexer::new(code, &poses, meta);
+    let mut lexer = Lexer::new(code, meta);
     lexer.populate(&mut res);
     res
 }
 
 fn make_poses(code: &str) -> Vec<Pos> {
     code.chars()
-        .chain(" :6  ".chars())
+        .chain("   ".chars())
         .scan(Pos { line: 1, symbol: 0 }, |p, c| {
-            *p = p.after(c);
+            if c == '\n' {
+                p.line += 1;
+                p.symbol = 0;
+            } else {
+                p.symbol += 1;
+            }
             Some(*p)
         })
         .collect()
@@ -52,61 +56,46 @@ impl<'a> Lexeme<'a> {
     }
 }
 
-struct Lexer<'a, 'b> {
+struct Lexer<'a> {
     code: &'a str,
-    poses: &'b [Pos],
+    poses: Vec<Pos>,
+    cursor: usize,
     meta: &'a Meta<'a>,
 }
 
-impl<'a, 'b> Lexer<'a, 'b> {
-    pub fn new(code: &'a str, poses: &'b [Pos], meta: &'a Meta<'a>) -> Self {
-        Self { code, poses, meta }
+impl<'a> Lexer<'a> {
+    fn new(code: &'a str, meta: &'a Meta<'a>) -> Self {
+        Self {
+            code,
+            poses: make_poses(code),
+            meta,
+            cursor: 0,
+        }
     }
 
     fn token(&mut self, lexeme: Lexeme<'a>, len: usize) -> Token<'a> {
         let location = self.location(len);
-        if !self.code.is_empty() {
-            self.code = &self.code[len..];
-        }
-        self.poses = &self.poses[len..];
+        self.cursor += len;
         Token { lexeme, location }
     }
 
     fn skip_spaces(&mut self) {
-        let old_len = self.code.len();
-        self.code = self.code.trim_start();
-        self.poses = &self.poses[old_len - self.code.len()..];
+        self.cursor += self.take_while(|c| c.is_whitespace()).len();
     }
 
     fn populate(&mut self, res: &mut Vec<Token<'a>>) {
-        let lex_list = [
-            ("(", ParL),
-            (")", ParR),
-            ("{", CurL),
-            ("}", CurR),
-            (";", Semicolon),
-        ];
         'main: loop {
             self.skip_spaces();
-            if self.code.is_empty() {
+            if self.cursor == self.code.len() {
                 res.push(self.token(Eof, 1));
                 break;
             }
-            for (pattern, lexeme) in lex_list {
-                if self.code.starts_with(pattern) {
-                    res.push(self.token(lexeme, pattern.len()));
-                    continue 'main;
-                }
-            }
-            let c = self.code.chars().next().unwrap();
-            if c.is_alphabetic() || c == '_' {
-                let name = self.take_while(|c| c.is_alphanumeric() || *c == '_');
-                res.push(self.token(Name(name), name.len()));
-                continue 'main;
-            }
-            if c.is_ascii_digit() {
-                let int = self.take_while(|c| c.is_ascii_digit());
-                res.push(self.token(Int(int.parse().unwrap()), int.len()));
+            if let Some(token) = self
+                .try_list()
+                .or_else(|| self.try_name())
+                .or_else(|| self.try_int())
+            {
+                res.push(token);
                 continue 'main;
             }
             res.push(self.token(Error, 1));
@@ -115,22 +104,66 @@ impl<'a, 'b> Lexer<'a, 'b> {
     }
 
     fn take_while(&self, predicate: fn(&char) -> bool) -> &'a str {
-        &self.code[..self.code.chars().take_while(predicate).count()]
+        &self.code[self.cursor
+            ..self.cursor
+                + self.code[self.cursor..]
+                    .chars()
+                    .take_while(predicate)
+                    .count()]
     }
 
     fn location(&self, len: usize) -> Location<'a> {
         Location {
-            start: self.poses[0],
-            end: self.poses[len],
+            start: self.poses[self.cursor],
+            end: self.poses[self.cursor + len],
             meta: self.meta,
         }
+    }
+
+    fn try_list(&mut self) -> Option<Token<'a>> {
+        let lex_list = [
+            ("(", ParL),
+            (")", ParR),
+            ("{", CurL),
+            ("}", CurR),
+            (";", Semicolon),
+        ];
+        for (pattern, lexeme) in lex_list {
+            if self.code[self.cursor..].starts_with(pattern) {
+                return Some(self.token(lexeme, pattern.len()));
+            }
+        }
+        None
+    }
+
+    fn try_name(&mut self) -> Option<Token<'a>> {
+        let c = self.next();
+        if c.is_alphabetic() || c == '_' {
+            let name = self.take_while(|c| c.is_alphanumeric() || *c == '_');
+            Some(self.token(Name(name), name.len()))
+        } else {
+            None
+        }
+    }
+
+    fn try_int(&mut self) -> Option<Token<'a>> {
+        let c = self.next();
+        if c.is_ascii_digit() {
+            let int = self.take_while(|c| c.is_ascii_digit());
+            Some(self.token(Int(int.parse().unwrap()), int.len()))
+        } else {
+            None
+        }
+    }
+
+    fn next(&self) -> char {
+        self.code[self.cursor..].chars().next().unwrap()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::read_file;
 
     fn mk_lexemes<'a>(code: &'a str, meta: &'a Meta) -> Vec<Lexeme<'a>> {
         lex(code, meta).iter().map(|t| t.lexeme).collect()
@@ -143,8 +176,8 @@ mod tests {
 
     #[test]
     fn lex_empty() {
-        let code = read_file("resources/empty.ok");
-        let tokens = mk_lexemes(&code, FAKE_META);
+        let code = include_str!("../resources/empty.ok");
+        let tokens = mk_lexemes(code, FAKE_META);
         let empty_ok_lexemes = vec![
             Name("fn"),
             Name("main"),
@@ -203,69 +236,5 @@ mod tests {
         ];
         let found = mk_lexemes(code, FAKE_META);
         assert_eq!(expected, found)
-    }
-}
-
-pub struct Meta<'a> {
-    pub name: &'a str,
-    pub lines: Vec<&'a str>,
-}
-
-#[derive(Clone, Copy)]
-pub struct Location<'a> {
-    pub start: Pos,
-    pub end: Pos,
-    pub meta: &'a Meta<'a>,
-}
-
-impl PartialEq for Location<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.start == other.start && self.end == other.end && self.meta.name == other.meta.name
-    }
-}
-
-impl Debug for Location<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "`{}`: [{} - {})", self.meta.name, self.start, self.end)
-    }
-}
-
-impl Display for Location<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "`{}` at {}:\n     |", self.meta.name, self.start)?;
-        write!(f, "{}", Line(self.start.line, &self.meta.lines))?;
-        Ok(())
-    }
-}
-
-struct Line<'a>(i32, &'a [&'a str]);
-
-impl Display for Line<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:4} | {}", self.0, self.1[self.0 as usize - 1])
-    }
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub struct Pos {
-    pub line: i32,
-    pub symbol: i32,
-}
-
-impl Pos {
-    fn after(mut self, c: char) -> Pos {
-        if c == '\n' {
-            self.line += 1;
-            self.symbol = 0;
-        } else {
-            self.symbol += 1;
-        }
-        self
-    }
-}
-
-impl Display for Pos {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.line, self.symbol)
     }
 }

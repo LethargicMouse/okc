@@ -1,13 +1,15 @@
 mod generate;
 mod lex;
 mod parse;
+mod source;
 
 use std::{env::args, fs::File, io::Read, process::exit};
 
 use crate::{
     generate::{IR_PATH, gen_ir},
-    lex::{Meta, lex},
+    lex::lex,
     parse::parse,
+    source::Meta,
 };
 
 fn main() {

@@ -4,8 +4,9 @@ use crate::{
     RED, RESET,
     lex::{
         Lexeme::{self, *},
-        Location, Token,
+        Token,
     },
+    source::Location,
 };
 
 #[derive(Debug, PartialEq)]
@@ -154,8 +155,9 @@ impl<'a> Parser<'a> {
 mod tests {
     use super::*;
     use crate::{
-        lex::{Meta, Pos, lex},
+        lex::lex,
         read_file,
+        source::{Location, Meta, Pos},
     };
 
     #[test]
@@ -226,7 +228,7 @@ mod tests {
     fn parse_fun_wrong_extra() {
         let code = read_file("resources/fun_wrong_extra.ok");
         let meta = Meta {
-            name: "resources",
+            name: "resources/fun_wrong_extra.ok",
             lines: code.lines().collect(),
         };
         let tokens = lex(&code, &meta);
