@@ -2,18 +2,27 @@ mod generate;
 mod lex;
 mod parse;
 
-use std::{
-    fs::{File, create_dir_all},
-    io::Read,
-};
+use std::{env::args, fs::File, io::Read, process::exit};
 
-use crate::{
-    generate::{IR_PATH, gen_ir},
-    lex::lex,
-    parse::parse,
-};
+use crate::{generate::gen_ir, lex::lex, parse::parse};
 
-fn main() {}
+fn main() {
+    let mut args = args();
+    // skip exec name
+    args.next();
+    match args.next() {
+        Some(path) => {
+            let code = read_file(&path);
+            let tokens = lex(&code);
+            let ast = parse(tokens);
+            gen_ir(ast);
+        }
+        None => {
+            eprintln!("{RED}error:{RESET} no source path given");
+            exit(1)
+        }
+    }
+}
 
 const RED: &str = "\x1b[0;31m";
 const RESET: &str = "\x1b[0m";
