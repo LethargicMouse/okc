@@ -207,7 +207,7 @@ pub mod tests {
             Name("i32"),
             CurL,
             Name("return"),
-            Int(0),
+            Int(123),
             Semicolon,
             CurR,
             Eof,

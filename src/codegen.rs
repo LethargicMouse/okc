@@ -60,7 +60,7 @@ pub mod tests {
     use crate::{lex::lex, parse::parse, read_file, source::Meta};
     use std::fs::create_dir_all;
 
-    pub const EMPTY_IR: &str = "\ndefine i32 @main() {\nentry:\nret i32 0\n}";
+    pub const EMPTY_IR: &str = "\ndefine i32 @main() {\nentry:\nret i32 123\n}";
 
     #[test]
     fn generate_empty() {

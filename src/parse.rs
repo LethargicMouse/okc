@@ -206,7 +206,7 @@ mod tests {
         let empty_ast = Ok(Ast {
             funs: vec![Fun {
                 name: "main",
-                body: vec![Statement::Return(Expr::Int(0))],
+                body: vec![Statement::Return(Expr::Int(123))],
             }],
         });
         assert_eq!(ast, empty_ast);
