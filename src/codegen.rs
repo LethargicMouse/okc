@@ -9,6 +9,7 @@ use crate::{
     parse::{Ast, Expr, Fun, Statement},
 };
 
+// tested
 pub fn gen_ir(ast: Ast, path: &str) {
     try_gen_ir(ast, path).unwrap_or_else(|e| {
         eprintln!("{RED}error: failed to write to {RESET}`{path}`{RED}: {e}");
@@ -18,6 +19,7 @@ pub fn gen_ir(ast: Ast, path: &str) {
 
 pub const IR_PATH: &str = "build/out.ll";
 
+// tested
 fn try_gen_ir(ast: Ast, path: &str) -> io::Result<()> {
     let mut file = File::create(path)?;
     for fun in ast.funs {
@@ -26,26 +28,29 @@ fn try_gen_ir(ast: Ast, path: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn gen_fun(file: &mut File, fun: Fun) -> io::Result<()> {
-    write!(file, "\ndefine i32 @{}() {{\nentry:", fun.name)?;
+// tested
+fn gen_fun<T: Write>(out: &mut T, fun: Fun) -> io::Result<()> {
+    write!(out, "\ndefine i32 @{}() {{\nentry:", fun.name)?;
     for statement in fun.body {
-        gen_statement(file, statement)?;
+        gen_statement(out, statement)?;
     }
-    write!(file, "\n}}")
+    write!(out, "\n}}")
 }
 
-fn gen_statement(file: &mut File, statement: Statement) -> io::Result<()> {
+// tested
+fn gen_statement<T: Write>(out: &mut T, statement: Statement) -> io::Result<()> {
     match statement {
         Statement::Return(expr) => {
-            write!(file, "\nret i32 ")?;
-            gen_expr(file, expr)
+            write!(out, "\nret i32 ")?;
+            gen_expr(out, expr)
         }
     }
 }
 
-fn gen_expr(file: &mut File, expr: Expr) -> io::Result<()> {
+// tested
+fn gen_expr<T: Write>(out: &mut T, expr: Expr) -> io::Result<()> {
     match expr {
-        Expr::Int(n) => write!(file, "{n}"),
+        Expr::Int(n) => write!(out, "{n}"),
     }
 }
 
@@ -85,5 +90,38 @@ mod tests {
         let expected = "\ndefine i32 @fun_1() {\nentry:\nret i32 123\n}\ndefine i32 @__fun_n2_() {\nentry:\nret i32 321\nret i32 444\n}";
         let generated = read_file("build/test_two_funs.ll");
         assert_eq!(expected, generated)
+    }
+
+    #[test]
+    fn test_gen_fun_empty() -> io::Result<()> {
+        let fun = Fun {
+            name: "hello",
+            body: vec![],
+        };
+        let mut out = Vec::new();
+        let expected = "\ndefine i32 @hello() {\nentry:\n}".to_owned();
+        gen_fun(&mut out, fun)?;
+        assert_eq!(expected, String::from_utf8(out).unwrap());
+        Ok(())
+    }
+
+    #[test]
+    fn test_gen_statement() -> io::Result<()> {
+        let statement = Statement::Return(Expr::Int(123));
+        let mut out = Vec::new();
+        let expected = "\nret i32 123".to_owned();
+        gen_statement(&mut out, statement)?;
+        assert_eq!(expected, String::from_utf8(out).unwrap());
+        Ok(())
+    }
+
+    #[test]
+    fn test_expr() -> io::Result<()> {
+        let expr = Expr::Int(321);
+        let mut out = Vec::new();
+        let expected = "321".to_owned();
+        gen_expr(&mut out, expr)?;
+        assert_eq!(expected, String::from_utf8(out).unwrap());
+        Ok(())
     }
 }
