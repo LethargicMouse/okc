@@ -11,7 +11,4 @@ That's all there is to it.
 - [x] lex `resources/empty.ok`
 - [x] parse `resources/empty.ok`
 - [ ] codegen for `resources/empty.ok`
-- [ ] tests
-    - [ ] for `lex.rs`
-    - [ ] for `parse.rs`
-
+- [ ] cli working for `resources/empty.ok`
