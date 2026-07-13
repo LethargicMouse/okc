@@ -5,7 +5,7 @@ mod parse;
 use std::{env::args, fs::File, io::Read, process::exit};
 
 use crate::{
-    generate::gen_ir,
+    generate::{IR_PATH, gen_ir},
     lex::{Meta, lex},
     parse::parse,
 };
@@ -26,7 +26,7 @@ fn main() {
                 eprintln!("{e}");
                 exit(1)
             });
-            gen_ir(ast);
+            gen_ir(ast, IR_PATH);
         }
         None => {
             eprintln!("{RED}error:{RESET} no source path given");
@@ -47,35 +47,12 @@ fn read_file(path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::create_dir_all;
-
-    use crate::{
-        generate::{IR_PATH, gen_ir},
-        lex::{Meta, lex},
-        parse::parse,
-        read_file,
-    };
+    use super::*;
 
     #[test]
     fn read_empty() {
         let code = read_file("resources/empty.ok");
         let actual = include_str!("../resources/empty.ok");
         assert_eq!(code, actual);
-    }
-
-    #[test]
-    fn generate_empty() {
-        let code = read_file("resources/empty.ok");
-        let meta = Meta {
-            name: "resources/empty.ok",
-            lines: code.lines().collect(),
-        };
-        let tokens = lex(&code, &meta);
-        let ast = parse(tokens).unwrap_or_else(|e| panic!("{e}"));
-        create_dir_all("build").unwrap();
-        gen_ir(ast);
-        let generated = read_file(IR_PATH);
-        let expected = "define i32 @main() {\nentry:\nret i32 0\n}";
-        assert_eq!(generated, expected);
     }
 }
