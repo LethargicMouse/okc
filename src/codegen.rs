@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     RED, RESET,
-    parse::{Ast, Expr, Statement},
+    parse::{Ast, Expr, Fun, Statement},
 };
 
 pub fn gen_ir(ast: Ast, path: &str) {
@@ -21,20 +21,32 @@ pub const IR_PATH: &str = "build/out.ll";
 fn try_gen_ir(ast: Ast, path: &str) -> io::Result<()> {
     let mut file = File::create(path)?;
     for fun in ast.funs {
-        write!(file, "\ndefine i32 @{}() {{\nentry:", fun.name)?;
-        for statement in fun.body {
-            match statement {
-                Statement::Return(expr) => {
-                    write!(file, "\nret i32 ")?;
-                    match expr {
-                        Expr::Int(n) => write!(file, "{n}")?,
-                    }
-                }
-            }
-        }
-        write!(file, "\n}}")?;
+        gen_fun(&mut file, fun)?;
     }
     Ok(())
+}
+
+fn gen_fun(file: &mut File, fun: Fun) -> io::Result<()> {
+    write!(file, "\ndefine i32 @{}() {{\nentry:", fun.name)?;
+    for statement in fun.body {
+        gen_statement(file, statement)?;
+    }
+    write!(file, "\n}}")
+}
+
+fn gen_statement(file: &mut File, statement: Statement) -> io::Result<()> {
+    match statement {
+        Statement::Return(expr) => {
+            write!(file, "\nret i32 ")?;
+            gen_expr(file, expr)
+        }
+    }
+}
+
+fn gen_expr(file: &mut File, expr: Expr) -> io::Result<()> {
+    match expr {
+        Expr::Int(n) => write!(file, "{n}"),
+    }
 }
 
 #[cfg(test)]
