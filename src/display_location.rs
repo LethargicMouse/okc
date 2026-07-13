@@ -44,3 +44,9 @@ impl Display for Pos {
         write!(f, "{}:{}", self.line, self.symbol)
     }
 }
+
+impl Debug for Pos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
+    }
+}
