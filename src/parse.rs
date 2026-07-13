@@ -188,11 +188,11 @@ impl Display for ParseError<'_> {
 mod tests {
     use super::*;
     use crate::{
+        compile::read_file,
         lex::{
             lex,
             tests::{FAKE_META, pos},
         },
-        read_file,
         source::{Location, Pos, meta},
     };
 

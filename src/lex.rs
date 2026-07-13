@@ -182,7 +182,7 @@ impl<'a> Lexer<'a> {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::{read_file, source::meta};
+    use crate::{compile::read_file, source::meta};
 
     use super::*;
 

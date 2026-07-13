@@ -22,6 +22,7 @@ pub const IR_PATH: &str = "build/out.ll";
 // tested
 fn try_gen_ir(ast: Ast, path: &str) -> io::Result<()> {
     let mut file = File::create(path)?;
+    write!(file, "target triple = \"x86_64-pc-linux-gnu\"")?;
     for fun in ast.funs {
         gen_fun(&mut file, fun)?;
     }
@@ -57,10 +58,11 @@ fn gen_expr<T: Write>(out: &mut T, expr: Expr) -> io::Result<()> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{lex::lex, parse::parse, read_file, source::Meta};
+    use crate::{compile::read_file, lex::lex, parse::parse, source::Meta};
     use std::fs::create_dir_all;
 
-    pub const EMPTY_IR: &str = "\ndefine i32 @main() {\nentry:\nret i32 123\n}";
+    pub const EMPTY_IR: &str =
+        "target triple = \"x86_64-pc-linux-gnu\"\ndefine i32 @main() {\nentry:\nret i32 123\n}";
 
     #[test]
     fn generate_empty() {
@@ -89,7 +91,7 @@ pub mod tests {
         let ast = parse(tokens).unwrap_or_else(|e| panic!("{e}"));
         create_dir_all("build").unwrap();
         gen_ir(ast, "build/test_two_funs.ll");
-        let expected = "\ndefine i32 @fun_1() {\nentry:\nret i32 123\n}\ndefine i32 @__fun_n2_() {\nentry:\nret i32 321\nret i32 444\n}";
+        let expected = "target triple = \"x86_64-pc-linux-gnu\"\ndefine i32 @fun_1() {\nentry:\nret i32 123\n}\ndefine i32 @__fun_n2_() {\nentry:\nret i32 321\nret i32 444\n}";
         let generated = read_file("build/test_two_funs.ll");
         assert_eq!(expected, generated)
     }
