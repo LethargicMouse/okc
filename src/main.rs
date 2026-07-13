@@ -8,18 +8,7 @@ use crate::{
     parse::{Ast, Expr, Fun, Statement, parse},
 };
 
-fn main() {
-    let code = read_file("resources/empty.ok");
-    let tokens = lex(&code);
-    let ast = parse(tokens);
-    let empty_ast = Ast {
-        funs: vec![Fun {
-            name: "main",
-            body: vec![Statement::Return(Expr::Int(0))],
-        }],
-    };
-    assert_eq!(ast, empty_ast);
-}
+fn main() {}
 
 const RED: &str = "\x1b[0;31m";
 const RESET: &str = "\x1b[0m";
@@ -38,8 +27,16 @@ mod tests {
             Lexeme::{self, *},
             lex,
         },
+        parse::{Ast, Expr, Fun, Statement, parse},
         read_file,
     };
+
+    #[test]
+    fn read_empty() {
+        let code = read_file("resources/empty.ok");
+        let actual = include_str!("../resources/empty.ok");
+        assert_eq!(code, actual);
+    }
 
     #[test]
     fn lex_empty() {
@@ -66,5 +63,19 @@ mod tests {
                 .as_slice(),
             empty_ok_lexemes
         )
+    }
+
+    #[test]
+    fn parse_empty() {
+        let code = read_file("resources/empty.ok");
+        let tokens = lex(&code);
+        let ast = parse(tokens);
+        let empty_ast = Ast {
+            funs: vec![Fun {
+                name: "main",
+                body: vec![Statement::Return(Expr::Int(0))],
+            }],
+        };
+        assert_eq!(ast, empty_ast);
     }
 }
