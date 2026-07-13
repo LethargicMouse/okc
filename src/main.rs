@@ -1,4 +1,5 @@
 mod codegen;
+mod display_location;
 mod lex;
 mod parse;
 mod source;
