@@ -7,7 +7,11 @@ use std::{
     io::Read,
 };
 
-use crate::{generate::gen_ir, lex::lex, parse::parse};
+use crate::{
+    generate::{IR_PATH, gen_ir},
+    lex::lex,
+    parse::parse,
+};
 
 fn main() {
     let code = read_file("resources/empty.ok");
@@ -15,7 +19,7 @@ fn main() {
     let ast = parse(tokens);
     create_dir_all("build").unwrap();
     gen_ir(ast);
-    let generated = read_file("build/out.ll");
+    let generated = read_file(IR_PATH);
     let expected = "define i32 @main() {\nentry:\nret i32 0\n}";
     assert_eq!(generated, expected);
 }
