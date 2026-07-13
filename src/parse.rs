@@ -30,6 +30,7 @@ pub enum Expr {
     Int(i64),
 }
 
+// tested
 pub fn parse<'a>(tokens: Vec<Token<'a>>) -> Result<Ast<'a>, ParseError<'a>> {
     let mut parser = Parser::new(tokens);
     parser.ast().map_err(|_| parser.error())
@@ -53,12 +54,14 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // tested
     fn ast(&mut self) -> Res<Ast<'a>> {
         let funs = self.many(Self::fun);
         self.expect(Eof)?;
         Ok(Ast { funs })
     }
 
+    // tested
     fn many<T>(&mut self, parse: fn(&mut Self) -> Res<T>) -> Vec<T> {
         let mut res = Vec::new();
         while let Some(item) = self.maybe(parse) {
@@ -67,6 +70,7 @@ impl<'a> Parser<'a> {
         res
     }
 
+    // tested
     fn maybe<T>(&mut self, parse: fn(&mut Self) -> Res<T>) -> Option<T> {
         let before = self.cursor;
         let res = parse(self).ok();
@@ -76,6 +80,7 @@ impl<'a> Parser<'a> {
         res
     }
 
+    // tested
     fn fun(&mut self) -> Res<Fun<'a>> {
         self.expect(Name("fn"))?;
         let name = self.name()?;
@@ -88,6 +93,7 @@ impl<'a> Parser<'a> {
         Ok(Fun { name, body })
     }
 
+    // tested
     fn statement(&mut self) -> Res<Statement> {
         self.expect(Name("return"))?;
         let expr = self.expr()?;
@@ -95,11 +101,13 @@ impl<'a> Parser<'a> {
         Ok(Statement::Return(expr))
     }
 
+    // test
     fn expr(&mut self) -> Res<Expr> {
         let int = self.int()?;
         Ok(Expr::Int(int))
     }
 
+    // dont wanna test im tired
     fn name(&mut self) -> Res<&'a str> {
         if let Name(name) = self.tokens[self.cursor].lexeme {
             self.cursor += 1;
@@ -110,6 +118,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // dont wanna test im tired
     fn int(&mut self) -> Res<i64> {
         if let Int(int) = self.tokens[self.cursor].lexeme {
             self.cursor += 1;
@@ -120,6 +129,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // tested
     fn fail(&mut self, msg: &'a str) {
         match self.cursor.cmp(&self.err_cursor) {
             Ordering::Less => {}
@@ -134,6 +144,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // dont wanna test im tired
     fn expect(&mut self, lexeme: Lexeme<'a>) -> Res<()> {
         if self.tokens[self.cursor].lexeme == lexeme {
             self.cursor += 1;
@@ -144,6 +155,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // tested
     fn error(self) -> ParseError<'a> {
         ParseError {
             location: self.tokens[self.err_cursor].location,
@@ -152,11 +164,34 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct ParseError<'a> {
+    location: Location<'a>,
+    msgs: Vec<&'a str>,
+}
+
+impl Display for ParseError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{RED}error:{RESET} failed to parse {}\n  expected:",
+            self.location
+        )?;
+        for msg in &self.msgs {
+            write!(f, "\n    {msg}")?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        lex::lex,
+        lex::{
+            lex,
+            tests::{FAKE_META, pos},
+        },
         read_file,
         source::{Location, Pos, meta},
     };
@@ -243,24 +278,182 @@ mod tests {
         let found = parse(tokens);
         assert_eq!(expected, found)
     }
-}
 
-#[derive(Debug, PartialEq)]
-pub struct ParseError<'a> {
-    location: Location<'a>,
-    msgs: Vec<&'a str>,
-}
+    fn fake_tokens<'a>(lexemes: &[Lexeme<'a>]) -> Vec<Token<'a>> {
+        lexemes
+            .iter()
+            .enumerate()
+            .map(|(i, &lexeme)| Token {
+                lexeme,
+                location: Location {
+                    start: pos(1, i as i32),
+                    end: pos(1, i as i32 + 1),
+                    meta: FAKE_META,
+                },
+            })
+            .collect()
+    }
 
-impl Display for ParseError<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{RED}error:{RESET} failed to parse {}\n  expected:",
-            self.location
-        )?;
-        for msg in &self.msgs {
-            write!(f, "\n    {msg}")?;
-        }
-        Ok(())
+    #[test]
+    fn test_many() {
+        let tokens = fake_tokens(&[Int(1), Int(2), Int(3), Eof]);
+        let mut parser = Parser::new(tokens);
+        let expected = vec![1, 2, 3];
+        let found = parser.many(Parser::int);
+        assert_eq!(expected, found);
+        assert_eq!(3, parser.cursor);
+    }
+
+    #[test]
+    fn test_many_none() {
+        let tokens = fake_tokens(&[Int(1), ParL, Int(2), Int(3), Eof]);
+        let mut parser = Parser::new(tokens);
+        parser.cursor = 1;
+        let expected: Vec<i64> = Vec::new();
+        let found = parser.many(Parser::int);
+        assert_eq!(expected, found);
+        assert_eq!(1, parser.cursor);
+    }
+
+    #[test]
+    fn test_maybe() {
+        let tokens = fake_tokens(&[ParL, ParL, Int(2)]);
+        let mut parser = Parser::new(tokens);
+        parser.cursor = 1;
+        let expected = Some(2);
+        let found = parser.maybe(|p| {
+            p.expect(ParL)?;
+            p.int()
+        });
+        assert_eq!(expected, found);
+        assert_eq!(3, parser.cursor);
+    }
+
+    #[test]
+    fn test_maybe_none() {
+        let tokens = fake_tokens(&[ParL, ParL, Int(2)]);
+        let mut parser = Parser::new(tokens);
+        let expected = None;
+        let found = parser.maybe(|p| {
+            p.expect(ParL)?;
+            p.int()
+        });
+        assert_eq!(expected, found);
+        assert_eq!(0, parser.cursor);
+    }
+
+    #[test]
+    fn test_fun_empty() {
+        let tokens = fake_tokens(&[
+            Name("fn"),
+            Name("hello"),
+            ParL,
+            ParR,
+            Name("i32"),
+            CurL,
+            CurR,
+        ]);
+        let mut parser = Parser::new(tokens);
+        let expected = Ok(Fun {
+            name: "hello",
+            body: vec![],
+        });
+        let found = parser.fun();
+        assert_eq!(expected, found);
+        assert_eq!(7, parser.cursor)
+    }
+
+    #[test]
+    fn test_fun_wrong() {
+        let tokens = fake_tokens(&[
+            Name("fn"),
+            Name("hello"),
+            ParR,
+            ParL,
+            Name("i32"),
+            CurL,
+            CurR,
+        ]);
+        let mut parser = Parser::new(tokens);
+        let expected = Err(());
+        let found = parser.fun();
+        assert_eq!(expected, found);
+        assert_eq!(2, parser.cursor)
+    }
+
+    #[test]
+    fn test_statement() {
+        let tokens = fake_tokens(&[Name("return"), Int(123), Semicolon]);
+        let mut parser = Parser::new(tokens);
+        let expected = Ok(Statement::Return(Expr::Int(123)));
+        let found = parser.statement();
+        assert_eq!(expected, found);
+        assert_eq!(3, parser.cursor)
+    }
+
+    #[test]
+    fn test_statement_wrong() {
+        let tokens = fake_tokens(&[Name("return"), Name("return"), Semicolon]);
+        let mut parser = Parser::new(tokens);
+        let expected = Err(());
+        let found = parser.statement();
+        assert_eq!(expected, found);
+        assert_eq!(1, parser.cursor)
+    }
+
+    #[test]
+    fn test_expr() {
+        let tokens = fake_tokens(&[Int(123)]);
+        let mut parser = Parser::new(tokens);
+        let expected = Ok(Expr::Int(123));
+        let found = parser.expr();
+        assert_eq!(expected, found);
+        assert_eq!(1, parser.cursor)
+    }
+
+    #[test]
+    fn test_expr_wrong() {
+        let tokens = fake_tokens(&[Semicolon]);
+        let mut parser = Parser::new(tokens);
+        let expected = Err(());
+        let found = parser.expr();
+        assert_eq!(expected, found);
+        assert_eq!(0, parser.cursor)
+    }
+
+    #[test]
+    fn test_fail() {
+        let tokens = fake_tokens(&[ParL, ParL, ParL, ParL]);
+        let mut parser = Parser::new(tokens);
+        parser.cursor = 1;
+        parser.err_cursor = 1;
+        parser.err_msgs.push("elloh");
+        parser.fail("hello");
+        assert_eq!(1, parser.err_cursor);
+        assert_eq!(vec!["elloh", "hello"], parser.err_msgs)
+    }
+
+    #[test]
+    fn test_fail_before() {
+        let tokens = fake_tokens(&[ParL, ParL, ParL, ParL]);
+        let mut parser = Parser::new(tokens);
+        parser.cursor = 1;
+        parser.err_cursor = 2;
+        parser.err_msgs.push("elloh");
+        parser.fail("hello");
+        assert_eq!(2, parser.err_cursor);
+        assert_eq!(vec!["elloh"], parser.err_msgs)
+    }
+
+    #[test]
+    fn test_fail_after() {
+        let tokens = fake_tokens(&[ParL, ParL, ParL, ParL]);
+        let mut parser = Parser::new(tokens);
+        parser.cursor = 2;
+        parser.err_cursor = 1;
+        parser.err_msgs.push("elloh");
+        parser.fail("hello");
+        assert_eq!(2, parser.err_cursor);
+        assert_eq!(vec!["hello"], parser.err_msgs)
     }
 }

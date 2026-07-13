@@ -181,7 +181,7 @@ impl<'a> Lexer<'a> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use crate::{read_file, source::meta};
 
     use super::*;
@@ -190,7 +190,7 @@ mod tests {
         lex(code, meta).iter().map(|t| t.lexeme).collect()
     }
 
-    const FAKE_META: &Meta = &Meta {
+    pub const FAKE_META: &Meta = &Meta {
         name: "fake",
         lines: Vec::new(),
     };
@@ -259,7 +259,7 @@ mod tests {
         assert_eq!(expected, found)
     }
 
-    fn pos(line: i32, symbol: i32) -> Pos {
+    pub fn pos(line: i32, symbol: i32) -> Pos {
         Pos { line, symbol }
     }
 
