@@ -9,7 +9,7 @@ use crate::{
     generate::{IR_PATH, gen_ir},
     lex::lex,
     parse::parse,
-    source::Meta,
+    source::meta,
 };
 
 fn main() {
@@ -19,10 +19,7 @@ fn main() {
     match args.next() {
         Some(path) => {
             let code = read_file(&path);
-            let meta = Meta {
-                name: &path,
-                lines: code.lines().collect(),
-            };
+            let meta = meta(&path, &code);
             let tokens = lex(&code, &meta);
             let ast = parse(tokens).unwrap_or_else(|e| {
                 eprintln!("{e}");

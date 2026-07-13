@@ -51,3 +51,10 @@ impl Display for Pos {
         write!(f, "{}:{}", self.line, self.symbol)
     }
 }
+
+pub fn meta<'a>(name: &'a str, code: &'a str) -> Meta<'a> {
+    Meta {
+        name,
+        lines: code.lines().collect(),
+    }
+}

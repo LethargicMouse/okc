@@ -157,16 +157,14 @@ mod tests {
     use crate::{
         lex::lex,
         read_file,
-        source::{Location, Meta, Pos},
+        source::{Location, Pos, meta},
     };
 
     #[test]
     fn parse_empty() {
-        let code = read_file("resources/empty.ok");
-        let meta = Meta {
-            name: "resources/empty.ok",
-            lines: code.lines().collect(),
-        };
+        let path = "resources/empty.ok";
+        let code = read_file(path);
+        let meta = meta(path, &code);
         let tokens = lex(&code, &meta);
         let ast = parse(tokens);
         let empty_ast = Ok(Ast {
@@ -180,11 +178,9 @@ mod tests {
 
     #[test]
     fn parse_two_funs() {
-        let code = read_file("resources/two_funs.ok");
-        let meta = Meta {
-            name: "two_funs.ok",
-            lines: code.lines().collect(),
-        };
+        let path = "resources/two_funs.ok";
+        let code = read_file(path);
+        let meta = meta(path, &code);
         let tokens = lex(&code, &meta);
         let expected = Ok(Ast {
             funs: vec![
@@ -207,11 +203,9 @@ mod tests {
 
     #[test]
     fn parse_fun_wrong_missing() {
-        let code = read_file("resources/fun_wrong_missing.ok");
-        let meta = Meta {
-            name: "resources/fun_wrong_missing.ok",
-            lines: code.lines().collect(),
-        };
+        let path = "resources/fun_wrong_missing.ok";
+        let code = read_file(path);
+        let meta = meta(path, &code);
         let tokens = lex(&code, &meta);
         let expected = Err(ParseError {
             location: Location {
@@ -226,11 +220,9 @@ mod tests {
 
     #[test]
     fn parse_fun_wrong_extra() {
-        let code = read_file("resources/fun_wrong_extra.ok");
-        let meta = Meta {
-            name: "resources/fun_wrong_extra.ok",
-            lines: code.lines().collect(),
-        };
+        let path = "resources/fun_wrong_extra.ok";
+        let code = read_file(path);
+        let meta = meta(path, &code);
         let tokens = lex(&code, &meta);
         let expected = Err(ParseError {
             location: Location {
