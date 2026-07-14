@@ -12,7 +12,6 @@ use std::{
     process::{Command, exit},
 };
 
-// untestable
 fn main() {
     let mut args = args();
     // skip exec name
@@ -31,13 +30,11 @@ impl Display for NoPathGiven {
     }
 }
 
-// untestable
 fn run(path: &str) {
     compile(path);
     run_command("build/out", []);
 }
 
-// untestable
 fn run_command(name: &str, args: impl IntoIterator<Item = &'static str>) {
     let status = Command::new(name).args(args).status().unwrap();
     if !status.success() {
@@ -45,7 +42,6 @@ fn run_command(name: &str, args: impl IntoIterator<Item = &'static str>) {
     }
 }
 
-// untestable
 fn die(e: impl Display) -> ! {
     eprintln!("{e}");
     exit(1)
