@@ -1,0 +1,7 @@
+extern fn puts(str: *u8) i32;
+
+fn main() i32 {
+  let msg = "wazzup nigas";
+  puts(msg);
+  return 0;
+}
