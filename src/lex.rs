@@ -48,6 +48,7 @@ pub enum Lexeme<'a> {
     Star,
     Eof,
     Error,
+    Comma,
 }
 
 impl<'a> Lexeme<'a> {
@@ -58,6 +59,7 @@ impl<'a> Lexeme<'a> {
             Name("return") => "`return`",
             Name("extern") => "`extern`",
             Name("i32") => "`i32`",
+            Comma => "`,`",
             ParL => "`(`",
             ParR => "`)`",
             CurL => "`{`",
@@ -109,6 +111,7 @@ impl<'a> Lexer<'a> {
             if let Some(token) = self
                 .try_list()
                 .or_else(|| self.try_raw_str())
+                .or_else(|| self.try_str())
                 .or_else(|| self.try_name())
                 .or_else(|| self.try_int())
             {
@@ -146,6 +149,7 @@ impl<'a> Lexer<'a> {
             (";", Semicolon),
             (":", Colon),
             ("*", Star),
+            (",", Comma),
         ];
         for (pattern, lexeme) in lex_list {
             if self.code[self.cursor..].starts_with(pattern) {
@@ -175,21 +179,29 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn try_raw_str(&mut self) -> Option<Token<'a>> {
-        if !self.code[self.cursor..].starts_with("r\"") {
+    fn try_str_with(&mut self, prefix: &str) -> Option<Token<'a>> {
+        if !self.code[self.cursor..].starts_with(prefix) {
             return None;
         }
-        self.cursor += 2;
+        self.cursor += prefix.len();
         let res = self.take_while(|c| *c != '\"');
-        self.cursor -= 2;
-        if res.len() == self.code.len() - self.cursor - 2 {
+        self.cursor -= prefix.len();
+        if res.len() == self.code.len() - self.cursor - prefix.len() {
             eprintln!(
                 "{RED}error:{RESET} unclosed string delimeter in {}",
                 self.location(1)
             );
             exit(1);
         }
-        Some(self.token(Lexeme::RawStr(res), res.len() + 3))
+        Some(self.token(Lexeme::RawStr(res), res.len() + prefix.len() + 1))
+    }
+
+    fn try_raw_str(&mut self) -> Option<Token<'a>> {
+        self.try_str_with("r\"")
+    }
+
+    fn try_str(&mut self) -> Option<Token<'a>> {
+        self.try_str_with("\"")
     }
 
     fn next(&self) -> char {

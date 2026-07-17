@@ -1,7 +1,7 @@
 extern fn printf(format: *u8, n: i32) i32;
 
 fn main() i32 {
-  printf("%d", calc());
+  printf(r"%d", calc());
   return 0;
 }
 
