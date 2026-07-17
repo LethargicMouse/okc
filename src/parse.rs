@@ -82,6 +82,13 @@ pub struct Call<'a> {
 #[derive(Debug, PartialEq)]
 pub enum Expr<'a> {
     Literal(Literal<'a>),
+    Call(Call<'a>),
+}
+
+impl<'a> From<Call<'a>> for Expr<'a> {
+    fn from(v: Call<'a>) -> Self {
+        Self::Call(v)
+    }
 }
 
 impl<'a> From<Literal<'a>> for Expr<'a> {
@@ -160,7 +167,22 @@ impl<'a> Parser<'a> {
         res
     }
 
-    fn maybe<T>(&mut self, parse: fn(&mut Self) -> Res<T>) -> Option<T> {
+    fn sep<T>(&mut self, parse: fn(&mut Self) -> Res<T>) -> Vec<T> {
+        let mut res = Vec::new();
+        match self.maybe(parse) {
+            Some(item) => res.push(item),
+            None => return res,
+        }
+        while let Some(item) = self.maybe(|p| {
+            p.expect(Comma)?;
+            parse(p)
+        }) {
+            res.push(item);
+        }
+        res
+    }
+
+    fn maybe<T>(&mut self, parse: impl Fn(&mut Self) -> Res<T>) -> Option<T> {
         let before = self.cursor;
         let res = parse(self).ok();
         if res.is_none() {
@@ -181,7 +203,7 @@ impl<'a> Parser<'a> {
         self.expect(Name("fn"))?;
         let name = self.name()?;
         self.expect(ParL)?;
-        let args = self.many(Self::fun_arg);
+        let args = self.sep(Self::fun_arg);
         self.expect(ParR)?;
         self.expect(Name("i32"))?;
         Ok(Header { name, args })
@@ -234,16 +256,22 @@ impl<'a> Parser<'a> {
     }
 
     fn expr(&mut self) -> Res<Expr<'a>> {
-        self.either(&[|p| {
-            let literal = p.literal()?;
-            Ok(literal.into())
-        }])
+        self.either(&[
+            |p| {
+                let literal = p.literal()?;
+                Ok(literal.into())
+            },
+            |p| {
+                let call = p.call()?;
+                Ok(call.into())
+            },
+        ])
     }
 
     fn call(&mut self) -> Res<Call<'a>> {
         let name = self.name()?;
         self.expect(ParL)?;
-        let args = self.many(Self::expr);
+        let args = self.sep(Self::expr);
         self.expect(ParR)?;
         Ok(Call { name, args })
     }

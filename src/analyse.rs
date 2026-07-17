@@ -73,6 +73,7 @@ fn analyse_call<'a>(call: Call<'a>) -> GoodCall<'a> {
 fn analyse_expr<'a>(expr: Expr<'a>) -> GoodExpr<'a> {
     match expr {
         Expr::Literal(literal) => GoodExpr::Literal(literal, get_literal_typ(literal)),
+        Expr::Call(_) => todo!(),
     }
 }
 
