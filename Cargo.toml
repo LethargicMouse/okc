@@ -1,7 +1,8 @@
 [package]
 name = "okc"
-version = "0.2.7"
+version = "0.2.8"
 edition = "2024"
 
 [dependencies]
+inkwell = { version = "0.9.0", features = ["llvm22-1-prefer-dynamic"] }
 pretty_assertions = "1.4.1"

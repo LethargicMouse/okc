@@ -1,158 +1,183 @@
-use std::{
-    fs::File,
-    io::{self, Write},
-    process::exit,
-};
+use std::{collections::HashMap, process::exit};
 
 use crate::{
     RED, RESET,
-    analyse::{GoodAst, GoodCall, GoodExpr, GoodFun, GoodStatement},
-    parse::{ExtFun, Literal, Prime, Typ},
+    parse::{Ast, Call, Expr, ExtFun, Fun, Header, Literal, Prime, Statement, Typ},
+};
+use inkwell::{
+    builder::Builder,
+    context::Context,
+    module::Module,
+    targets::TargetTriple,
+    types::{BasicMetadataTypeEnum, FunctionType},
+    values::{BasicValueEnum, FunctionValue, ValueKind},
 };
 
-pub fn gen_ir(ast: GoodAst, path: &str) {
-    Generator::default().ast(ast, path).unwrap_or_else(|e| {
-        eprintln!("{RED}error: failed to write to {RESET}`{path}`{RED}: {e}");
+pub const IR_PATH: &str = "build/out.ll";
+
+pub fn gen_ir(ast: Ast, path: &str) {
+    let context = Context::create();
+    let mut generator = Generator::new(&context);
+    generator.ast(ast);
+    generator.module.print_to_file(path).unwrap_or_else(|e| {
+        eprintln!("{RED}error:{RESET} failed to write to `{path}`: {e}");
         exit(1)
     })
 }
 
-#[derive(Default)]
 struct Generator<'a> {
-    strs: Vec<&'a str>,
+    context: &'a Context,
+    module: Module<'a>,
+    builder: Builder<'a>,
+    funs: HashMap<&'a str, FunctionValue<'a>>,
+    next_tmp: u32,
 }
-
-pub const IR_PATH: &str = "build/out.ll";
 
 impl<'a> Generator<'a> {
-    fn ast(mut self, ast: GoodAst<'a>, path: &str) -> io::Result<()> {
-        let mut file = File::create(path)?;
-        write!(file, "target triple = \"x86_64-pc-linux-gnu\"")?;
+    fn new(context: &'a Context) -> Self {
+        Self {
+            module: context.create_module("main"),
+            builder: context.create_builder(),
+            funs: HashMap::new(),
+            context,
+            next_tmp: 0,
+        }
+    }
+
+    fn ast(&mut self, ast: Ast<'a>) {
+        let triple = TargetTriple::create("x86_64-pc-linux-gnu");
+        self.module.set_triple(&triple);
         for ext_fun in ast.ext_funs {
-            gen_ext_fun(&mut file, ext_fun)?;
+            self.ext_fun(ext_fun);
         }
-        for fun in ast.funs {
-            self.fun(&mut file, fun)?;
+        let fun_vals: Vec<_> = ast
+            .funs
+            .iter()
+            .map(|fun| self.add_fun(&fun.header))
+            .collect();
+        for (fun, fun_val) in ast.funs.into_iter().zip(fun_vals) {
+            self.fun(fun, fun_val);
         }
-        for (i, s) in self.strs.into_iter().enumerate() {
-            gen_str(&mut file, i, s)?;
-        }
-        writeln!(file)
     }
 
-    fn fun(&mut self, out: &mut impl Write, fun: GoodFun<'a>) -> io::Result<()> {
-        write!(out, "\ndefine i32 @{}() {{\nentry:", fun.header.name)?;
-        for statement in fun.body {
-            self.statement(out, statement)?;
-        }
-        write!(out, "\n}}")
+    fn ext_fun(&mut self, ext_fun: ExtFun<'a>) {
+        self.add_fun(&ext_fun.header);
     }
 
-    fn statement(&mut self, out: &mut impl Write, statement: GoodStatement<'a>) -> io::Result<()> {
+    fn add_fun(&mut self, header: &Header<'a>) -> FunctionValue<'a> {
+        let fun_typ = self.fun_typ(header);
+        let res = self.module.add_function(header.name, fun_typ, None);
+        self.funs.insert(header.name, res);
+        res
+    }
+
+    fn fun_typ(&self, header: &Header) -> FunctionType<'a> {
+        let param_typs: Vec<BasicMetadataTypeEnum> = header
+            .args
+            .iter()
+            .map(|(_, typ)| gen_typ(self.context, typ))
+            .collect();
+        self.context.i32_type().fn_type(&param_typs, false)
+    }
+
+    fn fun(&mut self, fun: Fun, fun_val: FunctionValue<'a>) {
+        let basic_block = self.context.append_basic_block(fun_val, "entry");
+        self.builder.position_at_end(basic_block);
+        for statement in &fun.body {
+            self.statement(statement);
+        }
+    }
+
+    fn statement(&mut self, statement: &Statement) {
         match statement {
-            GoodStatement::Return(expr) => {
-                write!(out, "\nret ")?;
-                self.expr(out, expr)
-            }
-            GoodStatement::Call(call) => {
-                writeln!(out)?;
-                self.call(out, call)
+            Statement::Return(expr) => self.ret(expr),
+            Statement::Call(call) => {
+                self.call(call);
             }
         }
     }
 
-    fn call(&mut self, out: &mut impl Write, call: GoodCall<'a>) -> io::Result<()> {
-        write!(out, "call i32 (")?;
-        if let Some(expr) = call.args.first() {
-            gen_typ(out, expr.typ())?;
-            for expr in &call.args[1..] {
-                write!(out, ",")?;
-                gen_typ(out, expr.typ())?;
-            }
-        }
-        write!(out, ") @{}(", call.name)?;
-        for (i, expr) in call.args.into_iter().enumerate() {
-            if i != 0 {
-                write!(out, ", ")?;
-            }
-            self.expr(out, expr)?;
-        }
-        write!(out, ")")
+    fn ret(&mut self, expr: &Expr) {
+        let val = self.expr(expr);
+        self.builder.build_return(Some(&val)).unwrap();
     }
 
-    fn expr(&mut self, out: &mut impl Write, expr: GoodExpr<'a>) -> io::Result<()> {
+    fn expr(&mut self, expr: &Expr) -> BasicValueEnum<'a> {
         match expr {
-            GoodExpr::Literal(literal, typ) => {
-                gen_typ(out, &typ)?;
-                write!(out, " ")?;
-                self.literal(out, literal)
-            }
-            GoodExpr::Call(good_call) => todo!(),
+            Expr::Literal(literal) => self.literal(literal),
+            Expr::Call(call) => self.call(call).unwrap(),
         }
     }
 
-    fn literal(&mut self, out: &mut impl Write, literal: Literal<'a>) -> io::Result<()> {
+    fn literal(&mut self, literal: &Literal) -> BasicValueEnum<'a> {
         match literal {
-            Literal::Int(n) => write!(out, "{n}"),
+            Literal::Int(n) => self.context.i32_type().const_int(*n, false).into(),
             Literal::RawStr(s) => {
-                self.strs.push(s);
-                write!(out, "@.str{}", self.strs.len() - 1)
+                let tmp = self.new_tmp();
+                self.builder
+                    .build_global_string_ptr(s, &format!(".s{tmp}"))
+                    .unwrap()
+                    .as_pointer_value()
+                    .into()
             }
         }
     }
-}
 
-fn gen_str(out: &mut impl Write, i: usize, s: &str) -> io::Result<()> {
-    write!(
-        out,
-        "\n@.str{i} = private unnamed_addr constant [{} x i8] c\"{s}\\00\", align 1",
-        s.len() + 1
-    )
-}
-
-fn gen_ext_fun(out: &mut impl Write, ext_fun: ExtFun) -> io::Result<()> {
-    write!(out, "\ndeclare i32 @{}(", ext_fun.header.name)?;
-    if let Some((_, typ)) = ext_fun.header.args.first() {
-        gen_typ(out, typ)?;
-        for (_, typ) in &ext_fun.header.args[1..] {
-            write!(out, ",")?;
-            gen_typ(out, typ)?;
+    fn call(&mut self, call: &Call) -> Option<BasicValueEnum<'a>> {
+        let tmp = self.new_tmp();
+        let args: Vec<_> = call
+            .args
+            .iter()
+            .map(|expr| self.expr(expr).into())
+            .collect();
+        let call = self
+            .builder
+            .build_direct_call(self.funs[call.name], &args, &format!("t{}", tmp))
+            .unwrap();
+        match call.try_as_basic_value() {
+            ValueKind::Basic(val) => Some(val),
+            ValueKind::Instruction(_) => None,
         }
     }
-    write!(out, ")")
-}
 
-fn gen_typ(out: &mut impl Write, typ: &Typ) -> io::Result<()> {
-    match typ {
-        Typ::Prime(prime) => gen_prime(out, prime),
-        Typ::Ptr(_) | Typ::Name(_) => write!(out, "ptr"),
+    fn new_tmp(&mut self) -> u32 {
+        self.next_tmp += 1;
+        self.next_tmp - 1
     }
 }
 
-fn gen_prime(out: &mut impl Write, prime: &Prime) -> io::Result<()> {
+fn gen_typ<'a>(context: &'a Context, typ: &Typ<'_>) -> BasicMetadataTypeEnum<'a> {
+    match typ {
+        Typ::Prime(prime) => prime_typ(context, prime),
+        Typ::Ptr(_) => context.ptr_type(0.into()).into(),
+        Typ::Name(_) => context.ptr_type(0.into()).into(),
+    }
+}
+
+fn prime_typ<'a>(context: &'a Context, prime: &Prime) -> BasicMetadataTypeEnum<'a> {
     match prime {
-        Prime::I32 => write!(out, "i32"),
-        Prime::U8 => write!(out, "i8"),
+        Prime::I32 => context.i32_type().into(),
+        Prime::U8 => context.i8_type().into(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        analyse::analyse, codegen::gen_ir, compile::read_file, lex::lex, parse::parse, source::meta,
+        codegen::gen_ir, compile::read_file, lex::lex, parse::parse, run_command, source::meta,
     };
     use pretty_assertions::assert_eq;
 
     fn test_codegen(name: &str) {
         let input = format!("examples/{name}.ok");
         let output = format!("build/{name}.ll");
+        run_command("rm", ["-f", &output]);
         let expected = read_file(&format!("examples_compiled/{name}.ll"));
         let code = read_file(&input);
         let meta = meta(&input, &code);
         let tokens = lex(&code, &meta);
         let ast = parse(tokens).unwrap();
-        let good_ast = analyse(ast);
-        gen_ir(good_ast, &output);
+        gen_ir(ast, &output);
         let found = read_file(&output);
         assert_eq!(found, expected)
     }

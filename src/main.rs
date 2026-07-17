@@ -1,4 +1,3 @@
-mod analyse;
 mod codegen;
 mod compile;
 mod display_location;
@@ -36,7 +35,7 @@ fn run(path: &str) {
     run_command("build/out", []);
 }
 
-fn run_command(name: &str, args: impl IntoIterator<Item = &'static str>) {
+fn run_command<'a>(name: &str, args: impl IntoIterator<Item = &'a str>) {
     let status = Command::new(name).args(args).status().unwrap();
     if !status.success() {
         exit(status.code().unwrap_or(1))

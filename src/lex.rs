@@ -37,7 +37,7 @@ pub struct Token<'a> {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Lexeme<'a> {
     Name(&'a str),
-    Int(i64),
+    Int(u64),
     RawStr(&'a str),
     ParL,
     ParR,

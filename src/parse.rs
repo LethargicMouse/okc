@@ -99,12 +99,12 @@ impl<'a> From<Literal<'a>> for Expr<'a> {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Literal<'a> {
-    Int(i64),
+    Int(u64),
     RawStr(&'a str),
 }
 
-impl<'a> From<i64> for Literal<'a> {
-    fn from(v: i64) -> Self {
+impl<'a> From<u64> for Literal<'a> {
+    fn from(v: u64) -> Self {
         Self::Int(v)
     }
 }
@@ -297,7 +297,7 @@ impl<'a> Parser<'a> {
         get_lexeme!(self, Name, "<name>")
     }
 
-    fn int(&mut self) -> Res<i64> {
+    fn int(&mut self) -> Res<u64> {
         get_lexeme!(self, Int, "<int>")
     }
 
