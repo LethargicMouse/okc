@@ -327,11 +327,11 @@ mod tests {
 
     #[test]
     fn test_parse_empty() {
-        test_parse("resources/empty.ok");
+        test_parse("examples/empty.ok");
     }
 
     #[test]
     fn test_parse_simple_call() {
-        test_parse("resources/simple_call.ok")
+        test_parse("examples/simple_call.ok")
     }
 }

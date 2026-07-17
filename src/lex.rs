@@ -219,11 +219,11 @@ mod tests {
 
     #[test]
     fn test_lex_empty() {
-        test_lex("resources/empty.ok");
+        test_lex("examples/empty.ok");
     }
 
     #[test]
     fn test_lex_simple_call() {
-        test_lex("resources/simple_call.ok");
+        test_lex("examples/simple_call.ok");
     }
 }
