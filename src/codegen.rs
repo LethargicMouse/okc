@@ -165,4 +165,9 @@ mod tests {
     fn test_codegen_simple_call() {
         test_codegen("simple_call");
     }
+
+    #[test]
+    fn test_codegen_simple_call_2() {
+        test_codegen("simple_call_2");
+    }
 }
