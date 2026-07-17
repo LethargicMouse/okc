@@ -1,7 +1,7 @@
 [package]
 name = "okc"
-version = "0.1.8"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
-bumpalo = { version = "3.20.3", features = ["boxed", "collections"] }
+pretty_assertions = "1.4.1"

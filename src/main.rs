@@ -1,3 +1,4 @@
+mod analyse;
 mod codegen;
 mod compile;
 mod display_location;

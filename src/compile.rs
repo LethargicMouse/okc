@@ -1,8 +1,7 @@
 use std::{fs::File, io::Read};
 
-use bumpalo::Bump;
-
 use crate::{
+    analyse::analyse,
     codegen::{IR_PATH, gen_ir},
     die,
     lex::lex,
@@ -15,9 +14,9 @@ pub fn compile(path: &str) {
     let code = read_file(path);
     let meta = meta(path, &code);
     let tokens = lex(&code, &meta);
-    let arena = Bump::new();
-    let ast = parse(tokens, &arena).unwrap_or_else(|e| die(e));
-    gen_ir(ast, IR_PATH);
+    let ast = parse(tokens).unwrap_or_else(|e| die(e));
+    let good_ast = analyse(ast);
+    gen_ir(good_ast, IR_PATH);
     run_command("clang", ["-o", "build/out", "build/out.ll"]);
 }
 
