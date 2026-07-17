@@ -329,20 +329,26 @@ impl Display for ParseError<'_> {
 mod tests {
     use crate::{compile::read_file, lex::lex, parse::parse, source::meta};
 
-    fn test_parse(path: &str) {
-        let code = read_file(path);
-        let meta = meta(path, &code);
+    fn test_parse(name: &str) {
+        let path = format!("examples/{name}.ok");
+        let code = read_file(&path);
+        let meta = meta(&path, &code);
         let tokens = lex(&code, &meta);
         parse(tokens).unwrap_or_else(|e| panic!("{e}"));
     }
 
     #[test]
     fn test_parse_empty() {
-        test_parse("examples/empty.ok");
+        test_parse("empty");
     }
 
     #[test]
     fn test_parse_simple_call() {
-        test_parse("examples/simple_call.ok")
+        test_parse("simple_call")
+    }
+
+    #[test]
+    fn test_parse_simple_call_2() {
+        test_parse("simple_call_2")
     }
 }
