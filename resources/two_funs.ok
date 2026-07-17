@@ -1,8 +1,0 @@
-fn fun_1() i32 {
-  return 123;
-}
-
-fn __fun_n2_() i32 {
-  return 321;
-  return 444;
-}
