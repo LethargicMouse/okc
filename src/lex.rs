@@ -1,6 +1,9 @@
+use crate::{
+    RED, RESET,
+    source::{Location, Meta, Pos},
+};
 use Lexeme::*;
-
-use crate::source::{Location, Meta, Pos};
+use std::process::exit;
 
 pub fn lex<'a>(code: &'a str, meta: &'a Meta<'a>) -> Vec<Token<'a>> {
     let mut res = Vec::new();
@@ -34,20 +37,23 @@ pub struct Token<'a> {
 pub enum Lexeme<'a> {
     Name(&'a str),
     Int(i64),
+    RawStr(&'a str),
     ParL,
     ParR,
     CurL,
     CurR,
     Semicolon,
+    Colon,
+    Star,
     Eof,
     Error,
 }
 
 impl<'a> Lexeme<'a> {
     pub fn describe(&self) -> &'a str {
+        // FIXME some of those should not be here, gotta fix the parser msgs
         match self {
             Name("fn") => "`fn`",
-            // FIXME should not be here, gotta fix the parser msgs
             Name("return") => "`return`",
             Name("i32") => "`i32`",
             ParL => "`(`",
@@ -99,6 +105,7 @@ impl<'a> Lexer<'a> {
             }
             if let Some(token) = self
                 .try_list()
+                .or_else(|| self.try_raw_str())
                 .or_else(|| self.try_name())
                 .or_else(|| self.try_int())
             {
@@ -134,6 +141,8 @@ impl<'a> Lexer<'a> {
             ("{", CurL),
             ("}", CurR),
             (";", Semicolon),
+            (":", Colon),
+            ("*", Star),
         ];
         for (pattern, lexeme) in lex_list {
             if self.code[self.cursor..].starts_with(pattern) {
@@ -163,7 +172,55 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn try_raw_str(&mut self) -> Option<Token<'a>> {
+        if !self.code[self.cursor..].starts_with("r\"") {
+            return None;
+        }
+        self.cursor += 2;
+        let res = self.take_while(|c| *c != '\"');
+        self.cursor -= 2;
+        if res.len() == self.code.len() - self.cursor - 2 {
+            eprintln!(
+                "{RED}error:{RESET} unclosed string delimeter in {}",
+                self.location(1)
+            );
+            exit(1);
+        }
+        Some(self.token(Lexeme::RawStr(res), res.len() + 3))
+    }
+
     fn next(&self) -> char {
         self.code[self.cursor..].chars().next().unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        compile::read_file,
+        lex::{Lexeme, lex},
+        source::meta,
+    };
+
+    fn test_lex(path: &str) {
+        let code = read_file(path);
+        let meta = meta(path, &code);
+        let tokens = lex(&code, &meta);
+        if tokens.iter().any(|t| t.lexeme == Lexeme::Error) {
+            panic!(
+                "lex failed: {:?}",
+                tokens.iter().map(|t| t.lexeme).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn test_lex_empty() {
+        test_lex("resources/empty.ok");
+    }
+
+    #[test]
+    fn test_lex_simple_call() {
+        test_lex("resources/simple_call.ok");
     }
 }

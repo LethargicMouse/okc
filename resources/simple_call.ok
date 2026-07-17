@@ -1,6 +1,6 @@
 extern fn puts(str: *u8) i32;
 
 fn main() i32 {
-  puts(r"hello");
+  puts(r"hello world");
   return 0;
 }
