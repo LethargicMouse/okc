@@ -171,3 +171,25 @@ impl Display for ParseError<'_> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{compile::read_file, lex::lex, parse::parse, source::meta};
+
+    fn test_parse(path: &str) {
+        let code = read_file(path);
+        let meta = meta(path, &code);
+        let tokens = lex(&code, &meta);
+        parse(tokens).unwrap_or_else(|e| panic!("{e}"));
+    }
+
+    #[test]
+    fn test_parse_empty() {
+        test_parse("resources/empty.ok");
+    }
+
+    #[test]
+    fn test_parse_simple_call() {
+        test_parse("resources/simple_call.ok")
+    }
+}
