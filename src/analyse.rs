@@ -28,12 +28,20 @@ impl<'a> From<GoodCall<'a>> for GoodStatement<'a> {
 
 pub enum GoodExpr<'a> {
     Literal(Literal<'a>, Typ<'a>),
+    Call(GoodCall<'a>),
+}
+
+impl<'a> From<GoodCall<'a>> for GoodExpr<'a> {
+    fn from(v: GoodCall<'a>) -> Self {
+        Self::Call(v)
+    }
 }
 
 impl<'a> GoodExpr<'a> {
     pub fn typ(&self) -> &Typ<'a> {
         match self {
             GoodExpr::Literal(_, typ) => typ,
+            GoodExpr::Call(_) => &Typ::Prime(Prime::I32),
         }
     }
 }
@@ -73,7 +81,7 @@ fn analyse_call<'a>(call: Call<'a>) -> GoodCall<'a> {
 fn analyse_expr<'a>(expr: Expr<'a>) -> GoodExpr<'a> {
     match expr {
         Expr::Literal(literal) => GoodExpr::Literal(literal, get_literal_typ(literal)),
-        Expr::Call(_) => todo!(),
+        Expr::Call(call) => analyse_call(call).into(),
     }
 }
 
