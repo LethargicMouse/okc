@@ -244,4 +244,9 @@ mod tests {
     fn test_lex_simple_call_2() {
         test_lex("simple_call_2")
     }
+
+    #[test]
+    fn test_lex_var() {
+        test_lex("var")
+    }
 }
