@@ -1,5 +1,7 @@
 use std::{cmp::Ordering, fmt::Display};
 
+use bumpalo::{Bump, boxed::Box};
+
 use crate::{
     RED, RESET,
     lex::{
@@ -11,32 +13,93 @@ use crate::{
 
 #[derive(Debug, PartialEq)]
 pub struct Ast<'a> {
+    pub ext_funs: Vec<ExtFun<'a>>,
     pub funs: Vec<Fun<'a>>,
 }
 
 #[derive(Debug, PartialEq)]
+pub struct ExtFun<'a> {
+    pub header: Header<'a>,
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Fun<'a> {
+    pub header: Header<'a>,
+    pub body: Vec<Statement<'a>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Header<'a> {
     pub name: &'a str,
-    pub body: Vec<Statement>,
+    pub args: Vec<(&'a str, Typ<'a>)>,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Statement {
-    Return(Expr),
+pub enum Typ<'a> {
+    Prime(Prime),
+    Ptr(Box<'a, Typ<'a>>),
+    Name(&'a str),
+}
+
+impl<'a> From<Prime> for Typ<'a> {
+    fn from(v: Prime) -> Self {
+        Self::Prime(v)
+    }
+}
+
+impl<'a> From<&'a str> for Typ<'a> {
+    fn from(s: &'a str) -> Self {
+        match s {
+            "i32" => Prime::I32.into(),
+            "u8" => Prime::U8.into(),
+            _ => Self::Name(s),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Expr {
+pub enum Prime {
+    I32,
+    U8,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Statement<'a> {
+    Return(Expr<'a>),
+    Call(Call<'a>),
+}
+
+impl<'a> From<Call<'a>> for Statement<'a> {
+    fn from(v: Call<'a>) -> Self {
+        Self::Call(v)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Call<'a> {
+    name: &'a str,
+    args: Box<'a, [Expr<'a>]>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Expr<'a> {
     Int(i64),
+    RawStr(&'a str),
 }
 
-pub fn parse<'a>(tokens: Vec<Token<'a>>) -> Result<Ast<'a>, ParseError<'a>> {
-    let mut parser = Parser::new(tokens);
+impl<'a> From<i64> for Expr<'a> {
+    fn from(v: i64) -> Self {
+        Self::Int(v)
+    }
+}
+
+pub fn parse<'a>(tokens: Vec<Token<'a>>, arena: &'a Bump) -> Result<Ast<'a>, ParseError<'a>> {
+    let mut parser = Parser::new(tokens, arena);
     parser.ast().map_err(|_| parser.error())
 }
 
-#[derive(Default)]
 struct Parser<'a> {
+    arena: &'a Bump,
     tokens: Vec<Token<'a>>,
     cursor: usize,
     err_cursor: usize,
@@ -45,18 +108,41 @@ struct Parser<'a> {
 
 type Res<T> = Result<T, ()>;
 
+macro_rules! get_lexeme {
+    ($self: ident, $pat:ident, $f:expr) => {
+        if let $pat(val) = $self.tokens[$self.cursor].lexeme {
+            $self.cursor += 1;
+            Ok(val)
+        } else {
+            $self.fail($f);
+            Err(())
+        }
+    };
+}
+
 impl<'a> Parser<'a> {
-    fn new(tokens: Vec<Token<'a>>) -> Self {
+    fn new(tokens: Vec<Token<'a>>, arena: &'a Bump) -> Self {
         Self {
+            cursor: 0,
+            err_cursor: 0,
+            err_msgs: Vec::new(),
             tokens,
-            ..Default::default()
+            arena,
         }
     }
 
     fn ast(&mut self) -> Res<Ast<'a>> {
+        let ext_funs = self.many(Self::ext_fun);
         let funs = self.many(Self::fun);
         self.expect(Eof)?;
-        Ok(Ast { funs })
+        Ok(Ast { ext_funs, funs })
+    }
+
+    fn ext_fun(&mut self) -> Res<ExtFun<'a>> {
+        self.expect(Name("extern"))?;
+        let header = self.header()?;
+        self.expect(Semicolon)?;
+        Ok(ExtFun { header })
     }
 
     fn many<T>(&mut self, parse: fn(&mut Self) -> Res<T>) -> Vec<T> {
@@ -77,47 +163,100 @@ impl<'a> Parser<'a> {
     }
 
     fn fun(&mut self) -> Res<Fun<'a>> {
-        self.expect(Name("fn"))?;
-        let name = self.name()?;
-        self.expect(ParL)?;
-        self.expect(ParR)?;
-        self.expect(Name("i32"))?;
+        let header = self.header()?;
         self.expect(CurL)?;
         let body = self.many(Self::statement);
         self.expect(CurR)?;
-        Ok(Fun { name, body })
+        Ok(Fun { header, body })
     }
 
-    fn statement(&mut self) -> Res<Statement> {
-        self.expect(Name("return"))?;
-        let expr = self.expr()?;
-        self.expect(Semicolon)?;
-        Ok(Statement::Return(expr))
+    fn header(&mut self) -> Res<Header<'a>> {
+        self.expect(Name("fn"))?;
+        let name = self.name()?;
+        self.expect(ParL)?;
+        let args = self.many(Self::fun_arg);
+        self.expect(ParR)?;
+        self.expect(Name("i32"))?;
+        Ok(Header { name, args })
     }
 
-    fn expr(&mut self) -> Res<Expr> {
-        let int = self.int()?;
-        Ok(Expr::Int(int))
+    fn fun_arg(&mut self) -> Res<(&'a str, Typ<'a>)> {
+        let name = self.name()?;
+        self.expect(Colon)?;
+        let typ = self.typ()?;
+        Ok((name, typ))
+    }
+
+    fn typ(&mut self) -> Res<Typ<'a>> {
+        self.either(&[
+            |p| {
+                let name = p.name()?;
+                Ok(name.into())
+            },
+            |p| {
+                p.expect(Star)?;
+                let typ = p.typ()?;
+                Ok(Typ::Ptr(Box::new_in(typ, p.arena)))
+            },
+        ])
+    }
+
+    fn either<T>(&mut self, parses: &[fn(&mut Self) -> Res<T>]) -> Res<T> {
+        for parse in parses {
+            if let Some(res) = self.maybe(*parse) {
+                return Ok(res);
+            }
+        }
+        Err(())
+    }
+
+    fn statement(&mut self) -> Res<Statement<'a>> {
+        self.either(&[
+            |p| {
+                p.expect(Name("return"))?;
+                let expr = p.expr()?;
+                p.expect(Semicolon)?;
+                Ok(Statement::Return(expr))
+            },
+            |p| {
+                let call = p.call()?;
+                p.expect(Semicolon)?;
+                Ok(call.into())
+            },
+        ])
+    }
+
+    fn call(&mut self) -> Res<Call<'a>> {
+        let name = self.name()?;
+        self.expect(ParL)?;
+        let args = Box::from_iter_in(self.many(Self::expr), self.arena);
+        self.expect(ParR)?;
+        Ok(Call { name, args })
+    }
+
+    fn expr(&mut self) -> Res<Expr<'a>> {
+        self.either(&[
+            |p| {
+                let int = p.int()?;
+                Ok(int.into())
+            },
+            |p| {
+                let raw_str = p.raw_str()?;
+                Ok(Expr::RawStr(raw_str))
+            },
+        ])
+    }
+
+    fn raw_str(&mut self) -> Res<&'a str> {
+        get_lexeme!(self, RawStr, "<raw str>")
     }
 
     fn name(&mut self) -> Res<&'a str> {
-        if let Name(name) = self.tokens[self.cursor].lexeme {
-            self.cursor += 1;
-            Ok(name)
-        } else {
-            self.fail("name");
-            Err(())
-        }
+        get_lexeme!(self, Name, "<name>")
     }
 
     fn int(&mut self) -> Res<i64> {
-        if let Int(int) = self.tokens[self.cursor].lexeme {
-            self.cursor += 1;
-            Ok(int)
-        } else {
-            self.fail("int");
-            Err(())
-        }
+        get_lexeme!(self, Int, "<int>")
     }
 
     fn fail(&mut self, msg: &'a str) {
@@ -174,13 +313,16 @@ impl Display for ParseError<'_> {
 
 #[cfg(test)]
 mod tests {
+    use bumpalo::Bump;
+
     use crate::{compile::read_file, lex::lex, parse::parse, source::meta};
 
     fn test_parse(path: &str) {
         let code = read_file(path);
         let meta = meta(path, &code);
         let tokens = lex(&code, &meta);
-        parse(tokens).unwrap_or_else(|e| panic!("{e}"));
+        let arena = Bump::new();
+        parse(tokens, &arena).unwrap_or_else(|e| panic!("{e}"));
     }
 
     #[test]

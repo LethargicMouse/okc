@@ -28,7 +28,7 @@ fn try_gen_ir(ast: Ast, path: &str) -> io::Result<()> {
 }
 
 fn gen_fun<T: Write>(out: &mut T, fun: Fun) -> io::Result<()> {
-    write!(out, "\ndefine i32 @{}() {{\nentry:", fun.name)?;
+    write!(out, "\ndefine i32 @{}() {{\nentry:", fun.header.name)?;
     for statement in fun.body {
         gen_statement(out, statement)?;
     }
@@ -41,11 +41,13 @@ fn gen_statement<T: Write>(out: &mut T, statement: Statement) -> io::Result<()> 
             write!(out, "\nret i32 ")?;
             gen_expr(out, expr)
         }
+        Statement::Call(_) => todo!(),
     }
 }
 
 fn gen_expr<T: Write>(out: &mut T, expr: Expr) -> io::Result<()> {
     match expr {
         Expr::Int(n) => write!(out, "{n}"),
+        Expr::RawStr(_) => todo!(),
     }
 }

@@ -10,6 +10,7 @@ impl Debug for Location<'_> {
 
 impl Display for Location<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        dbg!(self.start, self.end);
         write!(f, "`{}` at {}:\n     |", self.meta.name, self.start)?;
         write!(f, "{}", Line(self.start.line, &self.meta.lines))?;
         write!(f, "{}", Underline(self.start.symbol, self.end.symbol))

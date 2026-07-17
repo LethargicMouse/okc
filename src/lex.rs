@@ -15,14 +15,15 @@ pub fn lex<'a>(code: &'a str, meta: &'a Meta<'a>) -> Vec<Token<'a>> {
 fn make_poses(code: &str) -> Vec<Pos> {
     code.chars()
         .chain("  ".chars())
-        .scan(Pos { line: 1, symbol: 0 }, |p, c| {
+        .scan(Pos { line: 1, symbol: 1 }, |p, c| {
+            let res = *p;
             if c == '\n' {
                 p.line += 1;
-                p.symbol = 0;
+                p.symbol = 1;
             } else {
                 p.symbol += 1;
             }
-            Some(*p)
+            Some(res)
         })
         .collect()
 }
@@ -55,6 +56,7 @@ impl<'a> Lexeme<'a> {
         match self {
             Name("fn") => "`fn`",
             Name("return") => "`return`",
+            Name("extern") => "`extern`",
             Name("i32") => "`i32`",
             ParL => "`(`",
             ParR => "`)`",
@@ -62,7 +64,8 @@ impl<'a> Lexeme<'a> {
             CurR => "`}`",
             Semicolon => "`;`",
             Eof => "<eof>",
-            _ => unreachable!(),
+            Star => "`*`",
+            lexeme => unreachable!("{lexeme:?}"),
         }
     }
 }
