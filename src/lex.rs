@@ -205,9 +205,10 @@ mod tests {
         source::meta,
     };
 
-    fn test_lex(path: &str) {
-        let code = read_file(path);
-        let meta = meta(path, &code);
+    fn test_lex(name: &str) {
+        let path = format!("examples/{name}.ok");
+        let code = read_file(&path);
+        let meta = meta(&path, &code);
         let tokens = lex(&code, &meta);
         if tokens.iter().any(|t| t.lexeme == Lexeme::Error) {
             panic!(
@@ -219,11 +220,16 @@ mod tests {
 
     #[test]
     fn test_lex_empty() {
-        test_lex("examples/empty.ok");
+        test_lex("empty");
     }
 
     #[test]
     fn test_lex_simple_call() {
-        test_lex("examples/simple_call.ok");
+        test_lex("simple_call");
+    }
+
+    #[test]
+    fn test_lex_simple_call_2() {
+        test_lex("simple_call_2")
     }
 }
