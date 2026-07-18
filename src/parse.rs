@@ -379,4 +379,9 @@ mod tests {
     fn test_parse_simple_call_2() {
         test_parse("simple_call_2")
     }
+
+    #[test]
+    fn test_parse_var() {
+        test_parse("var");
+    }
 }
