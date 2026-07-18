@@ -65,6 +65,19 @@ pub enum Prime {
 pub enum Statement<'a> {
     Return(Expr<'a>),
     Call(Call<'a>),
+    Let(Let<'a>),
+}
+
+impl<'a> From<Let<'a>> for Statement<'a> {
+    fn from(v: Let<'a>) -> Self {
+        Self::Let(v)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Let<'a> {
+    pub name: &'a str,
+    pub expr: Expr<'a>,
 }
 
 impl<'a> From<Call<'a>> for Statement<'a> {
@@ -83,6 +96,7 @@ pub struct Call<'a> {
 pub enum Expr<'a> {
     Literal(Literal<'a>),
     Call(Call<'a>),
+    Var(&'a str),
 }
 
 impl<'a> From<Call<'a>> for Expr<'a> {
@@ -242,6 +256,14 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> Res<Statement<'a>> {
         self.either(&[
             |p| {
+                p.expect(Name("let"))?;
+                let name = p.name()?;
+                p.expect(Equal)?;
+                let expr = p.expr()?;
+                p.expect(Semicolon)?;
+                Ok(Let { name, expr }.into())
+            },
+            |p| {
                 p.expect(Name("return"))?;
                 let expr = p.expr()?;
                 p.expect(Semicolon)?;
@@ -264,6 +286,10 @@ impl<'a> Parser<'a> {
             |p| {
                 let call = p.call()?;
                 Ok(call.into())
+            },
+            |p| {
+                let name = p.name()?;
+                Ok(Expr::Var(name))
             },
         ])
     }

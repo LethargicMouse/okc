@@ -94,6 +94,7 @@ impl<'a> Generator<'a> {
             Statement::Call(call) => {
                 self.call(call);
             }
+            Statement::Let(_) => todo!(),
         }
     }
 
@@ -106,6 +107,7 @@ impl<'a> Generator<'a> {
         match expr {
             Expr::Literal(literal) => self.literal(literal),
             Expr::Call(call) => self.call(call).unwrap(),
+            Expr::Var(_) => todo!(),
         }
     }
 

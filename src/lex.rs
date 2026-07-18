@@ -59,6 +59,7 @@ impl<'a> Lexeme<'a> {
             Name("fn") => "`fn`",
             Name("return") => "`return`",
             Name("extern") => "`extern`",
+            Name("let") => "`let`",
             Name("i32") => "`i32`",
             Equal => "`=`",
             Comma => "`,`",
