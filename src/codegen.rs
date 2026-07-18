@@ -2,7 +2,7 @@ use std::{collections::HashMap, process::exit};
 
 use crate::{
     RED, RESET,
-    parse::{Ast, Call, Expr, ExtFun, Fun, Header, Literal, Prime, Statement, Typ},
+    parse::{Ast, Call, Expr, ExtFun, Fun, Header, Let, Literal, Prime, Statement, Typ},
 };
 use inkwell::{
     builder::Builder,
@@ -30,6 +30,7 @@ struct Generator<'a> {
     module: Module<'a>,
     builder: Builder<'a>,
     funs: HashMap<&'a str, FunctionValue<'a>>,
+    vars: HashMap<&'a str, BasicValueEnum<'a>>,
     next_tmp: u32,
 }
 
@@ -41,6 +42,7 @@ impl<'a> Generator<'a> {
             funs: HashMap::new(),
             context,
             next_tmp: 0,
+            vars: HashMap::new(),
         }
     }
 
@@ -80,7 +82,8 @@ impl<'a> Generator<'a> {
         self.context.i32_type().fn_type(&param_typs, false)
     }
 
-    fn fun(&mut self, fun: Fun, fun_val: FunctionValue<'a>) {
+    fn fun(&mut self, fun: Fun<'a>, fun_val: FunctionValue<'a>) {
+        self.vars.clear();
         let basic_block = self.context.append_basic_block(fun_val, "entry");
         self.builder.position_at_end(basic_block);
         for statement in &fun.body {
@@ -88,13 +91,13 @@ impl<'a> Generator<'a> {
         }
     }
 
-    fn statement(&mut self, statement: &Statement) {
+    fn statement(&mut self, statement: &Statement<'a>) {
         match statement {
             Statement::Return(expr) => self.ret(expr),
             Statement::Call(call) => {
                 self.call(call);
             }
-            Statement::Let(_) => todo!(),
+            Statement::Let(let_expr) => self.let_expr(let_expr),
         }
     }
 
@@ -107,7 +110,7 @@ impl<'a> Generator<'a> {
         match expr {
             Expr::Literal(literal) => self.literal(literal),
             Expr::Call(call) => self.call(call).unwrap(),
-            Expr::Var(_) => todo!(),
+            Expr::Var(n) => self.vars[n],
         }
     }
 
@@ -145,6 +148,11 @@ impl<'a> Generator<'a> {
     fn new_tmp(&mut self) -> u32 {
         self.next_tmp += 1;
         self.next_tmp - 1
+    }
+
+    fn let_expr(&mut self, let_expr: &Let<'a>) {
+        let val = self.expr(&let_expr.expr);
+        self.vars.insert(let_expr.name, val);
     }
 }
 
@@ -197,5 +205,10 @@ mod tests {
     #[test]
     fn test_codegen_simple_call_2() {
         test_codegen("simple_call_2");
+    }
+
+    #[test]
+    fn test_codegen_var() {
+        test_codegen("var")
     }
 }
