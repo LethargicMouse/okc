@@ -410,4 +410,9 @@ mod tests {
     fn test_parse_var() {
         test_parse("var");
     }
+
+    #[test]
+    fn test_parse_var_assign() {
+        test_parse("var_assign");
+    }
 }
