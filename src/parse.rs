@@ -9,30 +9,25 @@ use crate::{
     source::Location,
 };
 
-#[derive(Debug, PartialEq)]
 pub struct Ast<'a> {
     pub ext_funs: Vec<ExtFun<'a>>,
     pub funs: Vec<Fun<'a>>,
 }
 
-#[derive(Debug, PartialEq)]
 pub struct ExtFun<'a> {
     pub header: Header<'a>,
 }
 
-#[derive(Debug, PartialEq)]
 pub struct Fun<'a> {
     pub header: Header<'a>,
     pub body: Vec<Statement<'a>>,
 }
 
-#[derive(Debug, PartialEq)]
 pub struct Header<'a> {
     pub name: &'a str,
     pub args: Vec<(&'a str, Typ<'a>)>,
 }
 
-#[derive(Debug, PartialEq)]
 pub enum Typ<'a> {
     Prime(Prime),
     Ptr(Box<Typ<'a>>),
@@ -55,17 +50,32 @@ impl<'a> From<&'a str> for Typ<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Prime {
     I32,
     U8,
 }
 
-#[derive(Debug, PartialEq)]
+pub struct Let<'a> {
+    pub name: &'a str,
+    pub expr: Expr<'a>,
+}
+
+pub struct Assign<'a> {
+    pub name: &'a str,
+    pub expr: Expr<'a>,
+}
+
 pub enum Statement<'a> {
     Return(Expr<'a>),
     Call(Call<'a>),
     Let(Let<'a>),
+    Assign(Assign<'a>),
+}
+
+impl<'a> From<Assign<'a>> for Statement<'a> {
+    fn from(v: Assign<'a>) -> Self {
+        Self::Assign(v)
+    }
 }
 
 impl<'a> From<Let<'a>> for Statement<'a> {
@@ -74,25 +84,17 @@ impl<'a> From<Let<'a>> for Statement<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Let<'a> {
-    pub name: &'a str,
-    pub expr: Expr<'a>,
-}
-
 impl<'a> From<Call<'a>> for Statement<'a> {
     fn from(v: Call<'a>) -> Self {
         Self::Call(v)
     }
 }
 
-#[derive(Debug, PartialEq)]
 pub struct Call<'a> {
     pub name: &'a str,
     pub args: Vec<Expr<'a>>,
 }
 
-#[derive(Debug, PartialEq)]
 pub enum Expr<'a> {
     Literal(Literal<'a>),
     Call(Call<'a>),
@@ -111,7 +113,6 @@ impl<'a> From<Literal<'a>> for Expr<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Literal<'a> {
     Int(u64),
     RawStr(&'a str),
@@ -270,6 +271,13 @@ impl<'a> Parser<'a> {
                 Ok(Statement::Return(expr))
             },
             |p| {
+                let name = p.name()?;
+                p.expect(Equal)?;
+                let expr = p.expr()?;
+                p.expect(Semicolon)?;
+                Ok(Assign { name, expr }.into())
+            },
+            |p| {
                 let call = p.call()?;
                 p.expect(Semicolon)?;
                 Ok(call.into())
@@ -359,7 +367,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct ParseError<'a> {
     location: Location<'a>,
     msgs: Vec<&'a str>,

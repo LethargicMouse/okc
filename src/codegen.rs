@@ -98,6 +98,7 @@ impl<'a> Generator<'a> {
                 self.call(call);
             }
             Statement::Let(let_expr) => self.let_expr(let_expr),
+            Statement::Assign(_) => todo!(),
         }
     }
 
