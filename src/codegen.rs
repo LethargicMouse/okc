@@ -2,15 +2,15 @@ use std::{collections::HashMap, process::exit};
 
 use crate::{
     RED, RESET,
-    parse::{Ast, Call, Expr, ExtFun, Fun, Header, Let, Literal, Prime, Statement, Typ},
+    parse::{Assign, Ast, Call, Expr, ExtFun, Fun, Header, Let, Literal, Prime, Statement, Typ},
 };
 use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
     targets::TargetTriple,
-    types::{BasicMetadataTypeEnum, FunctionType},
-    values::{BasicValueEnum, FunctionValue, ValueKind},
+    types::{BasicMetadataTypeEnum, BasicTypeEnum, FunctionType},
+    values::{BasicValueEnum, FunctionValue, PointerValue, ValueKind},
 };
 
 pub const IR_PATH: &str = "build/out.ll";
@@ -30,7 +30,7 @@ struct Generator<'a> {
     module: Module<'a>,
     builder: Builder<'a>,
     funs: HashMap<&'a str, FunctionValue<'a>>,
-    vars: HashMap<&'a str, BasicValueEnum<'a>>,
+    vars: HashMap<&'a str, (PointerValue<'a>, BasicTypeEnum<'a>)>,
     next_tmp: u32,
 }
 
@@ -98,7 +98,7 @@ impl<'a> Generator<'a> {
                 self.call(call);
             }
             Statement::Let(let_expr) => self.let_expr(let_expr),
-            Statement::Assign(_) => todo!(),
+            Statement::Assign(assign) => self.assign(assign),
         }
     }
 
@@ -111,7 +111,7 @@ impl<'a> Generator<'a> {
         match expr {
             Expr::Literal(literal) => self.literal(literal),
             Expr::Call(call) => self.call(call).unwrap(),
-            Expr::Var(n) => self.vars[n],
+            Expr::Var(n) => self.var(n),
         }
     }
 
@@ -153,7 +153,25 @@ impl<'a> Generator<'a> {
 
     fn let_expr(&mut self, let_expr: &Let<'a>) {
         let val = self.expr(&let_expr.expr);
-        self.vars.insert(let_expr.name, val);
+        let typ = val.get_type();
+        let tmp = self.new_tmp();
+        let ptr = self.builder.build_alloca(typ, &format!("t{tmp}")).unwrap();
+        self.builder.build_store(ptr, val).unwrap();
+        self.vars.insert(let_expr.name, (ptr, typ));
+    }
+
+    fn assign(&mut self, assign: &Assign) {
+        let ptr = self.vars[assign.name].0;
+        let val = self.expr(&assign.expr);
+        self.builder.build_store(ptr, val).unwrap();
+    }
+
+    fn var(&mut self, n: &str) -> BasicValueEnum<'a> {
+        let (ptr, typ) = self.vars[n];
+        let tmp = self.new_tmp();
+        self.builder
+            .build_load(typ, ptr, &format!("t{tmp}"))
+            .unwrap()
     }
 }
 
@@ -211,5 +229,10 @@ mod tests {
     #[test]
     fn test_codegen_var() {
         test_codegen("var")
+    }
+
+    #[test]
+    fn test_codegen_var_assign() {
+        test_codegen("var_assign")
     }
 }
