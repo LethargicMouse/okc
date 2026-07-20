@@ -258,4 +258,9 @@ mod tests {
     fn test_lex_var_assign() {
         test_lex("var_assign");
     }
+
+    #[test]
+    fn test_lex_add() {
+        test_lex("add")
+    }
 }
