@@ -1,7 +1,7 @@
 use std::{collections::HashMap, process::exit};
 
 use crate::{
-    RED, RESET,
+    display::LogError,
     parse::{
         Assign, Ast, BinOp, Binary, Call, Expr, ExtFun, Fun, Header, Let, Literal, Prime,
         Statement, Typ,
@@ -23,7 +23,7 @@ pub fn gen_ir(ast: Ast, path: &str) {
     let mut generator = Generator::new(&context);
     generator.ast(ast);
     generator.module.print_to_file(path).unwrap_or_else(|e| {
-        eprintln!("{RED}error:{RESET} failed to write to `{path}`: {e}");
+        eprintln!("{LogError} failed to write to `{path}`: {e}");
         exit(1)
     })
 }

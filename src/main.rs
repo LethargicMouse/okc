@@ -2,12 +2,13 @@
 
 mod codegen;
 mod compile;
+mod display;
 mod display_location;
 mod lex;
 mod parse;
 mod source;
 
-use crate::compile::compile;
+use crate::{compile::compile, display::LogError};
 use std::{
     env::args,
     fmt::Display,
@@ -21,7 +22,7 @@ fn main() {
     match args.next() {
         Some(path) => run(&path),
         None => {
-            eprintln!("{RED}error:{RESET} no source path given");
+            eprintln!("{LogError} no source path given");
             exit(1)
         }
     }
@@ -38,6 +39,3 @@ fn run_command<'a>(name: &str, args: impl IntoIterator<Item = &'a str>) {
         exit(status.code().unwrap_or(1))
     }
 }
-
-const RED: &str = "\x1b[0;31m";
-const RESET: &str = "\x1b[0m";

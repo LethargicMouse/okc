@@ -1,5 +1,5 @@
 use crate::{
-    RED, RESET,
+    display::LogError,
     source::{Location, Meta, Pos, Source},
 };
 use Lexeme::*;
@@ -193,7 +193,7 @@ impl<'a> Lexer<'a> {
         self.cursor -= prefix.len();
         if res.len() == self.source.code.len() - self.cursor - prefix.len() {
             eprintln!(
-                "{RED}error:{RESET} unclosed string delimeter in {}",
+                "{LogError} unclosed string delimeter in {}",
                 self.location(1)
             );
             exit(1);

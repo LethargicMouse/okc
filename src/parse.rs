@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, fmt::Display};
 
 use crate::{
-    RED, RESET,
+    display::LogError,
     lex::{
         Lexeme::{self, *},
         Token,
@@ -430,7 +430,7 @@ impl Display for ParseError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{RED}error:{RESET} failed to parse {}\n  expected:",
+            "{LogError} failed to parse {}\n  expected:",
             self.location
         )?;
         for msg in &self.msgs {

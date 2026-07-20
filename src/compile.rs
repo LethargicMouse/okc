@@ -1,8 +1,8 @@
 use std::{fs::File, io::Read, process::exit};
 
 use crate::{
-    RED, RESET,
     codegen::{IR_PATH, gen_ir},
+    display::LogError,
     lex::lex,
     parse::parse,
     run_command,
@@ -23,12 +23,12 @@ pub fn compile(path: &str) {
 
 pub fn read_file(path: &str) -> String {
     let mut file = File::open(path).unwrap_or_else(|e| {
-        eprintln!("{RED}error:{RESET} failed to open `{path}`: {e}");
+        eprintln!("{LogError} failed to open `{path}`: {e}");
         exit(1)
     });
     let mut res = String::new();
     file.read_to_string(&mut res).unwrap_or_else(|e| {
-        eprintln!("{RED}error:{RESET} failed to read `{path}`: {e}");
+        eprintln!("{LogError} failed to read `{path}`: {e}");
         exit(1)
     });
     res
