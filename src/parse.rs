@@ -423,4 +423,9 @@ mod tests {
     fn test_parse_var_assign() {
         test_parse("var_assign");
     }
+
+    #[test]
+    fn test_parse_add() {
+        test_parse("add");
+    }
 }
