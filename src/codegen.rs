@@ -2,7 +2,10 @@ use std::{collections::HashMap, process::exit};
 
 use crate::{
     RED, RESET,
-    parse::{Assign, Ast, Call, Expr, ExtFun, Fun, Header, Let, Literal, Prime, Statement, Typ},
+    parse::{
+        Assign, Ast, BinOp, Binary, Call, Expr, ExtFun, Fun, Header, Let, Literal, Prime,
+        Statement, Typ,
+    },
 };
 use inkwell::{
     builder::Builder,
@@ -112,7 +115,7 @@ impl<'a> Generator<'a> {
             Expr::Literal(literal) => self.literal(literal),
             Expr::Call(call) => self.call(call).unwrap(),
             Expr::Var(n) => self.var(n),
-            Expr::Binary(binary) => todo!(),
+            Expr::Binary(binary) => self.binary(binary),
         }
     }
 
@@ -173,6 +176,23 @@ impl<'a> Generator<'a> {
         self.builder
             .build_load(typ, ptr, &format!("t{tmp}"))
             .unwrap()
+    }
+
+    fn binary(&mut self, binary: &Binary) -> BasicValueEnum<'a> {
+        let left = self.expr(&binary.left);
+        let right = self.expr(&binary.right);
+        let tmp = self.new_tmp();
+        match binary.op {
+            BinOp::Add => self
+                .builder
+                .build_int_add(
+                    left.into_int_value(),
+                    right.into_int_value(),
+                    &format!("t{tmp}"),
+                )
+                .unwrap()
+                .into(),
+        }
     }
 }
 
@@ -235,5 +255,10 @@ mod tests {
     #[test]
     fn test_codegen_var_assign() {
         test_codegen("var_assign")
+    }
+
+    #[test]
+    fn test_codegen_add() {
+        test_codegen("add")
     }
 }

@@ -1,0 +1,13 @@
+; ModuleID = 'main'
+source_filename = "main"
+target triple = "x86_64-pc-linux-gnu"
+
+@.s1 = private unnamed_addr constant [3 x i8] c"%d\00", align 1
+
+declare i32 @printf(ptr, i32)
+
+define i32 @main() {
+entry:
+  %t0 = call i32 @printf(ptr @.s1, i32 4)
+  ret i32 0
+}
