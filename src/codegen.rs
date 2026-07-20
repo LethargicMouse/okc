@@ -122,15 +122,17 @@ impl<'a> Generator<'a> {
     fn literal(&mut self, literal: &Literal) -> BasicValueEnum<'a> {
         match literal {
             Literal::Int(n) => self.context.i32_type().const_int(*n, false).into(),
-            Literal::RawStr(s) => {
-                let tmp = self.new_tmp();
-                self.builder
-                    .build_global_string_ptr(s, &format!(".s{tmp}"))
-                    .unwrap()
-                    .as_pointer_value()
-                    .into()
-            }
+            Literal::RawStr(s) => self.raw_str(s),
         }
+    }
+
+    fn raw_str(&mut self, s: &str) -> BasicValueEnum<'a> {
+        let tmp = self.new_tmp();
+        self.builder
+            .build_global_string_ptr(s, &format!(".s{tmp}"))
+            .unwrap()
+            .as_pointer_value()
+            .into()
     }
 
     fn call(&mut self, call: &Call) -> Option<BasicValueEnum<'a>> {
