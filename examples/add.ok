@@ -1,5 +1,6 @@
-extern fn printf(fmt: *u8, n: i32);
+extern fn printf(fmt: *u8, n: i32) i32;
 
-fn main() {
+fn main() i32 {
   printf(2 + 2);
+  return 0;
 }

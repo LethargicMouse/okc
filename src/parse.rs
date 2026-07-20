@@ -95,10 +95,35 @@ pub struct Call<'a> {
     pub args: Vec<Expr<'a>>,
 }
 
+pub enum BinOp {
+    Add,
+}
+
+impl BinOp {
+    fn prior(&self) -> u8 {
+        match self {
+            BinOp::Add => 0,
+        }
+    }
+}
+
+pub struct Binary<'a> {
+    pub left: Expr<'a>,
+    pub op: BinOp,
+    pub right: Expr<'a>,
+}
+
 pub enum Expr<'a> {
     Literal(Literal<'a>),
     Call(Call<'a>),
     Var(&'a str),
+    Binary(Box<Binary<'a>>),
+}
+
+impl<'a> From<Binary<'a>> for Expr<'a> {
+    fn from(v: Binary<'a>) -> Self {
+        Self::Binary(Box::new(v))
+    }
 }
 
 impl<'a> From<Call<'a>> for Expr<'a> {
@@ -286,6 +311,34 @@ impl<'a> Parser<'a> {
     }
 
     fn expr(&mut self) -> Res<Expr<'a>> {
+        self.expr_prior(0)
+    }
+
+    fn expr_prior(&mut self, prior: u8) -> Res<Expr<'a>> {
+        let mut res = self.expr_atom()?;
+        while let Some((op, expr)) = self.maybe(|p| {
+            let op = p.bin_op()?;
+            let expr = p.expr_prior(op.prior())?;
+            Ok((op, expr))
+        }) {
+            res = Binary {
+                left: res,
+                right: expr,
+                op,
+            }
+            .into();
+        }
+        Ok(res)
+    }
+
+    fn bin_op(&mut self) -> Res<BinOp> {
+        self.either(&[|p| {
+            p.expect(Plus)?;
+            Ok(BinOp::Add)
+        }])
+    }
+
+    fn expr_atom(&mut self) -> Res<Expr<'a>> {
         self.either(&[
             |p| {
                 let literal = p.literal()?;

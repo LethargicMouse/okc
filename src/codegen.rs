@@ -112,6 +112,7 @@ impl<'a> Generator<'a> {
             Expr::Literal(literal) => self.literal(literal),
             Expr::Call(call) => self.call(call).unwrap(),
             Expr::Var(n) => self.var(n),
+            Expr::Binary(binary) => todo!(),
         }
     }
 
