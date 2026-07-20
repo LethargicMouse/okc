@@ -1,0 +1,5 @@
+extern fn printf(fmt: *u8, n: i32);
+
+fn main() {
+  printf(2 + 2);
+}

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 mod codegen;
 mod compile;
 mod display_location;
