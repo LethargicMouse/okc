@@ -1,3 +1,17 @@
+pub struct Source<'a> {
+    pub code: &'a str,
+    pub meta: Meta<'a>,
+}
+
+impl<'a> Source<'a> {
+    pub fn new(name: &'a str, code: &'a str) -> Self {
+        Self {
+            meta: meta(name, code),
+            code,
+        }
+    }
+}
+
 pub struct Meta<'a> {
     pub name: &'a str,
     pub lines: Vec<&'a str>,
@@ -22,7 +36,7 @@ pub struct Pos {
     pub symbol: i32,
 }
 
-pub fn meta<'a>(name: &'a str, code: &'a str) -> Meta<'a> {
+fn meta<'a>(name: &'a str, code: &'a str) -> Meta<'a> {
     Meta {
         name,
         lines: code.lines().collect(),

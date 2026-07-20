@@ -214,7 +214,7 @@ fn prime_typ<'a>(context: &'a Context, prime: &Prime) -> BasicMetadataTypeEnum<'
 #[cfg(test)]
 mod tests {
     use crate::{
-        codegen::gen_ir, compile::read_file, lex::lex, parse::parse, run_command, source::meta,
+        codegen::gen_ir, compile::read_file, lex::lex, parse::parse, run_command, source::Source,
     };
     use pretty_assertions::assert_eq;
 
@@ -224,8 +224,8 @@ mod tests {
         run_command("rm", ["-f", &output]);
         let expected = read_file(&format!("examples_compiled/{name}.ll"));
         let code = read_file(&input);
-        let meta = meta(&input, &code);
-        let tokens = lex(&code, &meta);
+        let source = Source::new(&input, &code);
+        let tokens = lex(&source);
         let ast = parse(tokens).unwrap();
         gen_ir(ast, &output);
         let found = read_file(&output);

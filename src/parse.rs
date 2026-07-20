@@ -442,13 +442,13 @@ impl Display for ParseError<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{compile::read_file, lex::lex, parse::parse, source::meta};
+    use crate::{compile::read_file, lex::lex, parse::parse, source::Source};
 
     fn test_parse(name: &str) {
         let path = format!("examples/{name}.ok");
         let code = read_file(&path);
-        let meta = meta(&path, &code);
-        let tokens = lex(&code, &meta);
+        let source = Source::new(&path, &code);
+        let tokens = lex(&source);
         parse(tokens).unwrap_or_else(|e| panic!("{e}"));
     }
 

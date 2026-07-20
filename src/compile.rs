@@ -7,13 +7,13 @@ use crate::{
     lex::lex,
     parse::parse,
     run_command,
-    source::meta,
+    source::Source,
 };
 
 pub fn compile(path: &str) {
     let code = read_file(path);
-    let meta = meta(path, &code);
-    let tokens = lex(&code, &meta);
+    let source = Source::new(path, &code);
+    let tokens = lex(&source);
     let ast = parse(tokens).unwrap_or_else(|e| die(e));
     gen_ir(ast, IR_PATH);
     run_command("clang", ["-o", "build/out", "build/out.ll"]);

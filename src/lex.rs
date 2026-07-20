@@ -1,13 +1,13 @@
 use crate::{
     RED, RESET,
-    source::{Location, Meta, Pos},
+    source::{Location, Meta, Pos, Source},
 };
 use Lexeme::*;
 use std::process::exit;
 
-pub fn lex<'a>(code: &'a str, meta: &'a Meta<'a>) -> Vec<Token<'a>> {
+pub fn lex<'a>(source: &'a Source<'a>) -> Vec<Token<'a>> {
     let mut res = Vec::new();
-    let mut lexer = Lexer::new(code, meta);
+    let mut lexer = Lexer::new(source);
     lexer.populate(&mut res);
     res
 }
@@ -78,19 +78,17 @@ impl<'a> Lexeme<'a> {
 }
 
 struct Lexer<'a> {
-    code: &'a str,
     poses: Vec<Pos>,
     cursor: usize,
-    meta: &'a Meta<'a>,
+    source: &'a Source<'a>,
 }
 
 impl<'a> Lexer<'a> {
-    fn new(code: &'a str, meta: &'a Meta<'a>) -> Self {
+    fn new(source: &'a Source<'a>) -> Self {
         Self {
-            code,
-            poses: make_poses(code),
-            meta,
+            poses: make_poses(source.code),
             cursor: 0,
+            source,
         }
     }
 
@@ -108,7 +106,7 @@ impl<'a> Lexer<'a> {
         'main: loop {
             let old = self.cursor;
             self.skip_spaces();
-            if self.cursor == self.code.len() {
+            if self.cursor == self.source.code.len() {
                 self.cursor = old;
                 res.push(self.token(Eof, 1));
                 break;
@@ -129,9 +127,9 @@ impl<'a> Lexer<'a> {
     }
 
     fn take_while(&self, predicate: fn(&char) -> bool) -> &'a str {
-        &self.code[self.cursor
+        &self.source.code[self.cursor
             ..self.cursor
-                + self.code[self.cursor..]
+                + self.source.code[self.cursor..]
                     .chars()
                     .take_while(predicate)
                     .count()]
@@ -141,7 +139,7 @@ impl<'a> Lexer<'a> {
         Location {
             start: self.poses[self.cursor],
             end: self.poses[self.cursor + len],
-            meta: self.meta,
+            meta: &self.source.meta,
         }
     }
 
@@ -159,7 +157,7 @@ impl<'a> Lexer<'a> {
             ("+", Plus),
         ];
         for (pattern, lexeme) in lex_list {
-            if self.code[self.cursor..].starts_with(pattern) {
+            if self.source.code[self.cursor..].starts_with(pattern) {
                 return Some(self.token(lexeme, pattern.len()));
             }
         }
@@ -187,13 +185,13 @@ impl<'a> Lexer<'a> {
     }
 
     fn try_str_with(&mut self, prefix: &str) -> Option<Token<'a>> {
-        if !self.code[self.cursor..].starts_with(prefix) {
+        if !self.source.code[self.cursor..].starts_with(prefix) {
             return None;
         }
         self.cursor += prefix.len();
         let res = self.take_while(|c| *c != '\"');
         self.cursor -= prefix.len();
-        if res.len() == self.code.len() - self.cursor - prefix.len() {
+        if res.len() == self.source.code.len() - self.cursor - prefix.len() {
             eprintln!(
                 "{RED}error:{RESET} unclosed string delimeter in {}",
                 self.location(1)
@@ -212,7 +210,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn next(&self) -> char {
-        self.code[self.cursor..].chars().next().unwrap()
+        self.source.code[self.cursor..].chars().next().unwrap()
     }
 }
 
@@ -221,14 +219,14 @@ mod tests {
     use crate::{
         compile::read_file,
         lex::{Lexeme, lex},
-        source::meta,
+        source::Source,
     };
 
     fn test_lex(name: &str) {
         let path = format!("examples/{name}.ok");
         let code = read_file(&path);
-        let meta = meta(&path, &code);
-        let tokens = lex(&code, &meta);
+        let source = Source::new(&path, &code);
+        let tokens = lex(&source);
         if tokens.iter().any(|t| t.lexeme == Lexeme::Error) {
             panic!(
                 "lex failed: {:?}",
