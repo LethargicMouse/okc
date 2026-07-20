@@ -146,10 +146,7 @@ impl<'a> Generator<'a> {
             .builder
             .build_direct_call(self.funs[call.name], &args, &format!("t{}", tmp))
             .unwrap();
-        match call.try_as_basic_value() {
-            ValueKind::Basic(val) => Some(val),
-            ValueKind::Instruction(_) => None,
-        }
+        call.try_as_basic_value().basic()
     }
 
     fn new_tmp(&mut self) -> u32 {
