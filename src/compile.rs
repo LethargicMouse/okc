@@ -3,7 +3,6 @@ use std::{fs::File, io::Read, process::exit};
 use crate::{
     RED, RESET,
     codegen::{IR_PATH, gen_ir},
-    die,
     lex::lex,
     parse::parse,
     run_command,
@@ -14,7 +13,10 @@ pub fn compile(path: &str) {
     let code = read_file(path);
     let source = Source::new(path, &code);
     let tokens = lex(&source);
-    let ast = parse(tokens).unwrap_or_else(|e| die(e));
+    let ast = parse(tokens).unwrap_or_else(|e| {
+        eprintln!("{e}");
+        exit(1)
+    });
     gen_ir(ast, IR_PATH);
     run_command("clang", ["-o", "build/out", "build/out.ll"]);
 }

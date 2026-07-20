@@ -20,15 +20,10 @@ fn main() {
     args.next();
     match args.next() {
         Some(path) => run(&path),
-        None => die(NoPathGiven),
-    }
-}
-
-struct NoPathGiven;
-
-impl Display for NoPathGiven {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{RED}error:{RESET} no source path given")
+        None => {
+            eprintln!("{RED}error:{RESET} no source path given");
+            exit(1)
+        }
     }
 }
 
@@ -42,11 +37,6 @@ fn run_command<'a>(name: &str, args: impl IntoIterator<Item = &'a str>) {
     if !status.success() {
         exit(status.code().unwrap_or(1))
     }
-}
-
-fn die(e: impl Display) -> ! {
-    eprintln!("{e}");
-    exit(1)
 }
 
 const RED: &str = "\x1b[0;31m";
