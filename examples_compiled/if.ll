@@ -3,7 +3,7 @@ source_filename = "main"
 target triple = "x86_64-pc-linux-gnu"
 
 @.s7 = private unnamed_addr constant [12 x i8] c"SIX SEVEEEN\00", align 1
-@.s9 = private unnamed_addr constant [12 x i8] c"SIX SEVEEEN\00", align 1
+@.s9 = private unnamed_addr constant [14 x i8] c"no six seven(\00", align 1
 
 declare i32 @puts(ptr)
 
