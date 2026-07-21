@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+mod ast;
 mod codegen;
 mod compile;
 mod display;

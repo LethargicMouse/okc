@@ -1,11 +1,11 @@
 use std::{collections::HashMap, process::exit};
 
 use crate::{
-    display::LogError,
-    parse::{
+    ast::{
         Assign, Ast, BinOp, Binary, Call, Expr, ExtFun, Fun, Header, Let, Literal, Prime,
         Statement, Typ,
     },
+    display::LogError,
 };
 use inkwell::{
     builder::Builder,
