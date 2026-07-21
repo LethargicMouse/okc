@@ -105,7 +105,7 @@ impl<'a> Parser<'a> {
         self.expect(ParL)?;
         let args = self.sep(Self::fun_arg);
         self.expect(ParR)?;
-        self.expect(Name("i32"))?;
+        self.typ()?;
         Ok(Header { name, args })
     }
 
@@ -142,34 +142,42 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self) -> Res<Statement<'a>> {
         self.either(&[
-            |p| {
-                p.expect_(Name("let"))?;
-                let name = p.name()?;
-                p.expect(Equal)?;
-                let expr = p.expr()?;
-                p.expect(Semicolon)?;
-                Ok(Let { name, expr }.into())
-            },
-            |p| {
-                p.expect_(Name("return"))?;
-                let expr = p.expr()?;
-                p.expect(Semicolon)?;
-                Ok(Statement::Return(expr))
-            },
-            |p| {
-                let name = p.name_()?;
-                p.expect(Equal)?;
-                let expr = p.expr()?;
-                p.expect(Semicolon)?;
-                Ok(Assign { name, expr }.into())
-            },
-            |p| {
-                let call = p.call_()?;
-                p.expect(Semicolon)?;
-                Ok(call.into())
-            },
+            |p| Ok(p.let_()?.into()),
+            |p| p.return_(),
+            |p| Ok(p.assign_()?.into()),
+            |p| p.call_statement_(),
         ])
         .inspect_err(|_| self.fail("<statement>"))
+    }
+
+    fn call_statement_(&mut self) -> Res<Statement<'a>> {
+        let call = self.call_()?;
+        self.expect(Semicolon)?;
+        Ok(call.into())
+    }
+
+    fn assign_(&mut self) -> Res<Assign<'a>> {
+        let name = self.name_()?;
+        self.expect(Equal)?;
+        let expr = self.expr()?;
+        self.expect(Semicolon)?;
+        Ok(Assign { name, expr })
+    }
+
+    fn return_(&mut self) -> Res<Statement<'a>> {
+        self.expect_(Name("return"))?;
+        let expr = self.expr()?;
+        self.expect(Semicolon)?;
+        Ok(Statement::Return(expr))
+    }
+
+    fn let_(&mut self) -> Res<Let<'a>> {
+        self.expect_(Name("let"))?;
+        let name = self.name()?;
+        self.expect(Equal)?;
+        let expr = self.expr()?;
+        self.expect(Semicolon)?;
+        Ok(Let { name, expr })
     }
 
     fn expr(&mut self) -> Res<Expr<'a>> {
