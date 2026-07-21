@@ -203,6 +203,10 @@ impl<'a> Parser<'a> {
                 p.expect_(Star)?;
                 Ok(BinOp::Mul)
             },
+            |p| {
+                p.expect_(Div)?;
+                Ok(BinOp::Div)
+            },
         ])
     }
 
@@ -320,7 +324,7 @@ impl Display for ParseError<'_> {
 fn get_prior(bin_op: BinOp) -> u8 {
     match bin_op {
         BinOp::Add => 0,
-        BinOp::Mul => 1,
+        BinOp::Mul | BinOp::Div => 1,
     }
 }
 

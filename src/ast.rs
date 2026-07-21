@@ -88,6 +88,7 @@ pub struct Call<'a> {
 pub enum BinOp {
     Add,
     Mul,
+    Div,
 }
 
 pub struct Binary<'a> {

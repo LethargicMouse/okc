@@ -200,6 +200,7 @@ impl<'a> Generator<'a> {
                 )
                 .unwrap()
                 .into(),
+            BinOp::Div => todo!(),
         }
     }
 }
