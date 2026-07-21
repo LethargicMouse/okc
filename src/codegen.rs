@@ -38,6 +38,7 @@ struct Generator<'a> {
     vars: HashMap<&'a str, (PointerValue<'a>, BasicTypeEnum<'a>)>,
     next_tmp: u32,
     current_fun: Option<FunctionValue<'a>>,
+    after_loop: Vec<BasicBlock<'a>>,
 }
 
 impl<'a> Generator<'a> {
@@ -50,6 +51,7 @@ impl<'a> Generator<'a> {
             next_tmp: 0,
             vars: HashMap::new(),
             current_fun: None,
+            after_loop: Vec::new(),
         }
     }
 
@@ -107,10 +109,11 @@ impl<'a> Generator<'a> {
             Statement::Call(call) => {
                 self.call(call);
             }
-            Statement::Let(let_statement) => self.let_statement(let_statement),
+            Statement::Let(let_statement) => self.gen_let(let_statement),
             Statement::Assign(assign) => self.assign(assign),
-            Statement::If(if_statement) => self.if_statement(if_statement),
-            Statement::Loop(body) => self.loop_statement(body),
+            Statement::If(if_statement) => self.gen_if(if_statement),
+            Statement::Loop(body) => self.gen_loop(body),
+            Statement::Break => self.gen_break(),
         }
     }
 
@@ -163,13 +166,13 @@ impl<'a> Generator<'a> {
         self.next_tmp - 1
     }
 
-    fn let_statement(&mut self, let_expr: &Let<'a>) {
-        let val = self.expr(&let_expr.expr);
+    fn gen_let(&mut self, let_statement: &Let<'a>) {
+        let val = self.expr(&let_statement.expr);
         let typ = val.get_type();
         let tmp = self.new_tmp();
         let ptr = self.builder.build_alloca(typ, &format!("t{tmp}")).unwrap();
         self.builder.build_store(ptr, val).unwrap();
-        self.vars.insert(let_expr.name, (ptr, typ));
+        self.vars.insert(let_statement.name, (ptr, typ));
     }
 
     fn assign(&mut self, assign: &Assign) {
@@ -195,6 +198,7 @@ impl<'a> Generator<'a> {
             BinOp::Add => Builder::build_int_add,
             BinOp::Mul => Builder::build_int_mul,
             BinOp::Div => Builder::build_int_signed_div,
+            BinOp::Rem => Builder::build_int_signed_rem,
             BinOp::Sub => Builder::build_int_sub,
             BinOp::Equ => {
                 |b: &Builder<'a>, l, r, t: &str| b.build_int_compare(IntPredicate::EQ, l, r, t)
@@ -210,7 +214,7 @@ impl<'a> Generator<'a> {
         .into()
     }
 
-    fn if_statement(&mut self, if_statement: &If<'a>) {
+    fn gen_if(&mut self, if_statement: &If<'a>) {
         let condition = self.expr(&if_statement.condition);
         let on_true = self.new_block();
         let on_false = self.new_block();
@@ -236,16 +240,23 @@ impl<'a> Generator<'a> {
             .append_basic_block(self.current_fun.unwrap(), &format!("s{tmp}"))
     }
 
-    fn loop_statement(&mut self, body: &[Statement<'a>]) {
+    fn gen_loop(&mut self, body: &[Statement<'a>]) {
         let loop_block = self.new_block();
         let after = self.new_block();
         self.builder.build_unconditional_branch(loop_block);
         self.builder.position_at_end(loop_block);
+        // self.after_loop.push(after);
         for statement in body {
             self.statement(statement);
         }
+        self.after_loop.pop();
         self.builder.build_unconditional_branch(loop_block);
         self.builder.position_at_end(after);
+    }
+
+    fn gen_break(&self) {
+        self.builder
+            .build_unconditional_branch(*self.after_loop.last().unwrap());
     }
 }
 

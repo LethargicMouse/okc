@@ -1,4 +1,7 @@
-use std::{cmp::Ordering, fmt::Display};
+use std::{
+    cmp::Ordering,
+    fmt::{Debug, Display},
+};
 
 use crate::{
     ast::*,
@@ -59,7 +62,7 @@ impl<'a> Parser<'a> {
         Ok(ExtFun { header })
     }
 
-    fn many<T>(&mut self, parse: fn(&mut Self) -> Res<T>) -> Vec<T> {
+    fn many<T: Debug>(&mut self, parse: fn(&mut Self) -> Res<T>) -> Vec<T> {
         let mut res = Vec::new();
         while let Some(item) = self.maybe(parse) {
             res.push(item);
@@ -150,14 +153,21 @@ impl<'a> Parser<'a> {
             |p| Ok(p.let_()?.into()),
             |p| p.return_(),
             |p| Ok(p.if_()?.into()),
-            |p| p.statement_(),
+            |p| p.loop_(),
+            |p| p.break_(),
             |p| Ok(p.assign_()?.into()),
             |p| p.call_statement_(),
         ])
         .inspect_err(|_| self.fail("<statement>"))
     }
 
-    fn statement_(&mut self) -> Res<Statement<'a>> {
+    fn break_(&mut self) -> Res<Statement<'a>> {
+        self.expect_(Name("break"))?;
+        self.expect(Semicolon)?;
+        Ok(Statement::Break)
+    }
+
+    fn loop_(&mut self) -> Res<Statement<'a>> {
         self.expect_(Name("loop"))?;
         let body = self.block()?;
         Ok(Statement::Loop(body))
@@ -236,6 +246,10 @@ impl<'a> Parser<'a> {
             |p| {
                 p.expect_(Equal2)?;
                 Ok(BinOp::Equ)
+            },
+            |p| {
+                p.expect_(Rem)?;
+                Ok(BinOp::Rem)
             },
         ])
         .and_then(|op| {
@@ -379,7 +393,7 @@ fn get_prior(bin_op: BinOp) -> u8 {
     match bin_op {
         BinOp::Equ => 0,
         BinOp::Add | BinOp::Sub => 1,
-        BinOp::Mul | BinOp::Div => 2,
+        BinOp::Mul | BinOp::Div | BinOp::Rem => 2,
     }
 }
 

@@ -3,20 +3,24 @@ pub struct Ast<'a> {
     pub funs: Vec<Fun<'a>>,
 }
 
+#[derive(Debug)]
 pub struct ExtFun<'a> {
     pub header: Header<'a>,
 }
 
+#[derive(Debug)]
 pub struct Fun<'a> {
     pub header: Header<'a>,
     pub body: Vec<Statement<'a>>,
 }
 
+#[derive(Debug)]
 pub struct Header<'a> {
     pub name: &'a str,
     pub args: Vec<(&'a str, Typ<'a>)>,
 }
 
+#[derive(Debug)]
 pub enum Typ<'a> {
     Prime(Prime),
     Ptr(Box<Typ<'a>>),
@@ -39,21 +43,25 @@ impl<'a> From<&'a str> for Typ<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum Prime {
     I32,
     U8,
 }
 
+#[derive(Debug)]
 pub struct Let<'a> {
     pub name: &'a str,
     pub expr: Expr<'a>,
 }
 
+#[derive(Debug)]
 pub struct Assign<'a> {
     pub name: &'a str,
     pub expr: Expr<'a>,
 }
 
+#[derive(Debug)]
 pub struct If<'a> {
     pub condition: Expr<'a>,
     pub on_true: Vec<Statement<'a>>,
@@ -62,6 +70,7 @@ pub struct If<'a> {
 
 pub type Block<'a> = Vec<Statement<'a>>;
 
+#[derive(Debug)]
 pub enum Statement<'a> {
     Return(Expr<'a>),
     Call(Call<'a>),
@@ -69,6 +78,7 @@ pub enum Statement<'a> {
     Assign(Assign<'a>),
     If(If<'a>),
     Loop(Block<'a>),
+    Break,
 }
 
 impl<'a> From<If<'a>> for Statement<'a> {
@@ -95,26 +105,30 @@ impl<'a> From<Call<'a>> for Statement<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct Call<'a> {
     pub name: &'a str,
     pub args: Vec<Expr<'a>>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinOp {
     Add,
     Mul,
     Div,
     Sub,
     Equ,
+    Rem,
 }
 
+#[derive(Debug)]
 pub struct Binary<'a> {
     pub left: Expr<'a>,
     pub op: BinOp,
     pub right: Expr<'a>,
 }
 
+#[derive(Debug)]
 pub enum Expr<'a> {
     Literal(Literal<'a>),
     Call(Call<'a>),
@@ -140,6 +154,7 @@ impl<'a> From<Literal<'a>> for Expr<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum Literal<'a> {
     Int(u64),
     RawStr(&'a str),
