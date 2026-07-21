@@ -3,7 +3,7 @@ extern fn puts(s: *u8) i32;
 fn main() i32 {
   let sixseven = 67;
   if sixseven == 67 {
-    puts("SIX SEVEEEN\n");
+    puts("SIX SEVEEEN");
   } else {
     puts("no six seven(");
   }

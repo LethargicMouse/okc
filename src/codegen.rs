@@ -251,6 +251,22 @@ fn prime_typ<'a>(context: &'a Context, prime: &Prime) -> BasicMetadataTypeEnum<'
     }
 }
 
+fn unescape(s: &str) -> String {
+    let mut res = String::new();
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        res.push(if c == '\\' {
+            match chars.next().unwrap() {
+                'n' => '\n',
+                c => unreachable!("{c}"),
+            }
+        } else {
+            c
+        });
+    }
+    res
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -316,20 +332,9 @@ mod tests {
     fn test_codegen_add_mul_div_sub() {
         test_codegen("add_mul_div_sub")
     }
-}
 
-fn unescape(s: &str) -> String {
-    let mut res = String::new();
-    let mut chars = s.chars();
-    while let Some(c) = chars.next() {
-        res.push(if c == '\\' {
-            match chars.next().unwrap() {
-                'n' => '\n',
-                c => unreachable!("{c}"),
-            }
-        } else {
-            c
-        });
+    #[test]
+    fn test_codegen_if() {
+        test_codegen("if")
     }
-    res
 }
