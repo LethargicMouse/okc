@@ -38,6 +38,7 @@ struct Generator<'a> {
     vars: HashMap<&'a str, (PointerValue<'a>, BasicTypeEnum<'a>)>,
     next_tmp: u32,
     current_fun: Option<FunctionValue<'a>>,
+    loop_block: Vec<BasicBlock<'a>>,
     after_loop: Vec<BasicBlock<'a>>,
 }
 
@@ -52,6 +53,7 @@ impl<'a> Generator<'a> {
             vars: HashMap::new(),
             current_fun: None,
             after_loop: Vec::new(),
+            loop_block: Vec::new(),
         }
     }
 
@@ -114,6 +116,7 @@ impl<'a> Generator<'a> {
             Statement::If(if_statement) => self.gen_if(if_statement),
             Statement::Loop(body) => self.gen_loop(body),
             Statement::Break => self.gen_break(),
+            Statement::Continue => self.gen_continue(),
         }
     }
 
@@ -245,10 +248,12 @@ impl<'a> Generator<'a> {
         let after = self.new_block();
         self.builder.build_unconditional_branch(loop_block);
         self.builder.position_at_end(loop_block);
-        // self.after_loop.push(after);
+        self.loop_block.push(loop_block);
+        self.after_loop.push(after);
         for statement in body {
             self.statement(statement);
         }
+        self.loop_block.pop();
         self.after_loop.pop();
         self.builder.build_unconditional_branch(loop_block);
         self.builder.position_at_end(after);
@@ -257,6 +262,11 @@ impl<'a> Generator<'a> {
     fn gen_break(&self) {
         self.builder
             .build_unconditional_branch(*self.after_loop.last().unwrap());
+    }
+
+    fn gen_continue(&self) {
+        self.builder
+            .build_unconditional_branch(*self.loop_block.last().unwrap());
     }
 }
 

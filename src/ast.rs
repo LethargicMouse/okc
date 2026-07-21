@@ -79,6 +79,7 @@ pub enum Statement<'a> {
     If(If<'a>),
     Loop(Block<'a>),
     Break,
+    Continue,
 }
 
 impl<'a> From<If<'a>> for Statement<'a> {

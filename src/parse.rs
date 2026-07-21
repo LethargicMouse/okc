@@ -155,6 +155,7 @@ impl<'a> Parser<'a> {
             |p| Ok(p.if_()?.into()),
             |p| p.loop_(),
             |p| p.break_(),
+            |p| p.continue_(),
             |p| Ok(p.assign_()?.into()),
             |p| p.call_statement_(),
         ])
@@ -165,6 +166,11 @@ impl<'a> Parser<'a> {
         self.expect_(Name("break"))?;
         self.expect(Semicolon)?;
         Ok(Statement::Break)
+    }
+    fn continue_(&mut self) -> Res<Statement<'a>> {
+        self.expect_(Name("continue"))?;
+        self.expect(Semicolon)?;
+        Ok(Statement::Continue)
     }
 
     fn loop_(&mut self) -> Res<Statement<'a>> {
