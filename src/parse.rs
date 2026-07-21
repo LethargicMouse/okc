@@ -358,4 +358,9 @@ mod tests {
     fn test_parse_add() {
         test_parse("add");
     }
+
+    #[test]
+    fn test_parse_add_mul() {
+        test_parse("add_mul")
+    }
 }
