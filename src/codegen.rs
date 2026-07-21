@@ -191,7 +191,15 @@ impl<'a> Generator<'a> {
                 )
                 .unwrap()
                 .into(),
-            BinOp::Mul => todo!(),
+            BinOp::Mul => self
+                .builder
+                .build_int_mul(
+                    left.into_int_value(),
+                    right.into_int_value(),
+                    &format!("t{tmp}"),
+                )
+                .unwrap()
+                .into(),
         }
     }
 }
@@ -260,5 +268,10 @@ mod tests {
     #[test]
     fn test_codegen_add() {
         test_codegen("add")
+    }
+
+    #[test]
+    fn test_codegen_add_mul() {
+        test_codegen("add_mul")
     }
 }
