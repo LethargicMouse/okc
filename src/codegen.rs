@@ -137,7 +137,7 @@ impl<'a> Generator<'a> {
     fn raw_str(&mut self, s: &str) -> BasicValueEnum<'a> {
         let tmp = self.new_tmp();
         self.builder
-            .build_global_string_ptr(s, &format!(".s{tmp}"))
+            .build_global_string_ptr(&unescape(s), &format!(".s{tmp}"))
             .unwrap()
             .as_pointer_value()
             .into()
@@ -316,4 +316,20 @@ mod tests {
     fn test_codegen_add_mul_div_sub() {
         test_codegen("add_mul_div_sub")
     }
+}
+
+fn unescape(s: &str) -> String {
+    let mut res = String::new();
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        res.push(if c == '\\' {
+            match chars.next().unwrap() {
+                'n' => '\n',
+                c => unreachable!("{c}"),
+            }
+        } else {
+            c
+        });
+    }
+    res
 }
