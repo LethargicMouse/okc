@@ -370,4 +370,9 @@ mod tests {
     fn test_parse_add_mul() {
         test_parse("add_mul")
     }
+
+    #[test]
+    fn test_parse_add_mul_div() {
+        test_parse("add_mul_div")
+    }
 }
