@@ -2,13 +2,14 @@ use std::{collections::HashMap, process::exit};
 
 use crate::{
     ast::{
-        Assign, Ast, BinOp, Binary, Call, Expr, ExtFun, Fun, Header, Let, Literal, Prime,
+        Assign, Ast, BinOp, Binary, Call, Expr, ExtFun, Fun, Header, If, Let, Literal, Prime,
         Statement, Typ,
     },
     display::LogError,
 };
 use inkwell::{
     IntPredicate,
+    basic_block::BasicBlock,
     builder::Builder,
     context::Context,
     module::Module,
@@ -36,6 +37,7 @@ struct Generator<'a> {
     funs: HashMap<&'a str, FunctionValue<'a>>,
     vars: HashMap<&'a str, (PointerValue<'a>, BasicTypeEnum<'a>)>,
     next_tmp: u32,
+    current_fun: Option<FunctionValue<'a>>,
 }
 
 impl<'a> Generator<'a> {
@@ -47,6 +49,7 @@ impl<'a> Generator<'a> {
             context,
             next_tmp: 0,
             vars: HashMap::new(),
+            current_fun: None,
         }
     }
 
@@ -62,7 +65,8 @@ impl<'a> Generator<'a> {
             .map(|fun| self.add_fun(&fun.header))
             .collect();
         for (fun, fun_val) in ast.funs.into_iter().zip(fun_vals) {
-            self.fun(fun, fun_val);
+            self.current_fun = Some(fun_val);
+            self.fun(fun);
         }
     }
 
@@ -86,9 +90,11 @@ impl<'a> Generator<'a> {
         self.context.i32_type().fn_type(&param_typs, false)
     }
 
-    fn fun(&mut self, fun: Fun<'a>, fun_val: FunctionValue<'a>) {
+    fn fun(&mut self, fun: Fun<'a>) {
         self.vars.clear();
-        let basic_block = self.context.append_basic_block(fun_val, "entry");
+        let basic_block = self
+            .context
+            .append_basic_block(self.current_fun.unwrap(), "entry");
         self.builder.position_at_end(basic_block);
         for statement in &fun.body {
             self.statement(statement);
@@ -101,9 +107,9 @@ impl<'a> Generator<'a> {
             Statement::Call(call) => {
                 self.call(call);
             }
-            Statement::Let(let_expr) => self.let_expr(let_expr),
+            Statement::Let(let_statement) => self.let_statement(let_statement),
             Statement::Assign(assign) => self.assign(assign),
-            Statement::If(_) => todo!(),
+            Statement::If(if_statement) => self.if_statement(if_statement),
         }
     }
 
@@ -156,7 +162,7 @@ impl<'a> Generator<'a> {
         self.next_tmp - 1
     }
 
-    fn let_expr(&mut self, let_expr: &Let<'a>) {
+    fn let_statement(&mut self, let_expr: &Let<'a>) {
         let val = self.expr(&let_expr.expr);
         let typ = val.get_type();
         let tmp = self.new_tmp();
@@ -201,6 +207,32 @@ impl<'a> Generator<'a> {
         )
         .unwrap()
         .into()
+    }
+
+    fn if_statement(&mut self, if_statement: &If<'a>) {
+        let condition = self.expr(&if_statement.condition);
+        let on_true = self.new_block();
+        let on_false = self.new_block();
+        let after = self.new_block();
+        self.builder
+            .build_conditional_branch(condition.into_int_value(), on_true, on_false);
+        self.builder.position_at_end(on_true);
+        for statement in &if_statement.on_true {
+            self.statement(statement);
+        }
+        self.builder.build_unconditional_branch(after);
+        self.builder.position_at_end(on_false);
+        for statement in &if_statement.on_true {
+            self.statement(statement);
+        }
+        self.builder.build_unconditional_branch(after);
+        self.builder.position_at_end(after);
+    }
+
+    fn new_block(&mut self) -> BasicBlock<'a> {
+        let tmp = self.new_tmp();
+        self.context
+            .append_basic_block(self.current_fun.unwrap(), &format!("s{tmp}"))
     }
 }
 
