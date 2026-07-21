@@ -60,12 +60,15 @@ pub struct If<'a> {
     pub on_false: Vec<Statement<'a>>,
 }
 
+pub type Block<'a> = Vec<Statement<'a>>;
+
 pub enum Statement<'a> {
     Return(Expr<'a>),
     Call(Call<'a>),
     Let(Let<'a>),
     Assign(Assign<'a>),
     If(If<'a>),
+    Loop(Block<'a>),
 }
 
 impl<'a> From<If<'a>> for Statement<'a> {

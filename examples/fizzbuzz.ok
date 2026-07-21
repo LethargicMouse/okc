@@ -1,7 +1,7 @@
 extern fn printf(fmt: *u8, n: i32) i32;
 extern fn puts(s: *u8) i32;
 
-fn main() {
+fn main() i32 {
   let i = 0;
   loop {
     i = i + 1;
@@ -22,4 +22,5 @@ fn main() {
     }
     printf("%d\n", i);
   }
+  return 0;
 }

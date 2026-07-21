@@ -97,7 +97,7 @@ impl<'a> Parser<'a> {
         Ok(Fun { header, body })
     }
 
-    fn block(&mut self) -> Res<Vec<Statement<'a>>> {
+    fn block(&mut self) -> Res<Block<'a>> {
         self.expect(CurL)?;
         let body = self.many(Self::statement);
         self.expect(CurR)?;
@@ -150,10 +150,17 @@ impl<'a> Parser<'a> {
             |p| Ok(p.let_()?.into()),
             |p| p.return_(),
             |p| Ok(p.if_()?.into()),
+            |p| p.statement_(),
             |p| Ok(p.assign_()?.into()),
             |p| p.call_statement_(),
         ])
         .inspect_err(|_| self.fail("<statement>"))
+    }
+
+    fn statement_(&mut self) -> Res<Statement<'a>> {
+        self.expect_(Name("loop"))?;
+        let body = self.block()?;
+        Ok(Statement::Loop(body))
     }
 
     fn call_statement_(&mut self) -> Res<Statement<'a>> {

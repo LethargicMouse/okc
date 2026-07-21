@@ -110,6 +110,7 @@ impl<'a> Generator<'a> {
             Statement::Let(let_statement) => self.let_statement(let_statement),
             Statement::Assign(assign) => self.assign(assign),
             Statement::If(if_statement) => self.if_statement(if_statement),
+            Statement::Loop(body) => self.loop_statement(body),
         }
     }
 
@@ -233,6 +234,18 @@ impl<'a> Generator<'a> {
         let tmp = self.new_tmp();
         self.context
             .append_basic_block(self.current_fun.unwrap(), &format!("s{tmp}"))
+    }
+
+    fn loop_statement(&mut self, body: &[Statement<'a>]) {
+        let loop_block = self.new_block();
+        let after = self.new_block();
+        self.builder.build_unconditional_branch(loop_block);
+        self.builder.position_at_end(loop_block);
+        for statement in body {
+            self.statement(statement);
+        }
+        self.builder.build_unconditional_branch(loop_block);
+        self.builder.position_at_end(after);
     }
 }
 
