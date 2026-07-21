@@ -222,7 +222,7 @@ impl<'a> Generator<'a> {
         }
         self.builder.build_unconditional_branch(after);
         self.builder.position_at_end(on_false);
-        for statement in &if_statement.on_true {
+        for statement in &if_statement.on_false {
             self.statement(statement);
         }
         self.builder.build_unconditional_branch(after);
