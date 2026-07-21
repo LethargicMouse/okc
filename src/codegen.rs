@@ -371,4 +371,9 @@ mod tests {
     fn test_codegen_if() {
         test_codegen("if")
     }
+
+    #[test]
+    fn test_codegen_fizzbuzz() {
+        test_codegen("fizzbuzz")
+    }
 }
