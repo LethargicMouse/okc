@@ -164,12 +164,11 @@ struct Parser<'a> {
 type Res<T> = Result<T, ()>;
 
 macro_rules! get_lexeme {
-    ($self: ident, $pat:ident, $f:expr) => {
+    ($self: ident, $pat:ident) => {
         if let $pat(val) = $self.tokens[$self.cursor].lexeme {
             $self.cursor += 1;
             Ok(val)
         } else {
-            $self.fail($f);
             Err(())
         }
     };
@@ -259,15 +258,16 @@ impl<'a> Parser<'a> {
     fn typ(&mut self) -> Res<Typ<'a>> {
         self.either(&[
             |p| {
-                let name = p.name()?;
+                let name = p.name_()?;
                 Ok(name.into())
             },
             |p| {
-                p.expect(Star)?;
+                p.expect_(Star)?;
                 let typ = p.typ()?;
                 Ok(Typ::Ptr(Box::new(typ)))
             },
         ])
+        .inspect_err(|_| self.fail("<type>"))
     }
 
     fn either<T>(&mut self, parses: &[fn(&mut Self) -> Res<T>]) -> Res<T> {
@@ -282,7 +282,7 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> Res<Statement<'a>> {
         self.either(&[
             |p| {
-                p.expect(Name("let"))?;
+                p.expect_(Name("let"))?;
                 let name = p.name()?;
                 p.expect(Equal)?;
                 let expr = p.expr()?;
@@ -290,24 +290,25 @@ impl<'a> Parser<'a> {
                 Ok(Let { name, expr }.into())
             },
             |p| {
-                p.expect(Name("return"))?;
+                p.expect_(Name("return"))?;
                 let expr = p.expr()?;
                 p.expect(Semicolon)?;
                 Ok(Statement::Return(expr))
             },
             |p| {
-                let name = p.name()?;
+                let name = p.name_()?;
                 p.expect(Equal)?;
                 let expr = p.expr()?;
                 p.expect(Semicolon)?;
                 Ok(Assign { name, expr }.into())
             },
             |p| {
-                let call = p.call()?;
+                let call = p.call_()?;
                 p.expect(Semicolon)?;
                 Ok(call.into())
             },
         ])
+        .inspect_err(|_| self.fail("<statement>"))
     }
 
     fn expr(&mut self) -> Res<Expr<'a>> {
@@ -317,7 +318,7 @@ impl<'a> Parser<'a> {
     fn expr_prior(&mut self, prior: u8) -> Res<Expr<'a>> {
         let mut res = self.expr_atom()?;
         while let Some((op, expr)) = self.maybe(|p| {
-            let op = p.bin_op()?;
+            let op = p.bin_op_()?;
             let expr = p.expr_prior(op.prior())?;
             Ok((op, expr))
         }) {
@@ -331,9 +332,9 @@ impl<'a> Parser<'a> {
         Ok(res)
     }
 
-    fn bin_op(&mut self) -> Res<BinOp> {
+    fn bin_op_(&mut self) -> Res<BinOp> {
         self.either(&[|p| {
-            p.expect(Plus)?;
+            p.expect_(Plus)?;
             Ok(BinOp::Add)
         }])
     }
@@ -341,51 +342,56 @@ impl<'a> Parser<'a> {
     fn expr_atom(&mut self) -> Res<Expr<'a>> {
         self.either(&[
             |p| {
-                let literal = p.literal()?;
+                let literal = p.literal_()?;
                 Ok(literal.into())
             },
             |p| {
-                let call = p.call()?;
+                let call = p.call_()?;
                 Ok(call.into())
             },
             |p| {
-                let name = p.name()?;
+                let name = p.name_()?;
                 Ok(Expr::Var(name))
             },
         ])
+        .inspect_err(|_| self.fail("<expr>"))
     }
 
-    fn call(&mut self) -> Res<Call<'a>> {
-        let name = self.name()?;
+    fn call_(&mut self) -> Res<Call<'a>> {
+        let name = self.name_()?;
         self.expect(ParL)?;
         let args = self.sep(Self::expr);
         self.expect(ParR)?;
         Ok(Call { name, args })
     }
 
-    fn literal(&mut self) -> Res<Literal<'a>> {
+    fn literal_(&mut self) -> Res<Literal<'a>> {
         self.either(&[
             |p| {
-                let int = p.int()?;
+                let int = p.int_()?;
                 Ok(int.into())
             },
             |p| {
-                let raw_str = p.raw_str()?;
+                let raw_str = p.raw_str_()?;
                 Ok(Literal::RawStr(raw_str))
             },
         ])
     }
 
-    fn raw_str(&mut self) -> Res<&'a str> {
-        get_lexeme!(self, RawStr, "<raw str>")
+    fn raw_str_(&mut self) -> Res<&'a str> {
+        get_lexeme!(self, RawStr)
     }
 
     fn name(&mut self) -> Res<&'a str> {
-        get_lexeme!(self, Name, "<name>")
+        self.name_().inspect_err(|_| self.fail("<name>"))
     }
 
-    fn int(&mut self) -> Res<u64> {
-        get_lexeme!(self, Int, "<int>")
+    fn name_(&mut self) -> Res<&'a str> {
+        get_lexeme!(self, Name)
+    }
+
+    fn int_(&mut self) -> Res<u64> {
+        get_lexeme!(self, Int)
     }
 
     fn fail(&mut self, msg: &'a str) {
@@ -403,11 +409,15 @@ impl<'a> Parser<'a> {
     }
 
     fn expect(&mut self, lexeme: Lexeme<'a>) -> Res<()> {
+        self.expect_(lexeme)
+            .inspect_err(|_| self.fail(lexeme.describe()))
+    }
+
+    fn expect_(&mut self, lexeme: Lexeme<'a>) -> Res<()> {
         if self.tokens[self.cursor].lexeme == lexeme {
             self.cursor += 1;
             Ok(())
         } else {
-            self.fail(lexeme.describe());
             Err(())
         }
     }

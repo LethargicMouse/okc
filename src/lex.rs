@@ -55,14 +55,9 @@ pub enum Lexeme<'a> {
 
 impl<'a> Lexeme<'a> {
     pub fn describe(&self) -> &'a str {
-        // FIXME some of those should not be here, gotta fix the parser msgs
         match self {
             Name("fn") => "`fn`",
-            Name("return") => "`return`",
             Name("extern") => "`extern`",
-            Name("let") => "`let`",
-            Name("i32") => "`i32`",
-            Plus => "`+`",
             Equal => "`=`",
             Comma => "`,`",
             ParL => "`(`",
@@ -71,7 +66,6 @@ impl<'a> Lexeme<'a> {
             CurR => "`}`",
             Semicolon => "`;`",
             Eof => "<eof>",
-            Star => "`*`",
             lexeme => unreachable!("{lexeme:?}"),
         }
     }
