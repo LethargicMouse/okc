@@ -7,6 +7,6 @@ pub struct LogError;
 
 impl Display for LogError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{RED}error:{RESET} ")
+        write!(f, "{RED}error:{RESET}")
     }
 }
