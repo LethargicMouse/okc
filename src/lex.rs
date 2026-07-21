@@ -263,4 +263,9 @@ mod tests {
     fn test_lex_add_mul() {
         test_lex("add_mul")
     }
+
+    #[test]
+    fn test_lex_add_mul_div() {
+        test_lex("add_mul_div")
+    }
 }
