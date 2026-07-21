@@ -191,6 +191,7 @@ impl<'a> Generator<'a> {
                 )
                 .unwrap()
                 .into(),
+            BinOp::Mul => todo!(),
         }
     }
 }

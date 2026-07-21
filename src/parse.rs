@@ -194,10 +194,16 @@ impl<'a> Parser<'a> {
     }
 
     fn bin_op_(&mut self) -> Res<BinOp> {
-        self.either(&[|p| {
-            p.expect_(Plus)?;
-            Ok(BinOp::Add)
-        }])
+        self.either(&[
+            |p| {
+                p.expect_(Plus)?;
+                Ok(BinOp::Add)
+            },
+            |p| {
+                p.expect_(Star)?;
+                Ok(BinOp::Mul)
+            },
+        ])
     }
 
     fn expr_atom(&mut self) -> Res<Expr<'a>> {
@@ -314,6 +320,7 @@ impl Display for ParseError<'_> {
 fn get_prior(bin_op: BinOp) -> u8 {
     match bin_op {
         BinOp::Add => 0,
+        BinOp::Mul => 1,
     }
 }
 

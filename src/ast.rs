@@ -87,6 +87,7 @@ pub struct Call<'a> {
 #[derive(Clone, Copy)]
 pub enum BinOp {
     Add,
+    Mul,
 }
 
 pub struct Binary<'a> {
