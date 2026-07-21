@@ -387,4 +387,9 @@ mod tests {
     fn test_parse_add_mul_div() {
         test_parse("add_mul_div")
     }
+
+    #[test]
+    fn test_parse_add_mul_div_sub() {
+        test_parse("add_mul_div_sub")
+    }
 }

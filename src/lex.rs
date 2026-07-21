@@ -270,4 +270,9 @@ mod tests {
     fn test_lex_add_mul_div() {
         test_lex("add_mul_div")
     }
+
+    #[test]
+    fn test_lex_add_mul_div_sub() {
+        test_lex("add_mul_div_sub")
+    }
 }
