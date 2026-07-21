@@ -8,6 +8,7 @@ use crate::{
     display::LogError,
 };
 use inkwell::{
+    IntPredicate,
     builder::Builder,
     context::Context,
     module::Module,
@@ -102,6 +103,7 @@ impl<'a> Generator<'a> {
             }
             Statement::Let(let_expr) => self.let_expr(let_expr),
             Statement::Assign(assign) => self.assign(assign),
+            Statement::If(_) => todo!(),
         }
     }
 
@@ -187,6 +189,9 @@ impl<'a> Generator<'a> {
             BinOp::Mul => Builder::build_int_mul,
             BinOp::Div => Builder::build_int_signed_div,
             BinOp::Sub => Builder::build_int_sub,
+            BinOp::Equ => {
+                |b: &Builder<'a>, l, r, t: &str| b.build_int_compare(IntPredicate::EQ, l, r, t)
+            }
         };
         op(
             &self.builder,

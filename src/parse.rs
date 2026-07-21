@@ -93,10 +93,15 @@ impl<'a> Parser<'a> {
 
     fn fun(&mut self) -> Res<Fun<'a>> {
         let header = self.header()?;
+        let body = self.block()?;
+        Ok(Fun { header, body })
+    }
+
+    fn block(&mut self) -> Res<Vec<Statement<'a>>> {
         self.expect(CurL)?;
         let body = self.many(Self::statement);
         self.expect(CurR)?;
-        Ok(Fun { header, body })
+        Ok(body)
     }
 
     fn header(&mut self) -> Res<Header<'a>> {
@@ -144,6 +149,7 @@ impl<'a> Parser<'a> {
         self.either(&[
             |p| Ok(p.let_()?.into()),
             |p| p.return_(),
+            |p| Ok(p.if_()?.into()),
             |p| Ok(p.assign_()?.into()),
             |p| p.call_statement_(),
         ])
@@ -219,6 +225,10 @@ impl<'a> Parser<'a> {
             |p| {
                 p.expect_(Minus)?;
                 Ok(BinOp::Sub)
+            },
+            |p| {
+                p.expect_(Equal2)?;
+                Ok(BinOp::Equ)
             },
         ])
         .and_then(|op| {
@@ -319,6 +329,23 @@ impl<'a> Parser<'a> {
             msgs: self.err_msgs,
         }
     }
+
+    fn if_(&mut self) -> Res<If<'a>> {
+        self.expect_(Name("if"))?;
+        let condition = self.expr()?;
+        let on_true = self.block()?;
+        let on_false = self
+            .maybe(|p| {
+                p.expect(Name("else"))?;
+                p.block()
+            })
+            .unwrap_or_default();
+        Ok(If {
+            condition,
+            on_true,
+            on_false,
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -343,8 +370,9 @@ impl Display for ParseError<'_> {
 
 fn get_prior(bin_op: BinOp) -> u8 {
     match bin_op {
-        BinOp::Add | BinOp::Sub => 0,
-        BinOp::Mul | BinOp::Div => 1,
+        BinOp::Equ => 0,
+        BinOp::Add | BinOp::Sub => 1,
+        BinOp::Mul | BinOp::Div => 2,
     }
 }
 

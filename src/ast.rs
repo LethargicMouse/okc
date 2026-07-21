@@ -54,11 +54,24 @@ pub struct Assign<'a> {
     pub expr: Expr<'a>,
 }
 
+pub struct If<'a> {
+    pub condition: Expr<'a>,
+    pub on_true: Vec<Statement<'a>>,
+    pub on_false: Vec<Statement<'a>>,
+}
+
 pub enum Statement<'a> {
     Return(Expr<'a>),
     Call(Call<'a>),
     Let(Let<'a>),
     Assign(Assign<'a>),
+    If(If<'a>),
+}
+
+impl<'a> From<If<'a>> for Statement<'a> {
+    fn from(v: If<'a>) -> Self {
+        Self::If(v)
+    }
 }
 
 impl<'a> From<Assign<'a>> for Statement<'a> {
@@ -90,6 +103,7 @@ pub enum BinOp {
     Mul,
     Div,
     Sub,
+    Equ,
 }
 
 pub struct Binary<'a> {
