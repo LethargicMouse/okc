@@ -208,6 +208,10 @@ impl<'a> Parser<'a> {
                 p.expect_(Div)?;
                 Ok(BinOp::Div)
             },
+            |p| {
+                p.expect_(Minus)?;
+                Ok(BinOp::Sub)
+            },
         ])
         .and_then(|op| {
             if get_prior(op) >= prior {
@@ -331,7 +335,7 @@ impl Display for ParseError<'_> {
 
 fn get_prior(bin_op: BinOp) -> u8 {
     match bin_op {
-        BinOp::Add => 0,
+        BinOp::Add | BinOp::Sub => 0,
         BinOp::Mul | BinOp::Div => 1,
     }
 }

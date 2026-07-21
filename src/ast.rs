@@ -89,6 +89,7 @@ pub enum BinOp {
     Add,
     Mul,
     Div,
+    Sub,
 }
 
 pub struct Binary<'a> {
