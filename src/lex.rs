@@ -258,4 +258,9 @@ mod tests {
     fn test_lex_add() {
         test_lex("add")
     }
+
+    #[test]
+    fn test_lex_add_mul() {
+        test_lex("add_mul")
+    }
 }
