@@ -277,4 +277,9 @@ mod tests {
     fn test_lex_add_mul_div_sub() {
         test_lex("add_mul_div_sub")
     }
+
+    #[test]
+    fn test_lex_if() {
+        test_lex("if")
+    }
 }

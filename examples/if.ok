@@ -1,0 +1,11 @@
+extern fn puts(s: *u8);
+
+fn main() i32 {
+  let sixseven = 67;
+  if sixseven == 67 {
+    puts("SIX SEVEEEN\n");
+  } else {
+    puts("no six seven(");
+  }
+  return 0;
+}

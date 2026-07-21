@@ -396,4 +396,9 @@ mod tests {
     fn test_parse_add_mul_div_sub() {
         test_parse("add_mul_div_sub")
     }
+
+    #[test]
+    fn test_parse_if() {
+        test_parse("if")
+    }
 }
