@@ -284,4 +284,9 @@ mod tests {
     fn test_lex_if() {
         test_lex("if")
     }
+
+    #[test]
+    fn test_lex_fizzbuzz() {
+        test_lex("fizzbuzz")
+    }
 }

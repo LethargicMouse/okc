@@ -1,0 +1,25 @@
+extern fn printf(fmt: *u8, n: i32) i32;
+extern fn puts(s: *u8) i32;
+
+fn main() {
+  let i = 0;
+  loop {
+    i = i + 1;
+    if i == 21 {
+      break;
+    }
+    if i % 15 == 0 {
+      puts("fizzbuzz");
+      continue;
+    }
+    if i % 5 == 0 {
+      puts("buzz");
+      continue;
+    }
+    if i % 3 == 0 {
+      puts("fizz");
+      continue;
+    }
+    printf("%d\n", i);
+  }
+}

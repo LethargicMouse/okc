@@ -437,4 +437,9 @@ mod tests {
     fn test_parse_if() {
         test_parse("if")
     }
+
+    #[test]
+    fn test_parse_fizzbuzz() {
+        test_parse("fizzbuzz")
+    }
 }
