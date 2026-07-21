@@ -181,44 +181,21 @@ impl<'a> Generator<'a> {
         let left = self.expr(&binary.left);
         let right = self.expr(&binary.right);
         let tmp = self.new_tmp();
-        match binary.op {
-            BinOp::Add => self
-                .builder
-                .build_int_add(
-                    left.into_int_value(),
-                    right.into_int_value(),
-                    &format!("t{tmp}"),
-                )
-                .unwrap()
-                .into(),
-            BinOp::Mul => self
-                .builder
-                .build_int_mul(
-                    left.into_int_value(),
-                    right.into_int_value(),
-                    &format!("t{tmp}"),
-                )
-                .unwrap()
-                .into(),
-            BinOp::Div => self
-                .builder
-                .build_int_signed_div(
-                    left.into_int_value(),
-                    right.into_int_value(),
-                    &format!("t{tmp}"),
-                )
-                .unwrap()
-                .into(),
-            BinOp::Sub => self
-                .builder
-                .build_int_sub(
-                    left.into_int_value(),
-                    right.into_int_value(),
-                    &format!("t{tmp}"),
-                )
-                .unwrap()
-                .into(),
-        }
+        let tmp = format!("t{tmp}");
+        let op = match binary.op {
+            BinOp::Add => Builder::build_int_add,
+            BinOp::Mul => Builder::build_int_mul,
+            BinOp::Div => Builder::build_int_signed_div,
+            BinOp::Sub => Builder::build_int_sub,
+        };
+        op(
+            &self.builder,
+            left.into_int_value(),
+            right.into_int_value(),
+            &tmp,
+        )
+        .unwrap()
+        .into()
     }
 }
 
