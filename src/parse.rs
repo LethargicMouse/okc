@@ -179,8 +179,9 @@ impl<'a> Parser<'a> {
     fn expr_prior(&mut self, prior: u8) -> Res<Expr<'a>> {
         let mut res = self.expr_atom()?;
         while let Some((op, expr)) = self.maybe(|p| {
-            let op = p.bin_op_()?;
-            let expr = p.expr_prior(get_prior(op))?;
+            let op = p.bin_op_(prior)?;
+            // + 1 so that chains are left-associative
+            let expr = p.expr_prior(get_prior(op) + 1)?;
             Ok((op, expr))
         }) {
             res = Binary {
@@ -193,7 +194,7 @@ impl<'a> Parser<'a> {
         Ok(res)
     }
 
-    fn bin_op_(&mut self) -> Res<BinOp> {
+    fn bin_op_(&mut self, prior: u8) -> Res<BinOp> {
         self.either(&[
             |p| {
                 p.expect_(Plus)?;
@@ -208,6 +209,13 @@ impl<'a> Parser<'a> {
                 Ok(BinOp::Div)
             },
         ])
+        .and_then(|op| {
+            if get_prior(op) >= prior {
+                Ok(op)
+            } else {
+                Err(())
+            }
+        })
     }
 
     fn expr_atom(&mut self) -> Res<Expr<'a>> {
