@@ -477,4 +477,9 @@ mod tests {
     fn test_parse_fizzbuzz() {
         test_parse("fizzbuzz")
     }
+
+    #[test]
+    fn test_parse_struct() {
+        test_parse("struct")
+    }
 }

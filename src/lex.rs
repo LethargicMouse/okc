@@ -297,4 +297,9 @@ mod tests {
     fn test_lex_fizzbuzz() {
         test_lex("fizzbuzz")
     }
+
+    #[test]
+    fn test_lex_struct() {
+        test_lex("struct");
+    }
 }
