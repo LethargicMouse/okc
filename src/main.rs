@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+mod analyse;
 mod ast;
 mod codegen;
 mod compile;

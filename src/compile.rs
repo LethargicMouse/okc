@@ -1,6 +1,7 @@
 use std::{fs::File, io::Read, process::exit};
 
 use crate::{
+    analyse::analyse,
     codegen::{IR_PATH, gen_ir},
     display::LogError,
     lex::lex,
@@ -17,7 +18,8 @@ pub fn compile(path: &str) {
         eprintln!("{e}");
         exit(1)
     });
-    gen_ir(ast, IR_PATH);
+    let info = analyse(&ast);
+    gen_ir(ast, info, IR_PATH);
     run_command("clang", ["-o", "build/out", "build/out.ll"]);
 }
 
