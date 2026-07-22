@@ -1,6 +1,5 @@
 use std::{
     cmp::Ordering,
-    collections::HashMap,
     fmt::{Debug, Display},
 };
 
@@ -54,10 +53,7 @@ impl<'a> Parser<'a> {
     }
 
     fn ast(&mut self) -> Res<Ast<'a>> {
-        let mut structs = HashMap::new();
-        self.many_do(Self::struct_decl, |(name, struct_decl)| {
-            structs.insert(name, struct_decl);
-        });
+        let structs = self.many(Self::struct_decl);
         let ext_funs = self.many(Self::ext_fun);
         let funs = self.many(Self::fun);
         self.expect(Eof)?;
@@ -68,16 +64,13 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn struct_decl(&mut self) -> Res<(&'a str, Struct<'a>)> {
+    fn struct_decl(&mut self) -> Res<Struct<'a>> {
         self.expect(Name("struct"))?;
         let name = self.name()?;
         self.expect(CurL)?;
-        let mut fields = HashMap::new();
-        self.sep_do(Self::field_decl, |(name, typ)| {
-            fields.insert(name, typ);
-        });
+        let fields = self.sep(Self::field_decl);
         self.expect(CurR)?;
-        Ok((name, Struct { fields }))
+        Ok(Struct { name, fields })
     }
 
     fn ext_fun(&mut self) -> Res<ExtFun<'a>> {
@@ -89,33 +82,25 @@ impl<'a> Parser<'a> {
 
     fn many<T>(&mut self, parse: fn(&mut Self) -> Res<T>) -> Vec<T> {
         let mut res = Vec::new();
-        self.many_do(parse, |item| res.push(item));
-        res
-    }
-
-    fn many_do<T>(&mut self, parse: fn(&mut Self) -> Res<T>, mut action: impl FnMut(T)) {
         while let Some(item) = self.maybe(parse) {
-            action(item);
+            res.push(item);
         }
+        res
     }
 
     fn sep<T>(&mut self, parse: fn(&mut Self) -> Res<T>) -> Vec<T> {
         let mut res = Vec::new();
-        self.sep_do(parse, |item| res.push(item));
-        res
-    }
-
-    fn sep_do<T>(&mut self, parse: fn(&mut Self) -> Res<T>, mut action: impl FnMut(T)) {
         match self.maybe(parse) {
-            Some(item) => action(item),
-            None => return,
+            Some(item) => res.push(item),
+            None => return res,
         }
         while let Some(item) = self.maybe(|p| {
             p.expect(Comma)?;
             parse(p)
         }) {
-            action(item)
+            res.push(item)
         }
+        res
     }
 
     fn maybe<T>(&mut self, parse: impl Fn(&mut Self) -> Res<T>) -> Option<T> {
@@ -144,18 +129,20 @@ impl<'a> Parser<'a> {
         self.expect(Name("fn"))?;
         let name = self.name()?;
         self.expect(ParL)?;
-        let args = self.sep(Self::fun_arg);
+        let params = self.sep(Self::param);
         self.expect(ParR)?;
         self.typ()?;
-        Ok(Header { name, args })
+        Ok(Header { name, params })
     }
 
-    fn fun_arg(&mut self) -> Res<(&'a str, Typ<'a>)> {
-        self.typed_name()
+    fn param(&mut self) -> Res<Param<'a>> {
+        let (name, typ) = self.typed_name()?;
+        Ok(Param { name, typ })
     }
 
-    fn field_decl(&mut self) -> Res<(&'a str, Typ<'a>)> {
-        self.typed_name()
+    fn field_decl(&mut self) -> Res<FieldDecl<'a>> {
+        let (name, typ) = self.typed_name()?;
+        Ok(FieldDecl { name, typ })
     }
 
     fn typed_name(&mut self) -> Res<(&'a str, Typ<'a>)> {

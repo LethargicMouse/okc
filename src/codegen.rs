@@ -86,8 +86,11 @@ impl<'a> Generator<'a> {
     }
 
     fn fun_typ(&self, header: &Header) -> FunctionType<'a> {
-        let param_typs: Vec<BasicMetadataTypeEnum> =
-            header.args.iter().map(|(_, typ)| self.typ(typ)).collect();
+        let param_typs: Vec<BasicMetadataTypeEnum> = header
+            .params
+            .iter()
+            .map(|param| self.typ(&param.typ))
+            .collect();
         self.context.i32_type().fn_type(&param_typs, false)
     }
 
