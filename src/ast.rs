@@ -2,6 +2,7 @@ pub struct Ast<'a> {
     pub structs: Vec<Struct<'a>>,
     pub ext_funs: Vec<ExtFun<'a>>,
     pub funs: Vec<Fun<'a>>,
+    pub ids: usize,
 }
 
 pub struct Struct<'a> {
@@ -42,6 +43,16 @@ pub enum Typ<'a> {
     Prime(Prime),
     Ptr(Box<Typ<'a>>),
     Name(&'a str),
+}
+
+impl<'a> Typ<'a> {
+    pub fn as_name(&self) -> Option<&'a str> {
+        if let Self::Name(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a> From<Prime> for Typ<'a> {
@@ -127,6 +138,7 @@ impl<'a> From<Call<'a>> for Statement<'a> {
 pub struct Call<'a> {
     pub name: &'a str,
     pub args: Vec<Expr<'a>>,
+    pub id: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -144,21 +156,47 @@ pub struct Binary<'a> {
     pub left: Expr<'a>,
     pub op: BinOp,
     pub right: Expr<'a>,
+    pub id: usize,
 }
 
 #[derive(Debug)]
 pub struct Field<'a> {
     pub parent: Expr<'a>,
     pub name: &'a str,
+    pub id: usize,
+}
+
+#[derive(Debug)]
+pub struct Var<'a> {
+    pub name: &'a str,
+    pub id: usize,
 }
 
 #[derive(Debug)]
 pub enum Expr<'a> {
     Literal(Literal<'a>),
     Call(Call<'a>),
-    Var(&'a str),
+    Var(Var<'a>),
     Binary(Box<Binary<'a>>),
     Field(Box<Field<'a>>),
+}
+
+impl<'a> From<Var<'a>> for Expr<'a> {
+    fn from(v: Var<'a>) -> Self {
+        Self::Var(v)
+    }
+}
+
+impl Expr<'_> {
+    pub fn id(&self) -> usize {
+        match self {
+            Expr::Literal(literal) => literal.id(),
+            Expr::Call(call) => call.id,
+            Expr::Var(var) => var.id,
+            Expr::Binary(binary) => binary.id,
+            Expr::Field(field) => field.id,
+        }
+    }
 }
 
 impl<'a> From<Field<'a>> for Expr<'a> {
@@ -186,14 +224,36 @@ impl<'a> From<Literal<'a>> for Expr<'a> {
 }
 
 #[derive(Debug)]
-pub enum Literal<'a> {
-    Int(u64),
-    RawStr(&'a str),
-    Str(&'a str),
+pub struct Int {
+    pub val: u64,
+    pub id: usize,
 }
 
-impl<'a> From<u64> for Literal<'a> {
-    fn from(v: u64) -> Self {
+#[derive(Debug)]
+pub struct Str<'a> {
+    pub val: &'a str,
+    pub id: usize,
+}
+
+#[derive(Debug)]
+pub enum Literal<'a> {
+    Int(Int),
+    RawStr(Str<'a>),
+    Str(Str<'a>),
+}
+
+impl Literal<'_> {
+    fn id(&self) -> usize {
+        match self {
+            Literal::Int(int) => int.id,
+            Literal::RawStr(s) => s.id,
+            Literal::Str(s) => s.id,
+        }
+    }
+}
+
+impl<'a> From<Int> for Literal<'a> {
+    fn from(v: Int) -> Self {
         Self::Int(v)
     }
 }

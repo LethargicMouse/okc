@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    ast::*,
+    ast::{self, *},
     display::LogError,
     lex::{
         Lexeme::{self, *},
@@ -14,7 +14,7 @@ use crate::{
 };
 
 pub enum Postfix<'a> {
-    Field(&'a str),
+    Field(usize, &'a str),
 }
 
 pub fn parse<'a>(tokens: Vec<Token<'a>>) -> Result<Ast<'a>, ParseError<'a>> {
@@ -27,6 +27,7 @@ struct Parser<'a> {
     cursor: usize,
     err_cursor: usize,
     err_msgs: Vec<&'a str>,
+    next_id: usize,
 }
 
 type Res<T> = Result<T, ()>;
@@ -47,6 +48,7 @@ impl<'a> Parser<'a> {
         Self {
             cursor: 0,
             err_cursor: 0,
+            next_id: 0,
             err_msgs: Vec::new(),
             tokens,
         }
@@ -57,10 +59,12 @@ impl<'a> Parser<'a> {
         let ext_funs = self.many(Self::ext_fun);
         let funs = self.many(Self::fun);
         self.expect(Eof)?;
+        let ids = self.new_id();
         Ok(Ast {
             ext_funs,
             funs,
             structs,
+            ids,
         })
     }
 
@@ -105,9 +109,11 @@ impl<'a> Parser<'a> {
 
     fn maybe<T>(&mut self, parse: impl Fn(&mut Self) -> Res<T>) -> Option<T> {
         let before = self.cursor;
+        let id_before = self.next_id;
         let res = parse(self).ok();
         if res.is_none() {
             self.cursor = before;
+            self.next_id = id_before;
         }
         res
     }
@@ -243,20 +249,27 @@ impl<'a> Parser<'a> {
 
     fn expr_prior(&mut self, prior: u8) -> Res<Expr<'a>> {
         let mut res = self.expr_posted()?;
-        while let Some((op, expr)) = self.maybe(|p| {
+        while let Some((id, op, expr)) = self.maybe(|p| {
             let op = p.bin_op_(prior)?;
             // + 1 so that chains are left-associative
             let expr = p.expr_prior(get_prior(op) + 1)?;
-            Ok((op, expr))
+            let id = p.new_id();
+            Ok((id, op, expr))
         }) {
             res = Binary {
                 left: res,
                 right: expr,
                 op,
+                id,
             }
             .into();
         }
         Ok(res)
+    }
+
+    fn new_id(&mut self) -> usize {
+        self.next_id += 1;
+        self.next_id - 1
     }
 
     fn bin_op_(&mut self, prior: u8) -> Res<BinOp> {
@@ -299,7 +312,14 @@ impl<'a> Parser<'a> {
         let mut res = self.expr_atom()?;
         while let Some(postfix) = self.maybe(Self::postfix_) {
             match postfix {
-                Postfix::Field(name) => res = Field { parent: res, name }.into(),
+                Postfix::Field(id, name) => {
+                    res = Field {
+                        parent: res,
+                        name,
+                        id,
+                    }
+                    .into()
+                }
             }
         }
         Ok(res)
@@ -309,7 +329,8 @@ impl<'a> Parser<'a> {
         self.either(&[|p| {
             p.expect_(Dot)?;
             let name = p.name()?;
-            Ok(Postfix::Field(name))
+            let id = p.new_id();
+            Ok(Postfix::Field(id, name))
         }])
     }
 
@@ -325,7 +346,8 @@ impl<'a> Parser<'a> {
             },
             |p| {
                 let name = p.name_()?;
-                Ok(Expr::Var(name))
+                let id = p.new_id();
+                Ok(Var { name, id }.into())
             },
         ])
         .inspect_err(|_| self.fail("<expr>"))
@@ -336,22 +358,26 @@ impl<'a> Parser<'a> {
         self.expect(ParL)?;
         let args = self.sep(Self::expr);
         self.expect(ParR)?;
-        Ok(Call { name, args })
+        let id = self.new_id();
+        Ok(Call { name, args, id })
     }
 
     fn literal_(&mut self) -> Res<Literal<'a>> {
         self.either(&[
             |p| {
-                let int = p.int_()?;
-                Ok(int.into())
+                let val = p.int_()?;
+                let id = p.new_id();
+                Ok(ast::Int { val, id }.into())
             },
             |p| {
-                let raw_str = p.raw_str_()?;
-                Ok(Literal::RawStr(raw_str))
+                let val = p.raw_str_()?;
+                let id = p.new_id();
+                Ok(Literal::RawStr(ast::Str { val, id }))
             },
             |p| {
-                let s = p.str_()?;
-                Ok(Literal::Str(s))
+                let val = p.str_()?;
+                let id = p.new_id();
+                Ok(Literal::Str(ast::Str { val, id }))
             },
         ])
     }
