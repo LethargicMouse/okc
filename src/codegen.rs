@@ -319,7 +319,11 @@ mod tests {
         let code = read_file(&input);
         let source = Source::new(&input, &code);
         let tokens = lex(&source);
-        let ast = parse(tokens).unwrap();
+        let ast = match parse(tokens) {
+            Ok(ast) => ast,
+            // test_parse will fail, not running test_codegen
+            Err(_) => return,
+        };
         gen_ir(ast, &output);
         let found = read_file(&output);
         assert_eq!(found, expected)
