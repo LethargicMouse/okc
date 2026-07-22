@@ -14,6 +14,10 @@ use crate::{
     source::Location,
 };
 
+pub enum Postfix<'a> {
+    Field(&'a str),
+}
+
 pub fn parse<'a>(tokens: Vec<Token<'a>>) -> Result<Ast<'a>, ParseError<'a>> {
     let mut parser = Parser::new(tokens);
     parser.ast().map_err(|_| parser.error())
@@ -251,7 +255,7 @@ impl<'a> Parser<'a> {
     }
 
     fn expr_prior(&mut self, prior: u8) -> Res<Expr<'a>> {
-        let mut res = self.expr_atom()?;
+        let mut res = self.expr_posted()?;
         while let Some((op, expr)) = self.maybe(|p| {
             let op = p.bin_op_(prior)?;
             // + 1 so that chains are left-associative
@@ -302,6 +306,24 @@ impl<'a> Parser<'a> {
                 Err(())
             }
         })
+    }
+
+    fn expr_posted(&mut self) -> Res<Expr<'a>> {
+        let mut res = self.expr_atom()?;
+        while let Some(postfix) = self.maybe(Self::postfix_) {
+            match postfix {
+                Postfix::Field(name) => res = Field { parent: res, name }.into(),
+            }
+        }
+        Ok(res)
+    }
+
+    fn postfix_(&mut self) -> Res<Postfix<'a>> {
+        self.either(&[|p| {
+            p.expect_(Dot)?;
+            let name = p.name()?;
+            Ok(Postfix::Field(name))
+        }])
     }
 
     fn expr_atom(&mut self) -> Res<Expr<'a>> {

@@ -137,11 +137,24 @@ pub struct Binary<'a> {
 }
 
 #[derive(Debug)]
+pub struct Field<'a> {
+    pub parent: Expr<'a>,
+    pub name: &'a str,
+}
+
+#[derive(Debug)]
 pub enum Expr<'a> {
     Literal(Literal<'a>),
     Call(Call<'a>),
     Var(&'a str),
     Binary(Box<Binary<'a>>),
+    Field(Box<Field<'a>>),
+}
+
+impl<'a> From<Field<'a>> for Expr<'a> {
+    fn from(v: Field<'a>) -> Self {
+        Self::Field(Box::new(v))
+    }
 }
 
 impl<'a> From<Binary<'a>> for Expr<'a> {

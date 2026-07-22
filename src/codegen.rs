@@ -128,6 +128,7 @@ impl<'a> Generator<'a> {
             Expr::Call(call) => self.call(call).unwrap(),
             Expr::Var(n) => self.var(n),
             Expr::Binary(binary) => self.binary(binary),
+            Expr::Field(_) => todo!(),
         }
     }
 
