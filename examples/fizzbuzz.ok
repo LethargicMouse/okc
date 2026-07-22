@@ -9,18 +9,18 @@ fn main() i32 {
       break;
     }
     if i % 15 == 0 {
-      puts("fizzbuzz");
+      puts(r"fizzbuzz");
       continue;
     }
     if i % 5 == 0 {
-      puts("buzz");
+      puts(r"buzz");
       continue;
     }
     if i % 3 == 0 {
-      puts("fizz");
+      puts(r"fizz");
       continue;
     }
-    printf("%d\n", i);
+    printf(r"%d\n", i);
   }
   return 0;
 }

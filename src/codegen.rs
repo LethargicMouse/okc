@@ -86,11 +86,8 @@ impl<'a> Generator<'a> {
     }
 
     fn fun_typ(&self, header: &Header) -> FunctionType<'a> {
-        let param_typs: Vec<BasicMetadataTypeEnum> = header
-            .args
-            .iter()
-            .map(|(_, typ)| gen_typ(self.context, typ))
-            .collect();
+        let param_typs: Vec<BasicMetadataTypeEnum> =
+            header.args.iter().map(|(_, typ)| self.typ(typ)).collect();
         self.context.i32_type().fn_type(&param_typs, false)
     }
 
@@ -137,17 +134,47 @@ impl<'a> Generator<'a> {
     fn literal(&mut self, literal: &Literal) -> BasicValueEnum<'a> {
         match literal {
             Literal::Int(n) => self.context.i32_type().const_int(*n, false).into(),
-            Literal::RawStr(s) => self.raw_str(s),
+            Literal::RawStr(s) => self.raw_str(&unescape(s)),
+            Literal::Str(s) => self.str(&unescape(s)),
         }
     }
 
     fn raw_str(&mut self, s: &str) -> BasicValueEnum<'a> {
         let tmp = self.new_tmp();
         self.builder
-            .build_global_string_ptr(&unescape(s), &format!(".s{tmp}"))
+            .build_global_string_ptr(s, &format!(".s{tmp}"))
             .unwrap()
             .as_pointer_value()
             .into()
+    }
+
+    fn str(&mut self, s: &str) -> BasicValueEnum<'a> {
+        let typ = self.context.struct_type(
+            &[
+                self.context.ptr_type(0.into()).into(),
+                self.context.i64_type().into(),
+            ],
+            false,
+        );
+        let tmp = self.new_tmp();
+        let res = self.builder.build_alloca(typ, &format!("t{tmp}")).unwrap();
+        let ptr = self.raw_str(s);
+        let tmp = self.new_tmp();
+        let dst = self
+            .builder
+            .build_struct_gep(typ, res, 0, &format!("t{tmp}"))
+            .unwrap();
+        self.builder.build_store(dst, ptr).unwrap();
+        let len = s.len();
+        let tmp = self.new_tmp();
+        let dst = self
+            .builder
+            .build_struct_gep(typ, res, 0, &format!("t{tmp}"))
+            .unwrap();
+        self.builder
+            .build_store(dst, self.context.i64_type().const_int(len as u64, false))
+            .unwrap();
+        res.into()
     }
 
     fn call(&mut self, call: &Call) -> Option<BasicValueEnum<'a>> {
@@ -271,20 +298,20 @@ impl<'a> Generator<'a> {
             .build_unconditional_branch(*self.loop_block.last().unwrap())
             .unwrap();
     }
-}
 
-fn gen_typ<'a>(context: &'a Context, typ: &Typ<'_>) -> BasicMetadataTypeEnum<'a> {
-    match typ {
-        Typ::Prime(prime) => prime_typ(context, prime),
-        Typ::Ptr(_) => context.ptr_type(0.into()).into(),
-        Typ::Name(_) => context.ptr_type(0.into()).into(),
+    fn typ(&self, typ: &Typ<'_>) -> BasicMetadataTypeEnum<'a> {
+        match typ {
+            Typ::Prime(prime) => self.prime(prime),
+            Typ::Ptr(_) => self.context.ptr_type(0.into()).into(),
+            Typ::Name(_) => self.context.ptr_type(0.into()).into(),
+        }
     }
-}
 
-fn prime_typ<'a>(context: &'a Context, prime: &Prime) -> BasicMetadataTypeEnum<'a> {
-    match prime {
-        Prime::I32 => context.i32_type().into(),
-        Prime::U8 => context.i8_type().into(),
+    fn prime(&self, prime: &Prime) -> BasicMetadataTypeEnum<'a> {
+        match prime {
+            Prime::I32 => self.context.i32_type().into(),
+            Prime::U8 => self.context.i8_type().into(),
+        }
     }
 }
 

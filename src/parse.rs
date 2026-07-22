@@ -303,7 +303,15 @@ impl<'a> Parser<'a> {
                 let raw_str = p.raw_str_()?;
                 Ok(Literal::RawStr(raw_str))
             },
+            |p| {
+                let s = p.str_()?;
+                Ok(Literal::Str(s))
+            },
         ])
+    }
+
+    fn str_(&mut self) -> Res<&'a str> {
+        get_lexeme!(self, Str)
     }
 
     fn raw_str_(&mut self) -> Res<&'a str> {

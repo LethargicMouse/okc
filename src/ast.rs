@@ -159,6 +159,7 @@ impl<'a> From<Literal<'a>> for Expr<'a> {
 pub enum Literal<'a> {
     Int(u64),
     RawStr(&'a str),
+    Str(&'a str),
 }
 
 impl<'a> From<u64> for Literal<'a> {
