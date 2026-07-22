@@ -39,6 +39,7 @@ pub enum Lexeme<'a> {
     Name(&'a str),
     Int(u64),
     RawStr(&'a str),
+    Str(&'a str),
     ParL,
     ParR,
     CurL,
@@ -187,7 +188,11 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn try_str_with(&mut self, prefix: &str) -> Option<Token<'a>> {
+    fn try_str_with(
+        &mut self,
+        prefix: &str,
+        to_lexeme: fn(&'a str) -> Lexeme<'a>,
+    ) -> Option<Token<'a>> {
         if !self.source.code[self.cursor..].starts_with(prefix) {
             return None;
         }
@@ -201,15 +206,15 @@ impl<'a> Lexer<'a> {
             );
             exit(1);
         }
-        Some(self.token(Lexeme::RawStr(res), res.len() + prefix.len() + 1))
+        Some(self.token(to_lexeme(res), res.len() + prefix.len() + 1))
     }
 
     fn try_raw_str(&mut self) -> Option<Token<'a>> {
-        self.try_str_with("r\"")
+        self.try_str_with("r\"", RawStr)
     }
 
     fn try_str(&mut self) -> Option<Token<'a>> {
-        self.try_str_with("\"")
+        self.try_str_with("\"", Str)
     }
 
     fn next(&self) -> char {
