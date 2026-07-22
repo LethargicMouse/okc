@@ -56,6 +56,7 @@ pub enum Lexeme<'a> {
     Div,
     Minus,
     Rem,
+    Dot,
 }
 
 impl<'a> Lexeme<'a> {
@@ -159,6 +160,7 @@ impl<'a> Lexer<'a> {
             ("/", Div),
             ("-", Minus),
             ("%", Rem),
+            (".", Dot),
         ];
         for (pattern, lexeme) in lex_list {
             if self.source.code[self.cursor..].starts_with(pattern) {
