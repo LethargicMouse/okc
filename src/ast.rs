@@ -1,6 +1,13 @@
+use std::collections::HashMap;
+
 pub struct Ast<'a> {
+    pub structs: HashMap<&'a str, Struct<'a>>,
     pub ext_funs: Vec<ExtFun<'a>>,
     pub funs: Vec<Fun<'a>>,
+}
+
+pub struct Struct<'a> {
+    pub fields: HashMap<&'a str, Typ<'a>>,
 }
 
 #[derive(Debug)]

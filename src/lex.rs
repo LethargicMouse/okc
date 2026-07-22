@@ -65,6 +65,7 @@ impl<'a> Lexeme<'a> {
             Name("fn") => "`fn`",
             Name("extern") => "`extern`",
             Name("else") => "`else`",
+            Name("struct") => "`struct`",
             Equal => "`=`",
             Comma => "`,`",
             ParL => "`(`",
