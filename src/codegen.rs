@@ -1,8 +1,9 @@
 use std::{collections::HashMap, process::exit};
 
 use crate::{
+    analyse::Info,
     ast::{
-        Assign, Ast, BinOp, Binary, Call, Expr, ExtFun, Fun, Header, If, Let, Literal, Prime,
+        self, Assign, Ast, BinOp, Binary, Call, Expr, ExtFun, Fun, Header, If, Let, Literal, Prime,
         Statement, Typ,
     },
     display::LogError,
@@ -14,15 +15,15 @@ use inkwell::{
     context::Context,
     module::Module,
     targets::TargetTriple,
-    types::{BasicMetadataTypeEnum, BasicTypeEnum, FunctionType},
+    types::{BasicMetadataTypeEnum, BasicTypeEnum, FunctionType, StructType},
     values::{BasicValueEnum, FunctionValue, PointerValue},
 };
 
 pub const IR_PATH: &str = "build/out.ll";
 
-pub fn gen_ir(ast: Ast, path: &str) {
+pub fn gen_ir(ast: Ast, info: Info, path: &str) {
     let context = Context::create();
-    let mut generator = Generator::new(&context);
+    let mut generator = Generator::new(&context, info);
     generator.ast(ast);
     generator.module.print_to_file(path).unwrap_or_else(|e| {
         eprintln!("{LogError} failed to write to `{path}`: {e}");
@@ -30,8 +31,19 @@ pub fn gen_ir(ast: Ast, path: &str) {
     })
 }
 
+struct Field<'a> {
+    index: u32,
+    typ: BasicTypeEnum<'a>,
+}
+
+struct Struct<'a> {
+    typ: StructType<'a>,
+    fields: HashMap<&'a str, Field<'a>>,
+}
+
 struct Generator<'a> {
     context: &'a Context,
+    info: Info<'a>,
     module: Module<'a>,
     builder: Builder<'a>,
     funs: HashMap<&'a str, FunctionValue<'a>>,
@@ -40,20 +52,23 @@ struct Generator<'a> {
     current_fun: Option<FunctionValue<'a>>,
     loop_block: Vec<BasicBlock<'a>>,
     after_loop: Vec<BasicBlock<'a>>,
+    structs: HashMap<&'a str, Struct<'a>>,
 }
 
 impl<'a> Generator<'a> {
-    fn new(context: &'a Context) -> Self {
+    fn new(context: &'a Context, info: Info<'a>) -> Self {
         Self {
             module: context.create_module("main"),
             builder: context.create_builder(),
             funs: HashMap::new(),
-            context,
             next_tmp: 0,
             vars: HashMap::new(),
             current_fun: None,
             after_loop: Vec::new(),
             loop_block: Vec::new(),
+            structs: HashMap::new(),
+            context,
+            info,
         }
     }
 
@@ -129,17 +144,17 @@ impl<'a> Generator<'a> {
         match expr {
             Expr::Literal(literal) => self.literal(literal),
             Expr::Call(call) => self.call(call).unwrap(),
-            Expr::Var(n) => self.var(n),
+            Expr::Var(n) => self.var(n.name),
             Expr::Binary(binary) => self.binary(binary),
-            Expr::Field(_) => todo!(),
+            Expr::Field(field) => self.field(field),
         }
     }
 
     fn literal(&mut self, literal: &Literal) -> BasicValueEnum<'a> {
         match literal {
-            Literal::Int(n) => self.context.i32_type().const_int(*n, false).into(),
-            Literal::RawStr(s) => self.raw_str(&unescape(s)),
-            Literal::Str(s) => self.str(&unescape(s)),
+            Literal::Int(n) => self.context.i32_type().const_int(n.val, false).into(),
+            Literal::RawStr(s) => self.raw_str(&unescape(s.val)),
+            Literal::Str(s) => self.str(&unescape(s.val)),
         }
     }
 
@@ -317,6 +332,29 @@ impl<'a> Generator<'a> {
             Prime::U8 => self.context.i8_type().into(),
         }
     }
+
+    fn field(&mut self, field: &ast::Field) -> BasicValueEnum<'a> {
+        let parent = self.expr(&field.parent);
+        let name = self.info.exprs[field.parent.id()].typ_name;
+        let tmp = self.new_tmp();
+        let ptr = self
+            .builder
+            .build_struct_gep(
+                self.structs[name].typ,
+                parent.into_pointer_value(),
+                self.structs[name].fields[field.name].index,
+                &format!("t{tmp}"),
+            )
+            .unwrap();
+        let tmp = self.new_tmp();
+        self.builder
+            .build_load(
+                self.structs[name].fields[field.name].typ,
+                ptr,
+                &format!("t{tmp}"),
+            )
+            .unwrap()
+    }
 }
 
 fn unescape(s: &str) -> String {
@@ -338,7 +376,8 @@ fn unescape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        codegen::gen_ir, compile::read_file, lex::lex, parse::parse, run_command, source::Source,
+        analyse::analyse, codegen::gen_ir, compile::read_file, lex::lex, parse::parse, run_command,
+        source::Source,
     };
     use pretty_assertions::assert_eq;
 
@@ -355,7 +394,8 @@ mod tests {
             // test_parse will fail, not running test_codegen
             Err(_) => return,
         };
-        gen_ir(ast, &output);
+        let info = analyse(&ast);
+        gen_ir(ast, info, &output);
         let found = read_file(&output);
         assert_eq!(found, expected)
     }
