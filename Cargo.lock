@@ -88,7 +88,7 @@ dependencies = [
 
 [[package]]
 name = "okc"
-version = "0.5.14"
+version = "0.6.0"
 dependencies = [
  "inkwell",
  "pretty_assertions",

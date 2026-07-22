@@ -75,6 +75,9 @@ impl<'a> Generator<'a> {
     fn ast(&mut self, ast: Ast<'a>) {
         let triple = TargetTriple::create("x86_64-pc-linux-gnu");
         self.module.set_triple(&triple);
+        for struct_decl in ast.structs {
+            self.struct_decl(struct_decl);
+        }
         for ext_fun in ast.ext_funs {
             self.ext_fun(ext_fun);
         }
@@ -104,7 +107,7 @@ impl<'a> Generator<'a> {
         let param_typs: Vec<BasicMetadataTypeEnum> = header
             .params
             .iter()
-            .map(|param| self.typ(&param.typ))
+            .map(|param| self.typ(&param.typ).into())
             .collect();
         self.context.i32_type().fn_type(&param_typs, false)
     }
@@ -188,7 +191,7 @@ impl<'a> Generator<'a> {
         let tmp = self.new_tmp();
         let dst = self
             .builder
-            .build_struct_gep(typ, res, 0, &format!("t{tmp}"))
+            .build_struct_gep(typ, res, 1, &format!("t{tmp}"))
             .unwrap();
         self.builder
             .build_store(dst, self.context.i64_type().const_int(len as u64, false))
@@ -318,7 +321,7 @@ impl<'a> Generator<'a> {
             .unwrap();
     }
 
-    fn typ(&self, typ: &Typ<'_>) -> BasicMetadataTypeEnum<'a> {
+    fn typ(&self, typ: &Typ<'_>) -> BasicTypeEnum<'a> {
         match typ {
             Typ::Prime(prime) => self.prime(prime),
             Typ::Ptr(_) => self.context.ptr_type(0.into()).into(),
@@ -326,7 +329,7 @@ impl<'a> Generator<'a> {
         }
     }
 
-    fn prime(&self, prime: &Prime) -> BasicMetadataTypeEnum<'a> {
+    fn prime(&self, prime: &Prime) -> BasicTypeEnum<'a> {
         match prime {
             Prime::I32 => self.context.i32_type().into(),
             Prime::U8 => self.context.i8_type().into(),
@@ -354,6 +357,31 @@ impl<'a> Generator<'a> {
                 &format!("t{tmp}"),
             )
             .unwrap()
+    }
+
+    fn struct_decl(&mut self, struct_decl: ast::Struct<'a>) {
+        let field_types: Vec<BasicTypeEnum> = struct_decl
+            .fields
+            .iter()
+            .map(|f| self.typ(&f.typ))
+            .collect();
+        let typ = self.context.struct_type(&field_types, false);
+        let fields = struct_decl
+            .fields
+            .into_iter()
+            .enumerate()
+            .map(|(i, field)| {
+                (
+                    field.name,
+                    Field {
+                        typ: field_types[i],
+                        index: i as u32,
+                    },
+                )
+            })
+            .collect();
+        let res = Struct { typ, fields };
+        self.structs.insert(struct_decl.name, res);
     }
 }
 
@@ -453,5 +481,10 @@ mod tests {
     #[test]
     fn test_codegen_fizzbuzz() {
         test_codegen("fizzbuzz")
+    }
+
+    #[test]
+    fn test_codegen_struct() {
+        test_codegen("struct")
     }
 }
