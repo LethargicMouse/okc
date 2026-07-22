@@ -1,6 +1,6 @@
 use crate::{
     display::LogError,
-    source::{Location, Meta, Pos, Source},
+    source::{Location, Pos, Source},
 };
 use Lexeme::*;
 use std::process::exit;

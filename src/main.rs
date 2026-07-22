@@ -1,4 +1,4 @@
-#![allow(unused)]
+#![allow(dead_code)]
 
 mod ast;
 mod codegen;
@@ -12,7 +12,6 @@ mod source;
 use crate::{compile::compile, display::LogError};
 use std::{
     env::args,
-    fmt::Display,
     process::{Command, exit},
 };
 

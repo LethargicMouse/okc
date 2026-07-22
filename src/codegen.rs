@@ -15,7 +15,7 @@ use inkwell::{
     module::Module,
     targets::TargetTriple,
     types::{BasicMetadataTypeEnum, BasicTypeEnum, FunctionType},
-    values::{BasicValueEnum, FunctionValue, PointerValue, ValueKind},
+    values::{BasicValueEnum, FunctionValue, PointerValue},
 };
 
 pub const IR_PATH: &str = "build/out.ll";
@@ -223,17 +223,18 @@ impl<'a> Generator<'a> {
         let on_false = self.new_block();
         let after = self.new_block();
         self.builder
-            .build_conditional_branch(condition.into_int_value(), on_true, on_false);
+            .build_conditional_branch(condition.into_int_value(), on_true, on_false)
+            .unwrap();
         self.builder.position_at_end(on_true);
         for statement in &if_statement.on_true {
             self.statement(statement);
         }
-        self.builder.build_unconditional_branch(after);
+        self.builder.build_unconditional_branch(after).unwrap();
         self.builder.position_at_end(on_false);
         for statement in &if_statement.on_false {
             self.statement(statement);
         }
-        self.builder.build_unconditional_branch(after);
+        self.builder.build_unconditional_branch(after).unwrap();
         self.builder.position_at_end(after);
     }
 
@@ -246,7 +247,7 @@ impl<'a> Generator<'a> {
     fn gen_loop(&mut self, body: &[Statement<'a>]) {
         let loop_block = self.new_block();
         let after = self.new_block();
-        self.builder.build_unconditional_branch(loop_block);
+        self.builder.build_unconditional_branch(loop_block).unwrap();
         self.builder.position_at_end(loop_block);
         self.loop_block.push(loop_block);
         self.after_loop.push(after);
@@ -255,18 +256,20 @@ impl<'a> Generator<'a> {
         }
         self.loop_block.pop();
         self.after_loop.pop();
-        self.builder.build_unconditional_branch(loop_block);
+        self.builder.build_unconditional_branch(loop_block).unwrap();
         self.builder.position_at_end(after);
     }
 
     fn gen_break(&self) {
         self.builder
-            .build_unconditional_branch(*self.after_loop.last().unwrap());
+            .build_unconditional_branch(*self.after_loop.last().unwrap())
+            .unwrap();
     }
 
     fn gen_continue(&self) {
         self.builder
-            .build_unconditional_branch(*self.loop_block.last().unwrap());
+            .build_unconditional_branch(*self.loop_block.last().unwrap())
+            .unwrap();
     }
 }
 
