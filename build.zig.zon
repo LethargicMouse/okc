@@ -1,0 +1,14 @@
+.{
+    .name = .okc,
+    .version = "0.0.0",
+    .fingerprint = 0xee78d7814bdd097c,
+    .minimum_zig_version = "0.16.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "examples",
+        "examples-compiled",
+        "README.md",
+    },
+}
