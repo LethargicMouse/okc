@@ -25,7 +25,16 @@ fn run(init: std.process.Init) !u8 {
     }
 }
 
+const build_dir = "build";
+const out_ll = build_dir ++ "/out.ll";
+const out = build_dir ++ "/out";
+
 fn runFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !u8 {
+    try compile(io, gpa, path);
+    return runCmd(io, &.{out});
+}
+
+fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var source = try Source.read(io, gpa, path);
     defer source.deinit(gpa);
 
@@ -36,17 +45,13 @@ fn runFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !u8 {
     var ast = try parser.run();
     defer ast.deinit(gpa);
 
-    const build_dir = "build";
     try std.Io.Dir.cwd().createDirPath(io, build_dir);
 
     var write_buf: [256]u8 = undefined;
-    const out_ll = build_dir ++ "/out.ll";
     var gen = try Codegen.init(io, &write_buf, out_ll);
     try gen.run(ast);
 
-    const out = build_dir ++ "/out";
     _ = try runCmd(io, &.{ "clang", "-o", out, out_ll });
-    return runCmd(io, &.{out});
 }
 
 fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
@@ -56,4 +61,28 @@ fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
         .exited => |code| return code,
         else => return 1,
     }
+}
+
+fn testFile(comptime name: []const u8) !void {
+    const ok = std.fmt.comptimePrint("examples/{s}.ok", .{name});
+    const ll = std.fmt.comptimePrint("examples_compiled/{s}.ll", .{name});
+
+    try compile(std.testing.io, std.testing.allocator, ok);
+
+    const dir = std.Io.Dir.cwd();
+
+    const expected = dir.readFileAlloc(std.testing.io, ll, std.testing.allocator, .unlimited) catch {
+        std.log.err("failed to read `{s}`", .{ll});
+        return error.Handled;
+    };
+    defer std.testing.allocator.free(expected);
+
+    const found = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, out_ll, std.testing.allocator, .unlimited);
+    defer std.testing.allocator.free(found);
+
+    try std.testing.expectEqualStrings(expected, found);
+}
+
+test "empty.ok" {
+    try testFile("empty");
 }
