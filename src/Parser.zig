@@ -43,7 +43,7 @@ pub fn init(gpa: std.mem.Allocator, tokens: []const Lexer.Token) Parser {
 
 pub fn run(parser: *Parser) !Ast {
     defer parser.deinit();
-    const res = try parser.parse_maybe(Ast, parse_ast) orelse {
+    const res = try parser.parseMaybe(Ast, parseAst) orelse {
         std.log.err("failed to parse {f}\n{f}", .{
             parser.tokens[parser.err_cursor].location,
             parser.err_msgs,
@@ -53,21 +53,21 @@ pub fn run(parser: *Parser) !Ast {
     return res;
 }
 
-fn parse_ast(parser: *Parser) !Ast {
-    const funs = try parser.parse_many(Ast.Fun, parse_fun_loud);
-    try parser.expect_loud(.eof);
+fn parseAst(parser: *Parser) !Ast {
+    const funs = try parser.parseMany(Ast.Fun, parseFunLoud);
+    try parser.expectLoud(.eof);
     return .{ .funs = funs };
 }
 
-fn parse_many(parser: *Parser, typ: type, parse: fn (*Parser) ParseError!typ) ![]const typ {
+fn parseMany(parser: *Parser, typ: type, parse: fn (*Parser) ParseError!typ) ![]const typ {
     var vec = std.ArrayList(typ).empty;
-    while (try parser.parse_maybe(typ, parse)) |item| {
+    while (try parser.parseMaybe(typ, parse)) |item| {
         try vec.append(parser.gpa, item);
     }
     return vec.toOwnedSlice(parser.gpa);
 }
 
-fn parse_maybe(parser: *Parser, typ: type, parse: fn (*Parser) ParseError!typ) !?typ {
+fn parseMaybe(parser: *Parser, typ: type, parse: fn (*Parser) ParseError!typ) !?typ {
     const cursor_before = parser.cursor;
     const res = parse(parser) catch |err| switch (err) {
         error.ParseFailed => {
@@ -79,58 +79,58 @@ fn parse_maybe(parser: *Parser, typ: type, parse: fn (*Parser) ParseError!typ) !
     return res;
 }
 
-fn parse_fun_loud(parser: *Parser) !Ast.Fun {
-    try parser.expect_loud(.fun);
-    const name = try parser.parse_name_loud();
-    try parser.expect_loud(.parl);
-    try parser.expect_loud(.parr);
+fn parseFunLoud(parser: *Parser) !Ast.Fun {
+    try parser.expectLoud(.fun);
+    const name = try parser.parseNameLoud();
+    try parser.expectLoud(.parl);
+    try parser.expectLoud(.parr);
     parser.expect(.{ .name = "i32" }) catch |err| {
         try parser.fail("<type>");
         return err;
     };
-    try parser.expect_loud(.curl);
-    const statements = try parser.parse_many(Ast.Statement, parse_statement_loud);
-    try parser.expect_loud(.curr);
+    try parser.expectLoud(.curl);
+    const statements = try parser.parseMany(Ast.Statement, parseStatementLoud);
+    try parser.expectLoud(.curr);
     return .{
         .name = name,
         .statements = statements,
     };
 }
 
-fn parse_statement_loud(parser: *Parser) !Ast.Statement {
-    return parser.parse_ret_statement() catch |err| {
+fn parseStatementLoud(parser: *Parser) !Ast.Statement {
+    return parser.parseRetStatement() catch |err| {
         try parser.fail("<statement>");
         return err;
     };
 }
 
-fn parse_ret_statement(parser: *Parser) !Ast.Statement {
+fn parseRetStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.ret);
-    const expr = try parser.parse_expr_loud();
-    try parser.expect_loud(.semi);
+    const expr = try parser.parseExprLoud();
+    try parser.expectLoud(.semi);
     return .{ .ret = expr };
 }
 
-fn parse_expr_loud(parser: *Parser) !Ast.Expr {
-    return parser.parse_int_expr() catch |err| {
+fn parseExprLoud(parser: *Parser) !Ast.Expr {
+    return parser.parseIntExpr() catch |err| {
         try parser.fail("<expr>");
         return err;
     };
 }
 
-fn parse_int_expr(parser: *Parser) !Ast.Expr {
-    const int = try parser.parse_int();
+fn parseIntExpr(parser: *Parser) !Ast.Expr {
+    const int = try parser.parseInt();
     return .{ .int = int };
 }
 
-fn parse_name_loud(parser: *Parser) ![]const u8 {
-    return parser.parse_name() catch |err| {
+fn parseNameLoud(parser: *Parser) ![]const u8 {
+    return parser.parseName() catch |err| {
         try parser.fail("<name>");
         return err;
     };
 }
 
-fn parse_name(parser: *Parser) ![]const u8 {
+fn parseName(parser: *Parser) ![]const u8 {
     switch (parser.tokens[parser.cursor].lexeme) {
         .name => |name| {
             parser.cursor += 1;
@@ -142,7 +142,7 @@ fn parse_name(parser: *Parser) ![]const u8 {
     }
 }
 
-fn parse_int(parser: *Parser) ![]const u8 {
+fn parseInt(parser: *Parser) ![]const u8 {
     switch (parser.tokens[parser.cursor].lexeme) {
         .int => |int| {
             parser.cursor += 1;
@@ -159,7 +159,7 @@ fn deinit(parser: *Parser) void {
     parser.err_msgs.deinit(parser.gpa);
 }
 
-fn expect_loud(parser: *Parser, lexeme: Lexeme) !void {
+fn expectLoud(parser: *Parser, lexeme: Lexeme) !void {
     parser.expect(lexeme) catch |err| {
         try parser.fail(lexeme.describe());
         return err;

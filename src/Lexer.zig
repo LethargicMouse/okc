@@ -62,7 +62,7 @@ poses: []const Pos,
 cursor: usize = 0,
 
 pub fn init(gpa: std.mem.Allocator, source: Source) !Lexer {
-    const poses = try Pos.make_poses(gpa, source.code);
+    const poses = try Pos.makePoses(gpa, source.code);
     return .{ .source = source, .poses = poses };
 }
 
@@ -76,43 +76,43 @@ pub fn lex(lexer: *Lexer, gpa: std.mem.Allocator) ![]const Token {
 fn populate(lexer: *Lexer, gpa: std.mem.Allocator, res: *std.ArrayList(Token)) !void {
     while (true) {
         const before_skip = lexer.cursor;
-        lexer.skip_spaces();
+        lexer.skipSpaces();
         if (lexer.cursor == lexer.source.code.len) {
             // so that eof is right after last lexeme
             lexer.cursor = before_skip;
-            try res.append(gpa, lexer.make_token(.eof, 1));
+            try res.append(gpa, lexer.makeToken(.eof, 1));
             break;
         }
-        if (lexer.lex_next()) |token| {
+        if (lexer.lexNext()) |token| {
             try res.append(gpa, token);
             continue;
         }
-        try res.append(gpa, lexer.make_token(.unknown, 1));
+        try res.append(gpa, lexer.makeToken(.unknown, 1));
         break;
     }
 }
 
-fn skip_spaces(lexer: *Lexer) void {
-    const spaces = lexer.take_while(std.ascii.isWhitespace);
+fn skipSpaces(lexer: *Lexer) void {
+    const spaces = lexer.takeWhile(std.ascii.isWhitespace);
     lexer.cursor += spaces.len;
 }
 
-fn lex_next(lexer: *Lexer) ?Token {
-    return lexer.lex_by_list() orelse lexer.lex_name() orelse lexer.lex_int();
+fn lexNext(lexer: *Lexer) ?Token {
+    return lexer.lexByList() orelse lexer.lexName() orelse lexer.lexInt();
 }
 
-fn lex_int(lexer: *Lexer) ?Token {
-    const res = lexer.take_while(std.ascii.isDigit);
+fn lexInt(lexer: *Lexer) ?Token {
+    const res = lexer.takeWhile(std.ascii.isDigit);
     if (res.len == 0) {
         return null;
     }
-    return lexer.make_token(.{ .int = res }, res.len);
+    return lexer.makeToken(.{ .int = res }, res.len);
 }
 
-fn lex_by_list(lexer: *Lexer) ?Token {
+fn lexByList(lexer: *Lexer) ?Token {
     for (lex_list) |pair| {
         if (std.mem.startsWith(u8, lexer.rest(), pair.prefix)) {
-            return lexer.make_token(pair.lexeme, pair.prefix.len);
+            return lexer.makeToken(pair.lexeme, pair.prefix.len);
         }
     }
     return null;
@@ -132,15 +132,15 @@ fn rest(lexer: Lexer) []const u8 {
     return lexer.source.code[lexer.cursor..];
 }
 
-fn lex_name(lexer: *Lexer) ?Token {
-    const res = lexer.take_while(is_name_char);
-    if (res.len != 0 and is_name_first_char(res[0])) {
-        return lexer.make_token(.{ .name = res }, res.len);
+fn lexName(lexer: *Lexer) ?Token {
+    const res = lexer.takeWhile(isNameChar);
+    if (res.len != 0 and isNameFirstChar(res[0])) {
+        return lexer.makeToken(.{ .name = res }, res.len);
     }
     return null;
 }
 
-fn take_while(lexer: Lexer, predicate: fn (u8) bool) []const u8 {
+fn takeWhile(lexer: Lexer, predicate: fn (u8) bool) []const u8 {
     var i = lexer.cursor;
     while (i < lexer.source.code.len and predicate(lexer.source.code[i])) {
         i += 1;
@@ -148,15 +148,15 @@ fn take_while(lexer: Lexer, predicate: fn (u8) bool) []const u8 {
     return lexer.source.code[lexer.cursor..i];
 }
 
-fn is_name_first_char(c: u8) bool {
+fn isNameFirstChar(c: u8) bool {
     return std.ascii.isAlphabetic(c) or c == '_';
 }
 
-fn is_name_char(c: u8) bool {
-    return is_name_first_char(c) or std.ascii.isDigit(c);
+fn isNameChar(c: u8) bool {
+    return isNameFirstChar(c) or std.ascii.isDigit(c);
 }
 
-fn make_token(lexer: *Lexer, lexeme: Lexeme, len: usize) Token {
+fn makeToken(lexer: *Lexer, lexeme: Lexeme, len: usize) Token {
     const location = Location{
         .name = lexer.source.name,
         .start = lexer.poses[lexer.cursor],

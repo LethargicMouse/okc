@@ -5,7 +5,7 @@ const Pos = @This();
 line: u32,
 symbol: u32,
 
-pub fn make_poses(gpa: std.mem.Allocator, code: []const u8) ![]const Pos {
+pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) ![]const Pos {
     var vec = try std.ArrayList(Pos).initCapacity(gpa, code.len + 2);
     var current = Pos{ .line = 1, .symbol = 1 };
     for (code) |c| {

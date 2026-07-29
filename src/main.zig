@@ -18,14 +18,14 @@ fn run(init: std.process.Init) !u8 {
     // skip exec name
     _ = args.skip();
     if (args.next()) |path| {
-        return run_file(init.io, init.gpa, path);
+        return runFile(init.io, init.gpa, path);
     } else {
         std.log.err("no source path given", .{});
         return error.Handled;
     }
 }
 
-fn run_file(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !u8 {
+fn runFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !u8 {
     var source = try Source.read(io, gpa, path);
     defer source.deinit(gpa);
 
@@ -45,11 +45,11 @@ fn run_file(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !u8 {
     try gen.run(ast);
 
     const out = build_dir ++ "/out";
-    _ = try run_cmd(io, &.{ "clang", "-o", out, out_ll });
-    return run_cmd(io, &.{out});
+    _ = try runCmd(io, &.{ "clang", "-o", out, out_ll });
+    return runCmd(io, &.{out});
 }
 
-fn run_cmd(io: std.Io, comptime argv: []const []const u8) !u8 {
+fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
     var child = try std.process.spawn(io, .{ .argv = argv });
     const term = try child.wait(io);
     switch (term) {

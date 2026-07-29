@@ -32,31 +32,31 @@ pub fn run(gen: *Codegen, ast: Ast) !void {
     defer gen.deinit();
     try gen.print("target triple = \"x86_64-pc-linux-gnu\"", .{});
     for (ast.funs) |fun| {
-        try gen.gen_fun(fun);
+        try gen.genFun(fun);
     }
     try gen.writer.flush();
 }
 
-fn gen_fun(gen: *Codegen, fun: Ast.Fun) !void {
+fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
     try gen.print("\ndefine i32 @{s}() {{\nentry:", .{fun.name});
     for (fun.statements) |statement| {
-        try gen.gen_statement(statement);
+        try gen.genStatement(statement);
     }
     try gen.print("\n}}", .{});
 }
 
-fn gen_statement(gen: *Codegen, statement: Ast.Statement) !void {
+fn genStatement(gen: *Codegen, statement: Ast.Statement) !void {
     switch (statement) {
-        .ret => |expr| try gen.gen_ret(expr),
+        .ret => |expr| try gen.genRet(expr),
     }
 }
 
-fn gen_ret(gen: *Codegen, expr: Ast.Expr) !void {
-    const val = gen_expr(expr);
+fn genRet(gen: *Codegen, expr: Ast.Expr) !void {
+    const val = genExpr(expr);
     try gen.print("\n  ret {f}", .{val});
 }
 
-fn gen_expr(expr: Ast.Expr) Val {
+fn genExpr(expr: Ast.Expr) Val {
     switch (expr) {
         .int => |int| return .{ .int = int },
     }
