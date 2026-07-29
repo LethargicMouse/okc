@@ -30,11 +30,11 @@ const out_ll = build_dir ++ "/out.ll";
 const out = build_dir ++ "/out";
 
 fn runFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !u8 {
-    try compile(io, gpa, path);
+    try compile(io, gpa, path, out_ll);
     return runCmd(io, &.{out});
 }
 
-fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
+fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8, comptime out_path: []const u8) !void {
     var source = try Source.read(io, gpa, path);
     defer source.deinit(gpa);
 
@@ -43,15 +43,15 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
 
     var parser = Parser.init(gpa, tokens);
     var ast = try parser.run();
-    defer ast.deinit(gpa);
+    defer ast.deinit();
 
     try std.Io.Dir.cwd().createDirPath(io, build_dir);
 
     var write_buf: [256]u8 = undefined;
-    var gen = try Codegen.init(io, &write_buf, out_ll);
+    var gen = try Codegen.init(io, gpa, &write_buf, out_path);
     try gen.run(ast);
 
-    _ = try runCmd(io, &.{ "clang", "-o", out, out_ll });
+    _ = try runCmd(io, &.{ "clang", "-o", out, out_path });
 }
 
 fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
@@ -66,8 +66,9 @@ fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
 fn testFile(comptime name: []const u8) !void {
     const ok = std.fmt.comptimePrint("examples/{s}.ok", .{name});
     const ll = std.fmt.comptimePrint("examples_compiled/{s}.ll", .{name});
+    const test_out_ll = std.fmt.comptimePrint("build/out_{s}.ll", .{name});
 
-    try compile(std.testing.io, std.testing.allocator, ok);
+    try compile(std.testing.io, std.testing.allocator, ok, test_out_ll);
 
     const dir = std.Io.Dir.cwd();
 
@@ -77,7 +78,7 @@ fn testFile(comptime name: []const u8) !void {
     };
     defer std.testing.allocator.free(expected);
 
-    const found = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, out_ll, std.testing.allocator, .unlimited);
+    const found = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, test_out_ll, std.testing.allocator, .unlimited);
     defer std.testing.allocator.free(found);
 
     try std.testing.expectEqualStrings(expected, found);

@@ -9,6 +9,8 @@ pub const Token = struct { lexeme: Lexeme, location: Location };
 pub const Lexeme = union(enum) {
     name: []const u8,
     int: []const u8,
+    str: []const u8,
+    unclosedStr,
     amp,
     star,
     colon,
@@ -21,7 +23,7 @@ pub const Lexeme = union(enum) {
     ret,
     semi,
     eof,
-    unknown,
+    invalid,
 
     pub fn eq(a: Lexeme, b: Lexeme) bool {
         if (@intFromEnum(a) != @intFromEnum(b)) {
@@ -42,6 +44,12 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .str => "<str>",
+            .unclosedStr => "<unclosed string>",
+            .name => "<name>",
+            .int => "<unt>",
+            .ret => "`return`",
+            .invalid => "<invalid>",
             .amp => "`&`",
             .star => "`*`",
             .colon => "`:`",
@@ -53,10 +61,6 @@ pub const Lexeme = union(enum) {
             .semi => "`;`",
             .curr => "`}`",
             .eof => "<eof>",
-            else => {
-                std.debug.print("bad describe: {any}", .{lexeme});
-                unreachable;
-            },
         };
     }
 };
@@ -95,7 +99,7 @@ fn populate(lexer: *Lexer, gpa: std.mem.Allocator, res: *std.ArrayList(Token)) !
             try res.append(gpa, token);
             continue;
         }
-        try res.append(gpa, lexer.makeToken(.unknown, 1));
+        try res.append(gpa, lexer.makeToken(.invalid, 1));
         break;
     }
 }
@@ -106,7 +110,26 @@ fn skipSpaces(lexer: *Lexer) void {
 }
 
 fn lexNext(lexer: *Lexer) ?Token {
-    return lexer.lexByList() orelse lexer.lexName() orelse lexer.lexInt();
+    return lexer.lexByList() orelse lexer.lexName() orelse lexer.lexInt() orelse lexer.lexStr();
+}
+
+fn lexStr(lexer: *Lexer) ?Token {
+    if (lexer.source.code[lexer.cursor] != '"') {
+        return null;
+    }
+    const start = lexer.cursor;
+    lexer.cursor += 1;
+    while (lexer.cursor < lexer.source.code.len and lexer.source.code[lexer.cursor] != '"') {
+        lexer.cursor += 1;
+    }
+    if (lexer.cursor == lexer.source.code.len) {
+        lexer.cursor = start;
+        return lexer.makeToken(.unclosedStr, 1);
+    }
+    const end = lexer.cursor;
+    lexer.cursor = start;
+    const str = lexer.source.code[start + 1 .. end];
+    return lexer.makeToken(.{ .str = str }, end + 1 - start);
 }
 
 fn lexInt(lexer: *Lexer) ?Token {
