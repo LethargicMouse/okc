@@ -9,6 +9,7 @@ pub const Token = struct { lexeme: Lexeme, location: Location };
 pub const Lexeme = union(enum) {
     name: []const u8,
     int: []const u8,
+    amp,
     star,
     colon,
     ext,
@@ -41,6 +42,7 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .amp => "`&`",
             .star => "`*`",
             .colon => "`:`",
             .ext => "`extern`",
@@ -125,6 +127,7 @@ fn lexByList(lexer: *Lexer) ?Token {
 }
 
 const lex_list = [_]LexPair{
+    .{ .prefix = "&", .lexeme = .amp },
     .{ .prefix = "*", .lexeme = .star },
     .{ .prefix = ":", .lexeme = .colon },
     .{ .prefix = "extern", .lexeme = .ext },
