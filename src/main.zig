@@ -86,3 +86,7 @@ fn testFile(comptime name: []const u8) !void {
 test "empty.ok" {
     try testFile("empty");
 }
+
+test "simple_call.ok" {
+    try testFile("simple_call");
+}
