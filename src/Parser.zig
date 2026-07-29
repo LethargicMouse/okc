@@ -84,7 +84,10 @@ fn parse_fun_loud(parser: *Parser) !Ast.Fun {
     const name = try parser.parse_name_loud();
     try parser.expect_loud(.parl);
     try parser.expect_loud(.parr);
-    try parser.expect_loud(.{ .name = "i32" });
+    parser.expect(.{ .name = "i32" }) catch |err| {
+        try parser.fail("<type>");
+        return err;
+    };
     try parser.expect_loud(.curl);
     const statements = try parser.parse_many(Ast.Statement, parse_statement_loud);
     try parser.expect_loud(.curr);

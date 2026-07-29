@@ -38,10 +38,12 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
-            .semi => "`;`",
-            .parl => "`(`",
-            .curr => "`}`",
             .fun => "`fn`",
+            .parl => "`(`",
+            .parr => "`)`",
+            .curl => "`{`",
+            .semi => "`;`",
+            .curr => "`}`",
             .eof => "<eof>",
             else => {
                 std.debug.print("bad describe: {any}", .{lexeme});
