@@ -36,16 +36,13 @@ const Var = struct {
 };
 
 const Typ = enum {
+    i1,
     i8,
     i32,
     ptr,
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        switch (typ) {
-            .i8 => try writer.writeAll("i8"),
-            .i32 => try writer.writeAll("i32"),
-            .ptr => try writer.writeAll("ptr"),
-        }
+        try writer.writeAll(@tagName(typ));
     }
 };
 
@@ -118,9 +115,9 @@ fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
 fn genStrDecl(gen: *Codegen, index: usize, str: []const u8) !void {
     const unescaped = try unescape(gen.gpa, str);
     defer gen.gpa.free(unescaped.repr);
-    try gen.print("\n@.s{} = private unnamed_addr constant [{} x i8] c\"{s}\", align 1", .{
+    try gen.print("\n@.s{} = private unnamed_addr constant [{} x i8] c\"{s}\\00\", align 1", .{
         index,
-        unescaped.len,
+        unescaped.len + 1,
         unescaped.repr,
     });
 }
@@ -187,13 +184,35 @@ fn genPrime(prime: Ast.Prime) Typ {
     }
 }
 
-fn genStatement(gen: *Codegen, statement: Ast.Statement) !void {
+fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
     switch (statement) {
         .ret => |expr| try gen.genRet(expr),
         .call => |call| _ = try gen.genCall(call),
         .let => |let| try gen.genLet(let),
         .assign => |assign| try gen.genAssign(assign),
+        .iff => |iff| try gen.genIf(iff),
     }
+}
+
+fn genIf(gen: *Codegen, iff: Ast.If) !void {
+    const condition = try gen.genExpr(iff.condition);
+    const then_label = gen.newTmp();
+    const else_label = gen.newTmp();
+    try gen.print("\n  br {f}, label %l{}, label %l{}\nl{}:", .{
+        condition,
+        then_label,
+        else_label,
+        then_label,
+    });
+    for (iff.then_branch) |statement| {
+        try gen.genStatement(statement);
+    }
+    const end_label = gen.newTmp();
+    try gen.print("\n  br label %l{}\nl{}:", .{ end_label, else_label });
+    for (iff.else_branch) |statement| {
+        try gen.genStatement(statement);
+    }
+    try gen.print("\n  br label %l{}\nl{}:", .{ end_label, end_label });
 }
 
 fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
@@ -282,9 +301,16 @@ fn genBinary(gen: *Codegen, binary: Ast.Binary) !TypVal {
     try gen.genBinOp(binary.op);
     try gen.print(" {f}, {f}", .{ left, right.val });
     return .{
-        .typ = left.typ,
+        .typ = binOpRetTyp(binary.op, left.typ),
         .val = .{ .tmp = tmp },
     };
+}
+
+fn binOpRetTyp(bin_op: Ast.BinOp, child_typ: Typ) Typ {
+    switch (bin_op) {
+        .sub, .add, .mul, .div => return child_typ,
+        .equ => return .i1,
+    }
 }
 
 fn genBinOp(gen: *Codegen, bin_op: Ast.BinOp) !void {
@@ -293,6 +319,7 @@ fn genBinOp(gen: *Codegen, bin_op: Ast.BinOp) !void {
         .sub => try gen.print("sub", .{}),
         .mul => try gen.print("mul", .{}),
         .div => try gen.print("sdiv", .{}),
+        .equ => try gen.print("icmp eq", .{}),
     }
 }
 

@@ -1,5 +1,5 @@
 target triple = "x86_64-pc-linux-gnu"
-@.s0 = private unnamed_addr constant [2 x i8] c"%d", align 1
+@.s0 = private unnamed_addr constant [3 x i8] c"%d\00", align 1
 declare i32 @printf(ptr, i32)
 define i32 @main() {
 entry:

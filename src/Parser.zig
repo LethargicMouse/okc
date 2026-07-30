@@ -56,6 +56,8 @@ pub fn init(gpa: std.mem.Allocator, tokens: []const Lexer.Token) Parser {
 pub fn run(parser: *Parser) !Ast {
     defer parser.deinit();
     const res = try parser.parseMaybe(Ast, parseAst) orelse {
+        // arena is not passed to ast, freeing it
+        parser.arena.deinit();
         std.log.err("failed to parse {f}\n{f}\n     found {s}", .{
             parser.tokens[parser.err_cursor].location,
             parser.err_msgs,
@@ -186,25 +188,49 @@ fn parseMaybe(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) !?typ {
 
 fn parseFunLoud(parser: *Parser) !Ast.Fun {
     const header = try parser.parseHeaderLoud();
-    try parser.expectLoud(.curl);
-    const statements = try parser.parseMany(Ast.Statement, parseStatementLoud);
-    try parser.expectLoud(.curr);
+    const statements = try parser.parseBlockLoud();
     return .{
         .header = header,
         .statements = statements,
     };
 }
 
+fn parseBlockLoud(parser: *Parser) Error![]const Ast.Statement {
+    try parser.expectLoud(.curl);
+    const statements = try parser.parseMany(Ast.Statement, parseStatementLoud);
+    try parser.expectLoud(.curr);
+    return statements;
+}
+
 fn parseStatementLoud(parser: *Parser) !Ast.Statement {
     return parser.parseEither(Ast.Statement, .{
         parseRetStatement,
         parseLetStatement,
+        parseIfStatement,
         parseAssignStatement,
         parseCallStatement,
     }) catch |err| {
         try parser.fail("<statement>");
         return err;
     };
+}
+
+fn parseIfStatement(parser: *Parser) !Ast.Statement {
+    try parser.expect(.iff);
+    const condition = try parser.parseExprLoud();
+    const then_branch = try parser.parseBlockLoud();
+    const else_branch = try parser.parseMaybe([]const Ast.Statement, parseElseLoud) orelse &.{};
+    return .{ .iff = .{
+        .condition = condition,
+        .then_branch = then_branch,
+        .else_branch = else_branch,
+    } };
+}
+
+fn parseElseLoud(parser: *Parser) ![]const Ast.Statement {
+    try parser.expectLoud(.els);
+    const statements = try parser.parseBlockLoud();
+    return statements;
 }
 
 fn parseAssignStatement(parser: *Parser) !Ast.Statement {
@@ -238,7 +264,7 @@ fn parseCallStatement(parser: *Parser) !Ast.Statement {
 
 fn parseCall(parser: *Parser) !Ast.Call {
     const name = try parser.parseName();
-    try parser.expectLoud(.parl);
+    try parser.expect(.parl);
     const args = try parser.parseSep(Ast.Expr, parseExprLoud);
     try parser.expectLoud(.parr);
     return .{
@@ -278,7 +304,7 @@ fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
         error.ParseFailed => return null,
         else => return err,
     };
-    const expr = parser.parseExprPriorLoud(prior + 1) catch |err| switch (err) {
+    const expr = parser.parseExprPriorLoud(bin_op.prior() + 1) catch |err| switch (err) {
         error.ParseFailed => {
             parser.cursor = cursor_before;
             return null;
@@ -297,12 +323,18 @@ fn parseBinOp(parser: *Parser, prior: u8) !Ast.BinOp {
         parseSub,
         parseMul,
         parseDiv,
+        parseEqu,
     });
     if (res.prior() < prior) {
         parser.cursor -= 1;
         return error.ParseFailed;
     }
     return res;
+}
+
+fn parseEqu(parser: *Parser) !Ast.BinOp {
+    try parser.expect(.equ2);
+    return .equ;
 }
 
 fn parseAdd(parser: *Parser) !Ast.BinOp {
@@ -321,7 +353,7 @@ fn parseMul(parser: *Parser) !Ast.BinOp {
 }
 
 fn parseDiv(parser: *Parser) !Ast.BinOp {
-    try parser.expectLoud(.slash);
+    try parser.expect(.slash);
     return .div;
 }
 

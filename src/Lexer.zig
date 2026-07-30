@@ -10,9 +10,12 @@ pub const Lexeme = union(enum) {
     name: []const u8,
     int: []const u8,
     str: []const u8,
+    els,
+    iff,
     slash,
     minus,
     plus,
+    equ2,
     equ,
     let,
     comma,
@@ -50,6 +53,9 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .equ2 => "`==`",
+            .els => "`else`",
+            .iff => "`if`",
             .slash => "`/`",
             .minus => "`-`",
             .plus => "`+`",
@@ -162,10 +168,13 @@ fn lexByList(lexer: *Lexer) ?Token {
 }
 
 const lex_list = [_]LexPair{
+    .{ .prefix = "else", .lexeme = .els },
+    .{ .prefix = "if", .lexeme = .iff },
     .{ .prefix = "/", .lexeme = .slash },
     .{ .prefix = "-", .lexeme = .minus },
     .{ .prefix = "+", .lexeme = .plus },
     .{ .prefix = "let", .lexeme = .let },
+    .{ .prefix = "==", .lexeme = .equ2 },
     .{ .prefix = "=", .lexeme = .equ },
     .{ .prefix = ",", .lexeme = .comma },
     .{ .prefix = "&", .lexeme = .amp },

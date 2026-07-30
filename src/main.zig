@@ -51,7 +51,9 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8, comptime out_pa
     var gen = try Codegen.init(io, gpa, &write_buf, out_path);
     try gen.run(ast);
 
-    _ = try runCmd(io, &.{ "clang", "-o", out, out_path });
+    const code = try runCmd(io, &.{ "clang", "-o", out, out_path });
+    // `Analyser` should prevent incorrect IR
+    std.debug.assert(code == 0);
 }
 
 fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
@@ -106,4 +108,8 @@ test "var_assign.ok" {
 
 test "arith.ok" {
     try testFile("arith");
+}
+
+test "if.ok" {
+    try testFile("if");
 }

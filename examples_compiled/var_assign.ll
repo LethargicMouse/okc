@@ -1,6 +1,6 @@
 target triple = "x86_64-pc-linux-gnu"
-@.s0 = private unnamed_addr constant [13 x i8] c"wazzup niggas", align 1
-@.s1 = private unnamed_addr constant [19 x i8] c"oh gotta go nvm bye", align 1
+@.s0 = private unnamed_addr constant [14 x i8] c"wazzup niggas\00", align 1
+@.s1 = private unnamed_addr constant [20 x i8] c"oh gotta go nvm bye\00", align 1
 declare i32 @puts(ptr)
 define i32 @main() {
 entry:
