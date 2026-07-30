@@ -237,39 +237,24 @@ fn parseNameLoud(parser: *Parser) ![]const u8 {
 }
 
 fn parseName(parser: *Parser) ![]const u8 {
-    switch (parser.tokens[parser.cursor].lexeme) {
-        .name => |name| {
-            parser.cursor += 1;
-            return name;
-        },
-        else => {
-            return error.ParseFailed;
-        },
-    }
+    return parser.parseLexeme(.name);
 }
 
 fn parseInt(parser: *Parser) ![]const u8 {
-    switch (parser.tokens[parser.cursor].lexeme) {
-        .int => |int| {
-            parser.cursor += 1;
-            return int;
-        },
-        else => {
-            return error.ParseFailed;
-        },
-    }
+    return parser.parseLexeme(.int);
 }
 
 fn parseStr(parser: *Parser) ![]const u8 {
-    switch (parser.tokens[parser.cursor].lexeme) {
-        .str => |str| {
-            parser.cursor += 1;
-            return str;
-        },
-        else => {
-            return error.ParseFailed;
-        },
+    return parser.parseLexeme(.str);
+}
+
+fn parseLexeme(parser: *Parser, comptime tag: @typeInfo(Lexeme).@"union".tag_type.?) ![]const u8 {
+    const next = parser.tokens[parser.cursor].lexeme;
+    if (next == tag) {
+        parser.cursor += 1;
+        return @field(next, @tagName(tag));
     }
+    return error.ParseFailed;
 }
 
 fn deinit(parser: *Parser) void {
