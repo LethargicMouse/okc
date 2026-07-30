@@ -4,6 +4,11 @@ const Ast = @import("Ast.zig");
 const Lexer = @import("Lexer.zig");
 const Lexeme = Lexer.Lexeme;
 
+const BinPostfix = struct {
+    bin_op: Ast.BinOp,
+    expr: Ast.Expr,
+};
+
 const ErrMsgs = struct {
     inner: std.ArrayList([]const u8),
 
@@ -249,7 +254,78 @@ fn parseRetStatement(parser: *Parser) !Ast.Statement {
     return .{ .ret = expr };
 }
 
-fn parseExprLoud(parser: *Parser) Error!Ast.Expr {
+fn parseExprLoud(parser: *Parser) !Ast.Expr {
+    return parser.parseExprPriorLoud(0);
+}
+
+fn parseExprPriorLoud(parser: *Parser, prior: u8) Error!Ast.Expr {
+    var res = try parser.parseExprAtomLoud();
+    while (try parser.parseBinPostfix(prior)) |bin_postfix| {
+        const binary = try parser.arena.allocator().create(Ast.Binary);
+        binary.* = .{
+            .left = res,
+            .op = bin_postfix.bin_op,
+            .right = bin_postfix.expr,
+        };
+        res = .{ .binary = binary };
+    }
+    return res;
+}
+
+fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
+    const cursor_before = parser.cursor;
+    const bin_op = parser.parseBinOp(prior) catch |err| switch (err) {
+        error.ParseFailed => return null,
+        else => return err,
+    };
+    const expr = parser.parseExprPriorLoud(prior + 1) catch |err| switch (err) {
+        error.ParseFailed => {
+            parser.cursor = cursor_before;
+            return null;
+        },
+        else => return err,
+    };
+    return .{
+        .bin_op = bin_op,
+        .expr = expr,
+    };
+}
+
+fn parseBinOp(parser: *Parser, prior: u8) !Ast.BinOp {
+    const res = try parser.parseEither(Ast.BinOp, .{
+        parseAdd,
+        parseSub,
+        parseMul,
+        parseDiv,
+    });
+    if (res.prior() < prior) {
+        parser.cursor -= 1;
+        return error.ParseFailed;
+    }
+    return res;
+}
+
+fn parseAdd(parser: *Parser) !Ast.BinOp {
+    try parser.expect(.plus);
+    return .add;
+}
+
+fn parseSub(parser: *Parser) !Ast.BinOp {
+    try parser.expect(.minus);
+    return .sub;
+}
+
+fn parseMul(parser: *Parser) !Ast.BinOp {
+    try parser.expect(.star);
+    return .mul;
+}
+
+fn parseDiv(parser: *Parser) !Ast.BinOp {
+    try parser.expectLoud(.slash);
+    return .div;
+}
+
+fn parseExprAtomLoud(parser: *Parser) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
         parseIntExpr,
         parseStrExpr,

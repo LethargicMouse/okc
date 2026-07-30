@@ -4,31 +4,30 @@ const Ast = @import("Ast.zig");
 
 const Unescaped = struct { len: usize, repr: []const u8 };
 
-const Val = union(enum) {
-    int: []const u8,
-    str: usize,
-    tmp: Tmp,
+const TypVal = struct {
+    typ: Typ,
+    val: Val,
 
-    pub fn format(val: Val, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        switch (val) {
-            .int => |int| try writer.print("i32 {s}", .{int}),
-            .str => |str| try writer.print("ptr @.s{}", .{str}),
-            .tmp => |tmp| try writer.print("{f} %t{}", .{ tmp.typ, tmp.number }),
-        }
-    }
-
-    fn typ(val: Val) Typ {
-        switch (val) {
-            .int => return .i32,
-            .str => return .ptr,
-            .tmp => |tmp| return tmp.typ,
-        }
+    pub fn format(
+        typ_val: TypVal,
+        writer: *std.Io.Writer,
+    ) std.Io.Writer.Error!void {
+        try writer.print("{f} {f}", .{ typ_val.typ, typ_val.val });
     }
 };
 
-const Tmp = struct {
-    number: u32,
-    typ: Typ,
+const Val = union(enum) {
+    int: []const u8,
+    str: usize,
+    tmp: u32,
+
+    pub fn format(val: Val, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        switch (val) {
+            .int => |int| try writer.print("{s}", .{int}),
+            .str => |str| try writer.print("@.s{}", .{str}),
+            .tmp => |tmp| try writer.print("%t{}", .{tmp}),
+        }
+    }
 };
 
 const Var = struct {
@@ -81,7 +80,7 @@ pub fn run(gen: *Codegen, ast: Ast) !void {
 fn genAst(gen: *Codegen, ast: Ast) !void {
     try gen.print("target triple = \"x86_64-pc-linux-gnu\"", .{});
     for (ast.strs, 0..) |str, i| {
-        try gen.genStr(i, str);
+        try gen.genStrDecl(i, str);
     }
     for (ast.ext_funs) |ext_fun| {
         try gen.registerHeader(ext_fun.header);
@@ -116,7 +115,7 @@ fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
     try gen.print(")", .{});
 }
 
-fn genStr(gen: *Codegen, index: usize, str: []const u8) !void {
+fn genStrDecl(gen: *Codegen, index: usize, str: []const u8) !void {
     const unescaped = try unescape(gen.gpa, str);
     defer gen.gpa.free(unescaped.repr);
     try gen.print("\n@.s{} = private unnamed_addr constant [{} x i8] c\"{s}\", align 1", .{
@@ -193,41 +192,41 @@ fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
 }
 
 fn genLet(gen: *Codegen, let: Ast.Let) !void {
-    const val = try gen.genExpr(let.expr);
-    const tmp = try gen.store(val);
+    const typ_val = try gen.genExpr(let.expr);
+    const tmp = try gen.store(typ_val);
     try gen.vars.put(let.name, tmp);
 }
 
-fn store(gen: *Codegen, val: Val) !Var {
+fn store(gen: *Codegen, typ_val: TypVal) !Var {
     const tmp = gen.newTmp();
-    try gen.print("\n  %t{} = alloca {f}", .{ tmp, val.typ() });
-    try gen.storeInto(tmp, val);
-    return .{ .tmp = tmp, .inner_typ = val.typ() };
+    try gen.print("\n  %t{} = alloca {f}", .{ tmp, typ_val.typ });
+    try gen.storeInto(tmp, typ_val);
+    return .{ .tmp = tmp, .inner_typ = typ_val.typ };
 }
 
-fn storeInto(gen: *Codegen, tmp: u32, val: Val) !void {
+fn storeInto(gen: *Codegen, tmp: u32, val: TypVal) !void {
     try gen.print("\n  store {f}, ptr %t{}", .{ val, tmp });
 }
 
-fn genCall(gen: *Codegen, call: Ast.Call) !Val {
-    var arg_vals = try std.ArrayList(Val).initCapacity(gen.gpa, call.args.len);
-    defer arg_vals.deinit(gen.gpa);
+fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
+    var arg_typ_vals = try std.ArrayList(TypVal).initCapacity(gen.gpa, call.args.len);
+    defer arg_typ_vals.deinit(gen.gpa);
     for (call.args) |arg| {
-        const val = try gen.genExpr(arg);
-        try arg_vals.append(gen.gpa, val);
+        const typ_val = try gen.genExpr(arg);
+        try arg_typ_vals.append(gen.gpa, typ_val);
     }
     const ret_tmp = gen.newTmp();
     try gen.print("\n  %t{} = call ", .{ret_tmp});
     const ret_typ = gen.fun_ret_typs.get(call.name).?;
     try gen.print("{f} @{s}(", .{ ret_typ, call.name });
     if (call.args.len != 0) {
-        try gen.print("{f}", .{arg_vals.items[0]});
-        for (arg_vals.items[1..]) |val| {
+        try gen.print("{f}", .{arg_typ_vals.items[0]});
+        for (arg_typ_vals.items[1..]) |val| {
             try gen.print(", {f}", .{val});
         }
     }
     try gen.print(")", .{});
-    return .{ .tmp = .{ .number = ret_tmp, .typ = ret_typ } };
+    return .{ .val = .{ .tmp = ret_tmp }, .typ = ret_typ };
 }
 
 fn newTmp(gen: *Codegen) u32 {
@@ -240,20 +239,60 @@ fn genRet(gen: *Codegen, expr: Ast.Expr) !void {
     try gen.print("\n  ret {f}", .{val});
 }
 
-fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!Val {
+fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
     switch (expr) {
-        .int => |int| return .{ .int = int },
-        .str => |str| return .{ .str = str },
+        .int => |int| return genInt(int),
+        .str => |str| return genStr(str),
         .call => |call| return gen.genCall(call),
         .vari => |name| return gen.genVar(name),
+        .binary => |binary| return gen.genBinary(binary.*),
     }
 }
 
-fn genVar(gen: *Codegen, name: []const u8) !Val {
+fn genInt(int: []const u8) TypVal {
+    return .{
+        .typ = .i32,
+        .val = .{ .int = int },
+    };
+}
+
+fn genStr(str: usize) TypVal {
+    return .{
+        .typ = .ptr,
+        .val = .{ .str = str },
+    };
+}
+
+fn genBinary(gen: *Codegen, binary: Ast.Binary) !TypVal {
+    const left = try gen.genExpr(binary.left);
+    const right = try gen.genExpr(binary.right);
+    const tmp = gen.newTmp();
+    try gen.print("\n  %t{} = ", .{tmp});
+    try gen.genBinOp(binary.op);
+    try gen.print(" {f}, {f}", .{ left, right.val });
+    return .{
+        .typ = left.typ,
+        .val = .{ .tmp = tmp },
+    };
+}
+
+fn genBinOp(gen: *Codegen, bin_op: Ast.BinOp) !void {
+    switch (bin_op) {
+        .add => try gen.print("add", .{}),
+        .sub => try gen.print("sub", .{}),
+        .mul => try gen.print("mul", .{}),
+        .div => try gen.print("sdiv", .{}),
+    }
+}
+
+fn genVar(gen: *Codegen, name: []const u8) !TypVal {
     const vari = gen.vars.get(name).?;
     const load_tmp = gen.newTmp();
     try gen.print("\n  %t{} = load {f}, ptr %t{}", .{ load_tmp, vari.inner_typ, vari.tmp });
-    return .{ .tmp = .{ .number = load_tmp, .typ = vari.inner_typ } };
+    return .{
+        .typ = vari.inner_typ,
+        .val = .{ .tmp = load_tmp },
+    };
 }
 
 fn print(gen: *Codegen, comptime fmt: []const u8, args: anytype) !void {

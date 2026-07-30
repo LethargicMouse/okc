@@ -106,3 +106,7 @@ test "var.ok" {
 test "var_assign.ok" {
     try testFile("var_assign");
 }
+
+test "arith.ok" {
+    try testFile("arith");
+}

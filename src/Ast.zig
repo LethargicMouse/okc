@@ -18,7 +18,7 @@ pub const Param = struct {
 pub const Typ = union(enum) {
     prime: Prime,
     name: []const u8,
-    ptr: *Typ,
+    ptr: *const Typ,
 
     pub fn fromName(name: []const u8) Typ {
         if (std.meta.stringToEnum(Prime, name)) |prime| {
@@ -65,6 +65,27 @@ pub const Expr = union(enum) {
     str: usize,
     call: Call,
     vari: []const u8,
+    binary: *const Binary,
+};
+
+pub const Binary = struct {
+    left: Expr,
+    op: BinOp,
+    right: Expr,
+};
+
+pub const BinOp = enum {
+    add,
+    sub,
+    mul,
+    div,
+
+    pub fn prior(bin_op: BinOp) u8 {
+        switch (bin_op) {
+            .add, .sub => return 0,
+            .mul, .div => return 1,
+        }
+    }
 };
 
 const Ast = @This();

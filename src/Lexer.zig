@@ -10,10 +10,13 @@ pub const Lexeme = union(enum) {
     name: []const u8,
     int: []const u8,
     str: []const u8,
+    slash,
+    minus,
+    plus,
     equ,
     let,
     comma,
-    unclosedStr,
+    unclosed_str,
     amp,
     star,
     colon,
@@ -47,13 +50,16 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .slash => "`/`",
+            .minus => "`-`",
+            .plus => "`+`",
             .equ => "`=`",
             .let => "`let`",
             .comma => "`,`",
             .str => "<str>",
-            .unclosedStr => "<unclosed string>",
+            .unclosed_str => "<unclosed string>",
             .name => "<name>",
-            .int => "<unt>",
+            .int => "<int>",
             .ret => "`return`",
             .invalid => "<invalid>",
             .amp => "`&`",
@@ -130,7 +136,7 @@ fn lexStr(lexer: *Lexer) ?Token {
     }
     if (lexer.cursor == lexer.source.code.len) {
         lexer.cursor = start;
-        return lexer.makeToken(.unclosedStr, 1);
+        return lexer.makeToken(.unclosed_str, 1);
     }
     const end = lexer.cursor;
     lexer.cursor = start;
@@ -156,6 +162,9 @@ fn lexByList(lexer: *Lexer) ?Token {
 }
 
 const lex_list = [_]LexPair{
+    .{ .prefix = "/", .lexeme = .slash },
+    .{ .prefix = "-", .lexeme = .minus },
+    .{ .prefix = "+", .lexeme = .plus },
     .{ .prefix = "let", .lexeme = .let },
     .{ .prefix = "=", .lexeme = .equ },
     .{ .prefix = ",", .lexeme = .comma },
