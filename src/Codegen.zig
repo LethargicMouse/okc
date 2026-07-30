@@ -199,20 +199,33 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
 
 fn genWhile(gen: *Codegen, whi: Ast.While) !void {
     const condition_label = gen.newTmp();
-    try gen.print("\n  br label %l{}\nl{}:", .{ condition_label, condition_label });
+    try gen.uncond(condition_label, condition_label);
     const condition = try gen.genExpr(whi.condition);
     const start_label = gen.newTmp();
     const end_label = gen.newTmp();
-    try gen.print("\n  br {f}, label %l{}, label %l{}\nl{}:", .{
-        condition,
-        start_label,
-        end_label,
-        start_label,
-    });
+    try gen.cond(condition.val, start_label, end_label);
     for (whi.statements) |statement| {
         try gen.genStatement(statement);
     }
-    try gen.print("\n  br label %l{}\nl{}:", .{ condition_label, end_label });
+    try gen.uncond(condition_label, end_label);
+}
+
+fn cond(
+    gen: *Codegen,
+    condition: Val,
+    then_label: u32,
+    else_label: u32,
+) !void {
+    try gen.print("\n  br i1 {f}, label %l{}, label %l{}\nl{}:", .{
+        condition,
+        then_label,
+        else_label,
+        then_label,
+    });
+}
+
+fn uncond(gen: *Codegen, to: u32, next: u32) !void {
+    try gen.print("\n  br label %l{}\nl{}:", .{ to, next });
 }
 
 fn genIf(gen: *Codegen, iff: Ast.If) !void {
@@ -230,7 +243,7 @@ fn genIf(gen: *Codegen, iff: Ast.If) !void {
     for (iff.else_branch) |statement| {
         try gen.genStatement(statement);
     }
-    try gen.print("\n  br label %l{}\nl{}:", .{ end_label, end_label });
+    try gen.uncond(end_label, end_label);
 }
 
 fn genBranch(
@@ -241,16 +254,11 @@ fn genBranch(
     const condition = try gen.genExpr(branch.condition);
     const then_label = gen.newTmp();
     const else_label = gen.newTmp();
-    try gen.print("\n  br {f}, label %l{}, label %l{}\nl{}:", .{
-        condition,
-        then_label,
-        else_label,
-        then_label,
-    });
+    try gen.cond(condition.val, then_label, else_label);
     for (branch.statements) |statement| {
         try gen.genStatement(statement);
     }
-    try gen.print("\n  br label %l{}\nl{}:", .{ end_label, else_label });
+    try gen.uncond(end_label, else_label);
 }
 
 fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
@@ -261,11 +269,11 @@ fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
 
 fn genLet(gen: *Codegen, let: Ast.Let) !void {
     const typ_val = try gen.genExpr(let.expr);
-    const tmp = try gen.store(typ_val);
+    const tmp = try gen.toStack(typ_val);
     try gen.vars.put(let.name, tmp);
 }
 
-fn store(gen: *Codegen, typ_val: TypVal) !Var {
+fn toStack(gen: *Codegen, typ_val: TypVal) !Var {
     const tmp = gen.newTmp();
     try gen.print("\n  %t{} = alloca {f}", .{ tmp, typ_val.typ });
     try gen.storeInto(tmp, typ_val);
