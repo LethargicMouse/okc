@@ -66,7 +66,7 @@ pub const Lexeme = union(enum) {
     }
 };
 
-const LexPair = struct { prefix: []const u8, lexeme: Lexeme };
+const LexPair = struct { str: []const u8, lexeme: Lexeme };
 
 const Lexer = @This();
 
@@ -111,7 +111,7 @@ fn skipSpaces(lexer: *Lexer) void {
 }
 
 fn lexNext(lexer: *Lexer) ?Token {
-    return lexer.lexByList() orelse lexer.lexName() orelse lexer.lexInt() orelse lexer.lexStr();
+    return lexer.lexByList() orelse lexer.lexVerbal() orelse lexer.lexInt() orelse lexer.lexStr();
 }
 
 fn lexStr(lexer: *Lexer) ?Token {
@@ -141,36 +141,51 @@ fn lexInt(lexer: *Lexer) ?Token {
     return lexer.makeToken(.{ .int = res }, res.len);
 }
 
+fn lexVerbal(lexer: *Lexer) ?Token {
+    var res = lexer.lexName() orelse return null;
+    const name = res.lexeme.name;
+    inline for (verbal_list) |pair| {
+        if (std.mem.eql(u8, name, pair.str)) {
+            res.lexeme = pair.lexeme;
+            break;
+        }
+    }
+    return res;
+}
+
+const verbal_list = [_]LexPair{
+    .{ .str = "else", .lexeme = .els },
+    .{ .str = "extern", .lexeme = .ext },
+    .{ .str = "fn", .lexeme = .fun },
+    .{ .str = "if", .lexeme = .iff },
+    .{ .str = "let", .lexeme = .let },
+    .{ .str = "return", .lexeme = .ret },
+};
+
 fn lexByList(lexer: *Lexer) ?Token {
-    for (lex_list) |pair| {
-        if (std.mem.startsWith(u8, lexer.rest(), pair.prefix)) {
-            return lexer.makeToken(pair.lexeme, pair.prefix.len);
+    inline for (lex_list) |pair| {
+        if (std.mem.startsWith(u8, lexer.rest(), pair.str)) {
+            return lexer.makeToken(pair.lexeme, pair.str.len);
         }
     }
     return null;
 }
 
 const lex_list = [_]LexPair{
-    .{ .prefix = "else", .lexeme = .els },
-    .{ .prefix = "if", .lexeme = .iff },
-    .{ .prefix = "/", .lexeme = .slash },
-    .{ .prefix = "-", .lexeme = .minus },
-    .{ .prefix = "+", .lexeme = .plus },
-    .{ .prefix = "let", .lexeme = .let },
-    .{ .prefix = "==", .lexeme = .equ2 },
-    .{ .prefix = "=", .lexeme = .equ },
-    .{ .prefix = ",", .lexeme = .comma },
-    .{ .prefix = "&", .lexeme = .amp },
-    .{ .prefix = "*", .lexeme = .star },
-    .{ .prefix = ":", .lexeme = .colon },
-    .{ .prefix = "extern", .lexeme = .ext },
-    .{ .prefix = ";", .lexeme = .semi },
-    .{ .prefix = "fn", .lexeme = .fun },
-    .{ .prefix = "(", .lexeme = .parl },
-    .{ .prefix = ")", .lexeme = .parr },
-    .{ .prefix = "{", .lexeme = .curl },
-    .{ .prefix = "}", .lexeme = .curr },
-    .{ .prefix = "return", .lexeme = .ret },
+    .{ .str = "/", .lexeme = .slash },
+    .{ .str = "-", .lexeme = .minus },
+    .{ .str = "+", .lexeme = .plus },
+    .{ .str = "==", .lexeme = .equ2 },
+    .{ .str = "=", .lexeme = .equ },
+    .{ .str = ",", .lexeme = .comma },
+    .{ .str = "&", .lexeme = .amp },
+    .{ .str = "*", .lexeme = .star },
+    .{ .str = ":", .lexeme = .colon },
+    .{ .str = ";", .lexeme = .semi },
+    .{ .str = "(", .lexeme = .parl },
+    .{ .str = ")", .lexeme = .parr },
+    .{ .str = "{", .lexeme = .curl },
+    .{ .str = "}", .lexeme = .curr },
 };
 
 fn rest(lexer: Lexer) []const u8 {
