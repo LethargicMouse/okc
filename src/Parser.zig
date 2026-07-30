@@ -433,7 +433,7 @@ fn expectLoud(parser: *Parser, lexeme: Lexeme) !void {
 }
 
 fn expect(parser: *Parser, lexeme: Lexeme) !void {
-    if (parser.tokens[parser.cursor].lexeme.eq(lexeme)) {
+    if (@intFromEnum(parser.tokens[parser.cursor].lexeme) == @intFromEnum(lexeme)) {
         parser.cursor += 1;
     } else {
         return error.ParseFailed;

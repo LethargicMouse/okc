@@ -34,23 +34,6 @@ pub const Lexeme = union(enum) {
     eof,
     invalid,
 
-    pub fn eq(a: Lexeme, b: Lexeme) bool {
-        if (@intFromEnum(a) != @intFromEnum(b)) {
-            return false;
-        }
-        return switch (a) {
-            .name => |an| switch (b) {
-                .name => |bn| std.mem.eql(u8, an, bn),
-                else => false,
-            },
-            .int => |ai| switch (b) {
-                .int => |bi| std.mem.eql(u8, ai, bi),
-                else => false,
-            },
-            else => true,
-        };
-    }
-
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
             .equ2 => "`==`",
