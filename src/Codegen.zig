@@ -31,6 +31,11 @@ const Tmp = struct {
     typ: Typ,
 };
 
+const Var = struct {
+    tmp: u32,
+    inner_typ: Typ,
+};
+
 const Typ = enum {
     i8,
     i32,
@@ -52,7 +57,7 @@ gpa: std.mem.Allocator,
 file: std.Io.File,
 writer: std.Io.File.Writer,
 fun_ret_typs: std.StringHashMap(Typ),
-vars: std.StringHashMap(Tmp),
+vars: std.StringHashMap(Var),
 next_tmp: u32 = 0,
 
 pub fn init(io: std.Io, gpa: std.mem.Allocator, write_buf: []u8, comptime path: []const u8) !Codegen {
@@ -63,7 +68,7 @@ pub fn init(io: std.Io, gpa: std.mem.Allocator, write_buf: []u8, comptime path: 
         .file = file,
         .writer = file.writer(io, write_buf),
         .fun_ret_typs = std.StringHashMap(Typ).init(gpa),
-        .vars = std.StringHashMap(Tmp).init(gpa),
+        .vars = std.StringHashMap(Var).init(gpa),
     };
 }
 
@@ -177,7 +182,14 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) !void {
         .ret => |expr| try gen.genRet(expr),
         .call => |call| _ = try gen.genCall(call),
         .let => |let| try gen.genLet(let),
+        .assign => |assign| try gen.genAssign(assign),
     }
+}
+
+fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
+    const tmp = gen.vars.get(assign.name).?;
+    const val = try gen.genExpr(assign.expr);
+    try gen.storeInto(tmp.tmp, val);
 }
 
 fn genLet(gen: *Codegen, let: Ast.Let) !void {
@@ -186,10 +198,15 @@ fn genLet(gen: *Codegen, let: Ast.Let) !void {
     try gen.vars.put(let.name, tmp);
 }
 
-fn store(gen: *Codegen, val: Val) !Tmp {
+fn store(gen: *Codegen, val: Val) !Var {
     const tmp = gen.newTmp();
-    try gen.print("\n  %t{} = alloca {f}\n  store {f}, ptr %t{}", .{ tmp, val.typ(), val, tmp });
-    return .{ .number = tmp, .typ = .ptr };
+    try gen.print("\n  %t{} = alloca {f}", .{ tmp, val.typ() });
+    try gen.storeInto(tmp, val);
+    return .{ .tmp = tmp, .inner_typ = val.typ() };
+}
+
+fn storeInto(gen: *Codegen, tmp: u32, val: Val) !void {
+    try gen.print("\n  store {f}, ptr %t{}", .{ val, tmp });
 }
 
 fn genCall(gen: *Codegen, call: Ast.Call) !Val {
@@ -228,15 +245,15 @@ fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!Val {
         .int => |int| return .{ .int = int },
         .str => |str| return .{ .str = str },
         .call => |call| return gen.genCall(call),
-        .item => |name| return gen.genItem(name),
+        .vari => |name| return gen.genVar(name),
     }
 }
 
-fn genItem(gen: *Codegen, name: []const u8) !Val {
-    const tmp = gen.vars.get(name).?;
+fn genVar(gen: *Codegen, name: []const u8) !Val {
+    const vari = gen.vars.get(name).?;
     const load_tmp = gen.newTmp();
-    try gen.print("\n  %t{} = load {f}, ptr %t{}", .{ load_tmp, tmp.typ, tmp.number });
-    return .{ .tmp = .{ .number = load_tmp, .typ = tmp.typ } };
+    try gen.print("\n  %t{} = load {f}, ptr %t{}", .{ load_tmp, vari.inner_typ, vari.tmp });
+    return .{ .tmp = .{ .number = load_tmp, .typ = vari.inner_typ } };
 }
 
 fn print(gen: *Codegen, comptime fmt: []const u8, args: anytype) !void {
