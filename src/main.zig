@@ -113,3 +113,7 @@ test "arith.ok" {
 test "if.ok" {
     try testFile("if");
 }
+
+test "fizzbuzz.ok" {
+    try testFile("fizzbuzz");
+}

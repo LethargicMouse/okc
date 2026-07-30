@@ -10,7 +10,10 @@ pub const Lexeme = union(enum) {
     name: []const u8,
     int: []const u8,
     str: []const u8,
-    els,
+    orr,
+    rem,
+    les,
+    whi,
     iff,
     slash,
     minus,
@@ -36,8 +39,11 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .orr => "`or`",
+            .rem => "`%`",
+            .les => "`<`",
+            .whi => "`while`",
             .equ2 => "`==`",
-            .els => "`else`",
             .iff => "`if`",
             .slash => "`/`",
             .minus => "`-`",
@@ -154,7 +160,8 @@ fn lexVerbal(lexer: *Lexer) ?Token {
 }
 
 const verbal_list = [_]LexPair{
-    .{ .str = "else", .lexeme = .els },
+    .{ .str = "or", .lexeme = .orr },
+    .{ .str = "while", .lexeme = .whi },
     .{ .str = "extern", .lexeme = .ext },
     .{ .str = "fn", .lexeme = .fun },
     .{ .str = "if", .lexeme = .iff },
@@ -172,6 +179,8 @@ fn lexByList(lexer: *Lexer) ?Token {
 }
 
 const lex_list = [_]LexPair{
+    .{ .str = "%", .lexeme = .rem },
+    .{ .str = "<", .lexeme = .les },
     .{ .str = "/", .lexeme = .slash },
     .{ .str = "-", .lexeme = .minus },
     .{ .str = "+", .lexeme = .plus },

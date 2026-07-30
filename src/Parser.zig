@@ -63,6 +63,12 @@ pub fn run(parser: *Parser) !Ast {
             parser.err_msgs,
             parser.tokens[parser.err_cursor].lexeme.describe(),
         });
+        if (parser.err_cursor != 0) {
+            const before = parser.tokens[parser.err_cursor - 1];
+            if (before.lexeme == .name and std.mem.eql(u8, before.lexeme.name, "else")) {
+                std.log.info("use `or` instead of `else`", .{});
+            }
+        }
         return error.Handled;
     };
     return res;
@@ -207,6 +213,7 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
         parseRetStatement,
         parseLetStatement,
         parseIfStatement,
+        parseWhileStatement,
         parseAssignStatement,
         parseCallStatement,
     }) catch |err| {
@@ -215,20 +222,49 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
     };
 }
 
+fn parseWhileStatement(parser: *Parser) !Ast.Statement {
+    try parser.expect(.whi);
+    try parser.expectLoud(.parl);
+    const condition = try parser.parseExprLoud();
+    try parser.expectLoud(.parr);
+    const statements = try parser.parseBlockLoud();
+    return .{ .whi = .{
+        .condition = condition,
+        .statements = statements,
+    } };
+}
+
 fn parseIfStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.iff);
-    const condition = try parser.parseExprLoud();
-    const then_branch = try parser.parseBlockLoud();
+    const cond_branch = try parser.parseBranch();
+    const else_ifs = try parser.parseMany(Ast.CondBranch, parseElseIf);
     const else_branch = try parser.parseMaybe([]const Ast.Statement, parseElseLoud) orelse &.{};
     return .{ .iff = .{
-        .condition = condition,
-        .then_branch = then_branch,
+        .cond_branch = cond_branch,
+        .else_ifs = else_ifs,
         .else_branch = else_branch,
     } };
 }
 
+fn parseElseIf(parser: *Parser) !Ast.CondBranch {
+    try parser.expect(.orr);
+    const branch = try parser.parseBranch();
+    return branch;
+}
+
+fn parseBranch(parser: *Parser) !Ast.CondBranch {
+    try parser.expectLoud(.parl);
+    const condition = try parser.parseExprLoud();
+    try parser.expectLoud(.parr);
+    const statements = try parser.parseBlockLoud();
+    return .{
+        .condition = condition,
+        .statements = statements,
+    };
+}
+
 fn parseElseLoud(parser: *Parser) ![]const Ast.Statement {
-    try parser.expectLoud(.els);
+    try parser.expectLoud(.orr);
     const statements = try parser.parseBlockLoud();
     return statements;
 }
@@ -264,7 +300,7 @@ fn parseCallStatement(parser: *Parser) !Ast.Statement {
 
 fn parseCall(parser: *Parser) !Ast.Call {
     const name = try parser.parseName();
-    try parser.expect(.parl);
+    try parser.expectLoud(.parl);
     const args = try parser.parseSep(Ast.Expr, parseExprLoud);
     try parser.expectLoud(.parr);
     return .{
@@ -324,12 +360,24 @@ fn parseBinOp(parser: *Parser, prior: u8) !Ast.BinOp {
         parseMul,
         parseDiv,
         parseEqu,
+        parseLes,
+        parseRem,
     });
     if (res.prior() < prior) {
         parser.cursor -= 1;
         return error.ParseFailed;
     }
     return res;
+}
+
+fn parseRem(parser: *Parser) !Ast.BinOp {
+    try parser.expect(.rem);
+    return .rem;
+}
+
+fn parseLes(parser: *Parser) !Ast.BinOp {
+    try parser.expect(.les);
+    return .les;
 }
 
 fn parseEqu(parser: *Parser) !Ast.BinOp {
@@ -432,8 +480,8 @@ fn expectLoud(parser: *Parser, lexeme: Lexeme) !void {
     };
 }
 
-fn expect(parser: *Parser, lexeme: Lexeme) !void {
-    if (@intFromEnum(parser.tokens[parser.cursor].lexeme) == @intFromEnum(lexeme)) {
+fn expect(parser: *Parser, lexeme: @typeInfo(Lexeme).@"union".tag_type.?) !void {
+    if (parser.tokens[parser.cursor].lexeme == lexeme) {
         parser.cursor += 1;
     } else {
         return error.ParseFailed;

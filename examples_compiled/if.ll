@@ -6,15 +6,15 @@ define i32 @main() {
 entry:
   %t0 = alloca i32
   store i32 67, ptr %t0
-  %t1 = load i32, ptr %t0
-  %t2 = icmp eq i32 %t1, 67
-  br i1 %t2, label %l3, label %l4
-l3:
-  %t5 = call i32 @puts(ptr @.s0)
-  br label %l6
+  %t2 = load i32, ptr %t0
+  %t3 = icmp eq i32 %t2, 67
+  br i1 %t3, label %l4, label %l5
 l4:
+  %t6 = call i32 @puts(ptr @.s0)
+  br label %l1
+l5:
   %t7 = call i32 @puts(ptr @.s1)
-  br label %l6
-l6:
+  br label %l1
+l1:
   ret i32 0
 }

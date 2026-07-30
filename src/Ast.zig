@@ -44,12 +44,23 @@ pub const Statement = union(enum) {
     let: Let,
     assign: Assign,
     iff: If,
+    whi: While,
+};
+
+pub const While = struct {
+    condition: Expr,
+    statements: []const Statement,
 };
 
 pub const If = struct {
-    condition: Expr,
-    then_branch: []const Statement,
+    cond_branch: CondBranch,
+    else_ifs: []const CondBranch,
     else_branch: []const Statement,
+};
+
+pub const CondBranch = struct {
+    condition: Expr,
+    statements: []const Statement,
 };
 
 pub const Assign = struct {
@@ -87,12 +98,14 @@ pub const BinOp = enum {
     sub,
     mul,
     div,
+    les,
+    rem,
 
     pub fn prior(bin_op: BinOp) u8 {
         switch (bin_op) {
-            .equ => return 0,
+            .equ, .les => return 0,
             .add, .sub => return 1,
-            .mul, .div => return 2,
+            .mul, .div, .rem => return 2,
         }
     }
 };

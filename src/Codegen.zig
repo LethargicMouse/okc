@@ -125,12 +125,14 @@ fn genStrDecl(gen: *Codegen, index: usize, str: []const u8) !void {
 fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
     var vec = try std.ArrayList(u8).initCapacity(gpa, str.len);
     var i: usize = 0;
+    var len = str.len;
     while (i < str.len) : (i += 1) {
         switch (str[i]) {
             '\\' => {
                 i += 1;
+                len -= 1;
                 switch (str[i]) {
-                    'n' => try vec.append(gpa, str[i]),
+                    'n' => try vec.appendSlice(gpa, "\\0A"),
                     else => {
                         std.log.err("bad escape symbol: `\\{}`", .{str[i]});
                         // supposed to be checked by `Analyser`
@@ -143,7 +145,7 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
     }
     const repr = try vec.toOwnedSlice(gpa);
     return .{
-        .len = str.len,
+        .len = len,
         .repr = repr,
     };
 }
@@ -191,11 +193,52 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
         .let => |let| try gen.genLet(let),
         .assign => |assign| try gen.genAssign(assign),
         .iff => |iff| try gen.genIf(iff),
+        .whi => |whi| try gen.genWhile(whi),
     }
 }
 
+fn genWhile(gen: *Codegen, whi: Ast.While) !void {
+    const condition_label = gen.newTmp();
+    try gen.print("\n  br label %l{}\nl{}:", .{ condition_label, condition_label });
+    const condition = try gen.genExpr(whi.condition);
+    const start_label = gen.newTmp();
+    const end_label = gen.newTmp();
+    try gen.print("\n  br {f}, label %l{}, label %l{}\nl{}:", .{
+        condition,
+        start_label,
+        end_label,
+        start_label,
+    });
+    for (whi.statements) |statement| {
+        try gen.genStatement(statement);
+    }
+    try gen.print("\n  br label %l{}\nl{}:", .{ condition_label, end_label });
+}
+
 fn genIf(gen: *Codegen, iff: Ast.If) !void {
-    const condition = try gen.genExpr(iff.condition);
+    const end_label = gen.newTmp();
+    try gen.genBranch(
+        iff.cond_branch,
+        end_label,
+    );
+    for (iff.else_ifs) |branch| {
+        try gen.genBranch(
+            branch,
+            end_label,
+        );
+    }
+    for (iff.else_branch) |statement| {
+        try gen.genStatement(statement);
+    }
+    try gen.print("\n  br label %l{}\nl{}:", .{ end_label, end_label });
+}
+
+fn genBranch(
+    gen: *Codegen,
+    branch: Ast.CondBranch,
+    end_label: u32,
+) !void {
+    const condition = try gen.genExpr(branch.condition);
     const then_label = gen.newTmp();
     const else_label = gen.newTmp();
     try gen.print("\n  br {f}, label %l{}, label %l{}\nl{}:", .{
@@ -204,15 +247,10 @@ fn genIf(gen: *Codegen, iff: Ast.If) !void {
         else_label,
         then_label,
     });
-    for (iff.then_branch) |statement| {
+    for (branch.statements) |statement| {
         try gen.genStatement(statement);
     }
-    const end_label = gen.newTmp();
     try gen.print("\n  br label %l{}\nl{}:", .{ end_label, else_label });
-    for (iff.else_branch) |statement| {
-        try gen.genStatement(statement);
-    }
-    try gen.print("\n  br label %l{}\nl{}:", .{ end_label, end_label });
 }
 
 fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
@@ -308,8 +346,8 @@ fn genBinary(gen: *Codegen, binary: Ast.Binary) !TypVal {
 
 fn binOpRetTyp(bin_op: Ast.BinOp, child_typ: Typ) Typ {
     switch (bin_op) {
-        .sub, .add, .mul, .div => return child_typ,
-        .equ => return .i1,
+        .sub, .add, .mul, .div, .rem => return child_typ,
+        .equ, .les => return .i1,
     }
 }
 
@@ -319,7 +357,9 @@ fn genBinOp(gen: *Codegen, bin_op: Ast.BinOp) !void {
         .sub => try gen.print("sub", .{}),
         .mul => try gen.print("mul", .{}),
         .div => try gen.print("sdiv", .{}),
+        .rem => try gen.print("srem", .{}),
         .equ => try gen.print("icmp eq", .{}),
+        .les => try gen.print("icmp slt", .{}),
     }
 }
 

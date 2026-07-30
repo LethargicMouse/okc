@@ -1,0 +1,19 @@
+extern fn printf(fmt: &u8, n: i32) i32;
+extern fn puts(s: &u8) i32;
+
+fn main() i32 {
+  let i = 0;
+  while (i < 20) {
+    i = i + 1;
+    if (i % 15 == 0) {
+      puts("fizzbuzz");
+    } or (i % 5 == 0) {
+      puts("buzz");
+    } or (i % 3 == 0) {
+      puts("fizz");
+    } or {
+      printf("%d\n", i);
+    }
+  }
+  return 0;
+}
