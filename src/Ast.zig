@@ -41,6 +41,12 @@ pub const Fun = struct {
 pub const Statement = union(enum) {
     ret: Expr,
     call: Call,
+    let: Let,
+};
+
+pub const Let = struct {
+    name: []const u8,
+    expr: Expr,
 };
 
 pub const Call = struct {
@@ -52,6 +58,7 @@ pub const Expr = union(enum) {
     int: []const u8,
     str: usize,
     call: Call,
+    item: []const u8,
 };
 
 const Ast = @This();

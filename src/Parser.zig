@@ -193,11 +193,24 @@ fn parseFunLoud(parser: *Parser) !Ast.Fun {
 fn parseStatementLoud(parser: *Parser) !Ast.Statement {
     return parser.parseEither(Ast.Statement, .{
         parseRetStatement,
+        parseLetStatement,
         parseCallStatement,
     }) catch |err| {
         try parser.fail("<statement>");
         return err;
     };
+}
+
+fn parseLetStatement(parser: *Parser) !Ast.Statement {
+    try parser.expect(.let);
+    const name = try parser.parseNameLoud();
+    try parser.expectLoud(.equ);
+    const expr = try parser.parseExprLoud();
+    try parser.expectLoud(.semi);
+    return .{ .let = .{
+        .name = name,
+        .expr = expr,
+    } };
 }
 
 fn parseCallStatement(parser: *Parser) !Ast.Statement {
@@ -229,10 +242,16 @@ fn parseExprLoud(parser: *Parser) Error!Ast.Expr {
         parseIntExpr,
         parseStrExpr,
         parseCallExpr,
+        parseVarExpr,
     }) catch |err| {
         try parser.fail("<expr>");
         return err;
     };
+}
+
+fn parseVarExpr(parser: *Parser) !Ast.Expr {
+    const name = try parser.parseName();
+    return .{ .item = name };
 }
 
 fn parseCallExpr(parser: *Parser) !Ast.Expr {

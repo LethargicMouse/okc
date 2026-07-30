@@ -95,3 +95,7 @@ test "simple_call.ok" {
 test "simple_call_2.ok" {
     try testFile("simple_call_2");
 }
+
+test "var.ok" {
+    try testFile("var");
+}
