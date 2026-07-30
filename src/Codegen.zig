@@ -130,6 +130,17 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
     var i: usize = 0;
     while (i < str.len) : (i += 1) {
         switch (str[i]) {
+            '\\' => {
+                i += 1;
+                switch (str[i]) {
+                    'n' => try vec.append(gpa, str[i]),
+                    else => {
+                        std.log.err("bad escape symbol: `\\{}`", .{str[i]});
+                        // supposed to be checked by `Analyser`
+                        unreachable;
+                    },
+                }
+            },
             else => try vec.append(gpa, str[i]),
         }
     }
