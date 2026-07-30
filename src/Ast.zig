@@ -51,6 +51,7 @@ pub const Call = struct {
 pub const Expr = union(enum) {
     int: []const u8,
     str: usize,
+    call: Call,
 };
 
 const Ast = @This();

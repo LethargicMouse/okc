@@ -91,3 +91,7 @@ test "empty.ok" {
 test "simple_call.ok" {
     try testFile("simple_call");
 }
+
+test "simple_call_2.ok" {
+    try testFile("simple_call_2");
+}

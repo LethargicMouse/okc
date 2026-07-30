@@ -88,7 +88,7 @@ fn parseHeaderLoud(parser: *Parser) !Ast.Header {
     try parser.expectLoud(.fun);
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.parl);
-    const params = try parser.parseMany(Ast.Param, parseParamLoud);
+    const params = try parser.parseSep(Ast.Param, parseParamLoud);
     try parser.expectLoud(.parr);
     const ret_typ = try parser.parseTypLoud();
     return .{
@@ -96,6 +96,23 @@ fn parseHeaderLoud(parser: *Parser) !Ast.Header {
         .params = params,
         .ret_typ = ret_typ,
     };
+}
+
+fn parseSep(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) ![]const typ {
+    var vec = std.ArrayList(typ).empty;
+    defer vec.deinit(parser.gpa);
+    if (try parser.parseMaybe(typ, parse)) |first| {
+        try vec.append(parser.gpa, first);
+        while (true) {
+            parser.expectLoud(.comma) catch break;
+            if (try parser.parseMaybe(typ, parse)) |item| {
+                try vec.append(parser.gpa, item);
+            } else break;
+        }
+    }
+    const slice = try parser.arena.allocator().alloc(typ, vec.items.len);
+    @memcpy(slice, vec.items);
+    return slice;
 }
 
 fn parseParamLoud(parser: *Parser) !Ast.Param {
@@ -108,7 +125,7 @@ fn parseParamLoud(parser: *Parser) !Ast.Param {
     };
 }
 
-fn parseTypLoud(parser: *Parser) ParseError!Ast.Typ {
+fn parseTypLoud(parser: *Parser) Error!Ast.Typ {
     return parser.parseEither(Ast.Typ, .{
         parseVerbalTyp,
         parsePtrTyp,
@@ -139,7 +156,7 @@ fn parseVerbalTyp(parser: *Parser) !Ast.Typ {
     return Ast.Typ.fromName(name);
 }
 
-fn parseMany(parser: *Parser, typ: type, comptime parse: fn (*Parser) ParseError!typ) ![]const typ {
+fn parseMany(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) ![]const typ {
     var vec = std.ArrayList(typ).empty;
     defer vec.deinit(parser.gpa);
     while (try parser.parseMaybe(typ, parse)) |item| {
@@ -150,7 +167,7 @@ fn parseMany(parser: *Parser, typ: type, comptime parse: fn (*Parser) ParseError
     return slice;
 }
 
-fn parseMaybe(parser: *Parser, typ: type, comptime parse: fn (*Parser) ParseError!typ) !?typ {
+fn parseMaybe(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) !?typ {
     const cursor_before = parser.cursor;
     const res = parse(parser) catch |err| switch (err) {
         error.ParseFailed => {
@@ -192,7 +209,7 @@ fn parseCallStatement(parser: *Parser) !Ast.Statement {
 fn parseCall(parser: *Parser) !Ast.Call {
     const name = try parser.parseName();
     try parser.expectLoud(.parl);
-    const args = try parser.parseMany(Ast.Expr, parseExprLoud);
+    const args = try parser.parseSep(Ast.Expr, parseExprLoud);
     try parser.expectLoud(.parr);
     return .{
         .name = name,
@@ -207,14 +224,20 @@ fn parseRetStatement(parser: *Parser) !Ast.Statement {
     return .{ .ret = expr };
 }
 
-fn parseExprLoud(parser: *Parser) !Ast.Expr {
+fn parseExprLoud(parser: *Parser) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
         parseIntExpr,
         parseStrExpr,
+        parseCallExpr,
     }) catch |err| {
         try parser.fail("<expr>");
         return err;
     };
+}
+
+fn parseCallExpr(parser: *Parser) !Ast.Expr {
+    const call = try parser.parseCall();
+    return .{ .call = call };
 }
 
 fn parseStrExpr(parser: *Parser) !Ast.Expr {
@@ -292,4 +315,4 @@ fn fail(parser: *Parser, msg: []const u8) !void {
     }
 }
 
-const ParseError = error{ ParseFailed, OutOfMemory };
+const Error = error{ ParseFailed, OutOfMemory };

@@ -7,11 +7,32 @@ const Unescaped = struct { len: usize, repr: []const u8 };
 const Val = union(enum) {
     int: []const u8,
     str: usize,
+    tmp: Tmp,
 
     pub fn format(val: Val, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (val) {
             .int => |int| try writer.print("i32 {s}", .{int}),
             .str => |str| try writer.print("ptr @.s{}", .{str}),
+            .tmp => |tmp| try writer.print("{f} %t{}", .{ tmp.typ, tmp.number }),
+        }
+    }
+};
+
+const Tmp = struct {
+    number: u32,
+    typ: Typ,
+};
+
+const Typ = enum {
+    i8,
+    i32,
+    ptr,
+
+    pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        switch (typ) {
+            .i8 => try writer.writeAll("i8"),
+            .i32 => try writer.writeAll("i32"),
+            .ptr => try writer.writeAll("ptr"),
         }
     }
 };
@@ -22,15 +43,19 @@ io: std.Io,
 gpa: std.mem.Allocator,
 file: std.Io.File,
 writer: std.Io.File.Writer,
+fun_ret_typs: std.StringHashMap(Typ),
+next_tmp: u32 = 0,
 
 pub fn init(io: std.Io, gpa: std.mem.Allocator, write_buf: []u8, comptime path: []const u8) !Codegen {
     const file = try std.Io.Dir.cwd().createFile(io, path, .{});
     const writer = file.writer(io, write_buf);
+    const fun_ret_typs = std.StringHashMap(Typ).init(gpa);
     return .{
         .io = io,
         .gpa = gpa,
         .file = file,
         .writer = writer,
+        .fun_ret_typs = fun_ret_typs,
     };
 }
 
@@ -46,20 +71,33 @@ fn genAst(gen: *Codegen, ast: Ast) !void {
         try gen.genStr(i, str);
     }
     for (ast.ext_funs) |ext_fun| {
+        try gen.registerHeader(ext_fun.header);
+    }
+    for (ast.funs) |fun| {
+        try gen.registerHeader(fun.header);
+    }
+    for (ast.ext_funs) |ext_fun| {
         try gen.genExtFun(ext_fun);
     }
     for (ast.funs) |fun| {
         try gen.genFun(fun);
     }
+    try gen.print("\n", .{});
+}
+
+fn registerHeader(gen: *Codegen, header: Ast.Header) !void {
+    const typ = genTyp(header.ret_typ);
+    try gen.fun_ret_typs.put(header.name, typ);
 }
 
 fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
     try gen.print("\ndeclare i32 @{s}(", .{ext_fun.header.name});
     if (ext_fun.header.params.len != 0) {
-        try gen.genTyp(ext_fun.header.params[0].typ);
+        const first_typ = genTyp(ext_fun.header.params[0].typ);
+        try gen.print("{f}", .{first_typ});
         for (ext_fun.header.params[1..]) |param| {
-            try gen.print(", ", .{});
-            try gen.genTyp(param.typ);
+            const typ = genTyp(param.typ);
+            try gen.print(", {f}", .{typ});
         }
     }
     try gen.print(")", .{});
@@ -107,40 +145,43 @@ fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
 }
 
 fn genParam(gen: *Codegen, param: Ast.Param) !void {
-    try gen.genTyp(param.typ);
-    try gen.print(" {s}", .{param.name});
+    const typ = genTyp(param.typ);
+    try gen.print("{f} {s}", .{ typ, param.name });
 }
 
-fn genTyp(gen: *Codegen, typ: Ast.Typ) !void {
+fn genTyp(typ: Ast.Typ) Typ {
     switch (typ) {
-        .name => try gen.print("ptr", .{}),
-        .prime => |prime| try gen.genPrime(prime),
-        .ptr => try gen.print("ptr", .{}),
+        .name => return .ptr,
+        .prime => |prime| return genPrime(prime),
+        .ptr => return .ptr,
     }
 }
 
-fn genPrime(gen: *Codegen, prime: Ast.Prime) !void {
+fn genPrime(prime: Ast.Prime) Typ {
     switch (prime) {
-        .i32 => try gen.print("i32", .{}),
-        .u8 => try gen.print("u8", .{}),
+        .i32 => return .i32,
+        .u8 => return .i8,
     }
 }
 
 fn genStatement(gen: *Codegen, statement: Ast.Statement) !void {
     switch (statement) {
         .ret => |expr| try gen.genRet(expr),
-        .call => |call| try gen.genCall(call),
+        .call => |call| _ = try gen.genCall(call),
     }
 }
 
-fn genCall(gen: *Codegen, call: Ast.Call) !void {
+fn genCall(gen: *Codegen, call: Ast.Call) !Val {
     var arg_vals = try std.ArrayList(Val).initCapacity(gen.gpa, call.args.len);
     defer arg_vals.deinit(gen.gpa);
     for (call.args) |arg| {
-        const val = genExpr(arg);
+        const val = try gen.genExpr(arg);
         try arg_vals.append(gen.gpa, val);
     }
-    try gen.print("\n  call i32 @{s}(", .{call.name});
+    const ret_tmp = gen.newTmp();
+    try gen.print("\n  %t{} = call ", .{ret_tmp});
+    const ret_typ = gen.fun_ret_typs.get(call.name).?;
+    try gen.print("{f} @{s}(", .{ ret_typ, call.name });
     if (call.args.len != 0) {
         try gen.print("{f}", .{arg_vals.items[0]});
         for (arg_vals.items[1..]) |val| {
@@ -148,17 +189,24 @@ fn genCall(gen: *Codegen, call: Ast.Call) !void {
         }
     }
     try gen.print(")", .{});
+    return .{ .tmp = .{ .number = ret_tmp, .typ = ret_typ } };
+}
+
+fn newTmp(gen: *Codegen) u32 {
+    gen.next_tmp += 1;
+    return gen.next_tmp - 1;
 }
 
 fn genRet(gen: *Codegen, expr: Ast.Expr) !void {
-    const val = genExpr(expr);
+    const val = try gen.genExpr(expr);
     try gen.print("\n  ret {f}", .{val});
 }
 
-fn genExpr(expr: Ast.Expr) Val {
+fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!Val {
     switch (expr) {
         .int => |int| return .{ .int = int },
         .str => |str| return .{ .str = str },
+        .call => |call| return gen.genCall(call),
     }
 }
 
@@ -166,6 +214,9 @@ fn print(gen: *Codegen, comptime fmt: []const u8, args: anytype) !void {
     try gen.writer.interface.print(fmt, args);
 }
 
-fn deinit(gen: Codegen) void {
+const Error = error{ WriteFailed, OutOfMemory };
+
+fn deinit(gen: *Codegen) void {
+    gen.fun_ret_typs.deinit();
     gen.file.close(gen.io);
 }

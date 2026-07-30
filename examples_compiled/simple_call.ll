@@ -3,6 +3,6 @@ target triple = "x86_64-pc-linux-gnu"
 declare i32 @puts(ptr)
 define i32 @main() {
 entry:
-  call i32 @puts(ptr @.s0)
+  %t0 = call i32 @puts(ptr @.s0)
   ret i32 0
 }
