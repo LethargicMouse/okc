@@ -40,7 +40,7 @@ pub const Fun = struct {
 
 pub const Statement = union(enum) {
     ret: Expr,
-    call: Call,
+    expr: Expr,
     let: Let,
     assign: Assign,
     iff: If,
@@ -84,6 +84,12 @@ pub const Expr = union(enum) {
     call: Call,
     vari: []const u8,
     binary: *const Binary,
+    field: *const Field,
+};
+
+pub const Field = struct {
+    expr: Expr,
+    name: []const u8,
 };
 
 pub const Binary = struct {

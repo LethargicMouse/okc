@@ -68,7 +68,7 @@ fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
 fn testFile(comptime name: []const u8) !void {
     const ok = std.fmt.comptimePrint("examples/{s}.ok", .{name});
     const ll = std.fmt.comptimePrint("examples_compiled/{s}.ll", .{name});
-    const test_out_ll = std.fmt.comptimePrint("build/out_{s}.ll", .{name});
+    const test_out_ll = std.fmt.comptimePrint("build/{s}.ll", .{name});
 
     try compile(std.testing.io, std.testing.allocator, ok, test_out_ll);
 
@@ -116,4 +116,8 @@ test "if.ok" {
 
 test "fizzbuzz.ok" {
     try testFile("fizzbuzz");
+}
+
+test "str.ok" {
+    try testFile("str");
 }

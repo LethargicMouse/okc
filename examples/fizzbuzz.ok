@@ -6,13 +6,13 @@ fn main() i32 {
   while (i < 20) {
     i = i + 1;
     if (i % 15 == 0) {
-      puts("fizzbuzz");
+      puts("fizzbuzz".ptr);
     } or (i % 5 == 0) {
-      puts("buzz");
+      puts("buzz".ptr);
     } or (i % 3 == 0) {
-      puts("fizz");
+      puts("fizz".ptr);
     } or {
-      printf("%d\n", i);
+      printf("%d\n".ptr, i);
     }
   }
   return 0;

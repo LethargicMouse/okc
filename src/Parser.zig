@@ -9,6 +9,10 @@ const BinPostfix = struct {
     expr: Ast.Expr,
 };
 
+const Postfix = union(enum) {
+    field: []const u8,
+};
+
 const ErrMsgs = struct {
     inner: std.ArrayList([]const u8),
 
@@ -102,7 +106,7 @@ fn parseHeaderLoud(parser: *Parser) !Ast.Header {
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.parl);
     const params = try parser.parseSep(Ast.Param, parseParamLoud);
-    try parser.expectLoud(.parr);
+    try parser.expect(.parr);
     const ret_typ = try parser.parseTypLoud();
     return .{
         .name = name,
@@ -204,7 +208,7 @@ fn parseFunLoud(parser: *Parser) !Ast.Fun {
 fn parseBlockLoud(parser: *Parser) Error![]const Ast.Statement {
     try parser.expectLoud(.curl);
     const statements = try parser.parseMany(Ast.Statement, parseStatementLoud);
-    try parser.expectLoud(.curr);
+    try parser.expect(.curr);
     return statements;
 }
 
@@ -215,7 +219,7 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
         parseIfStatement,
         parseWhileStatement,
         parseAssignStatement,
-        parseCallStatement,
+        parseExprStatement,
     }) catch |err| {
         try parser.fail("<statement>");
         return err;
@@ -271,7 +275,7 @@ fn parseElseLoud(parser: *Parser) ![]const Ast.Statement {
 
 fn parseAssignStatement(parser: *Parser) !Ast.Statement {
     const name = try parser.parseName();
-    try parser.expectLoud(.equ);
+    try parser.expect(.equ);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
     return .{ .assign = .{
@@ -292,17 +296,17 @@ fn parseLetStatement(parser: *Parser) !Ast.Statement {
     } };
 }
 
-fn parseCallStatement(parser: *Parser) !Ast.Statement {
-    const call = try parser.parseCall();
+fn parseExprStatement(parser: *Parser) !Ast.Statement {
+    const expr = try parser.parseExpr();
     try parser.expectLoud(.semi);
-    return .{ .call = call };
+    return .{ .expr = expr };
 }
 
 fn parseCall(parser: *Parser) !Ast.Call {
     const name = try parser.parseName();
-    try parser.expectLoud(.parl);
+    try parser.expect(.parl);
     const args = try parser.parseSep(Ast.Expr, parseExprLoud);
-    try parser.expectLoud(.parr);
+    try parser.expect(.parr);
     return .{
         .name = name,
         .args = args,
@@ -317,11 +321,25 @@ fn parseRetStatement(parser: *Parser) !Ast.Statement {
 }
 
 fn parseExprLoud(parser: *Parser) !Ast.Expr {
-    return parser.parseExprPriorLoud(0);
+    return parser.parseExpr() catch |err| {
+        try parser.fail("<expr>");
+        return err;
+    };
+}
+
+fn parseExpr(parser: *Parser) !Ast.Expr {
+    return parser.parseExprPrior(0);
 }
 
 fn parseExprPriorLoud(parser: *Parser, prior: u8) Error!Ast.Expr {
-    var res = try parser.parseExprAtomLoud();
+    return parser.parseExprPrior(prior) catch |err| {
+        try parser.fail("<expr>");
+        return err;
+    };
+}
+
+fn parseExprPrior(parser: *Parser, prior: u8) Error!Ast.Expr {
+    var res = try parser.parseExprPosted();
     while (try parser.parseBinPostfix(prior)) |bin_postfix| {
         const binary = try parser.arena.allocator().create(Ast.Binary);
         binary.* = .{
@@ -405,16 +423,39 @@ fn parseDiv(parser: *Parser) !Ast.BinOp {
     return .div;
 }
 
-fn parseExprAtomLoud(parser: *Parser) Error!Ast.Expr {
+fn parseExprPosted(parser: *Parser) Error!Ast.Expr {
+    var res = try parser.parseExprAtom();
+    while (try parser.parseMaybe(Postfix, parsePostfix)) |postfix| {
+        switch (postfix) {
+            .field => |name| {
+                const field = try parser.arena.allocator().create(Ast.Field);
+                field.* = .{ .expr = res, .name = name };
+                res = .{ .field = field };
+            },
+        }
+    }
+    return res;
+}
+
+fn parsePostfix(parser: *Parser) !Postfix {
+    return parser.parseEither(Postfix, .{
+        parseFieldPostfix,
+    });
+}
+
+fn parseFieldPostfix(parser: *Parser) !Postfix {
+    try parser.expect(.dot);
+    const name = try parser.parseNameLoud();
+    return .{ .field = name };
+}
+
+fn parseExprAtom(parser: *Parser) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
         parseIntExpr,
         parseStrExpr,
         parseCallExpr,
         parseVarExpr,
-    }) catch |err| {
-        try parser.fail("<expr>");
-        return err;
-    };
+    });
 }
 
 fn parseVarExpr(parser: *Parser) !Ast.Expr {

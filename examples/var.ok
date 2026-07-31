@@ -1,7 +1,7 @@
 extern fn puts(s: &u8) i32;
 
 fn main() i32 {
-  let msg = "wazzup niggas";
+  let msg = "wazzup niggas".ptr;
   puts(msg);
   return 0;
 }

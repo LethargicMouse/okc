@@ -1,4 +1,5 @@
 target triple = "x86_64-pc-linux-gnu"
+%str = type { ptr, i64 }
 @.s0 = private unnamed_addr constant [9 x i8] c"fizzbuzz\00", align 1
 @.s1 = private unnamed_addr constant [5 x i8] c"buzz\00", align 1
 @.s2 = private unnamed_addr constant [5 x i8] c"fizz\00", align 1
@@ -23,27 +24,43 @@ l4:
   %t11 = icmp eq i32 %t10, 0
   br i1 %t11, label %l12, label %l13
 l12:
-  %t14 = call i32 @puts(ptr @.s0)
+  %t14 = alloca %str, align 8
+  store %str { ptr @.s0, i64 8 }, ptr %t14
+  %t15 = getelementptr inbounds %str, ptr %t14, i32 0, i32 0
+  %t16 = load ptr, ptr %t15
+  %t17 = call i32 @puts(ptr %t16)
   br label %l8
 l13:
-  %t15 = load i32, ptr %t0
-  %t16 = srem i32 %t15, 5
-  %t17 = icmp eq i32 %t16, 0
-  br i1 %t17, label %l18, label %l19
-l18:
-  %t20 = call i32 @puts(ptr @.s1)
+  %t18 = load i32, ptr %t0
+  %t19 = srem i32 %t18, 5
+  %t20 = icmp eq i32 %t19, 0
+  br i1 %t20, label %l21, label %l22
+l21:
+  %t23 = alloca %str, align 8
+  store %str { ptr @.s1, i64 4 }, ptr %t23
+  %t24 = getelementptr inbounds %str, ptr %t23, i32 0, i32 0
+  %t25 = load ptr, ptr %t24
+  %t26 = call i32 @puts(ptr %t25)
   br label %l8
-l19:
-  %t21 = load i32, ptr %t0
-  %t22 = srem i32 %t21, 3
-  %t23 = icmp eq i32 %t22, 0
-  br i1 %t23, label %l24, label %l25
-l24:
-  %t26 = call i32 @puts(ptr @.s2)
-  br label %l8
-l25:
+l22:
   %t27 = load i32, ptr %t0
-  %t28 = call i32 @printf(ptr @.s3, i32 %t27)
+  %t28 = srem i32 %t27, 3
+  %t29 = icmp eq i32 %t28, 0
+  br i1 %t29, label %l30, label %l31
+l30:
+  %t32 = alloca %str, align 8
+  store %str { ptr @.s2, i64 4 }, ptr %t32
+  %t33 = getelementptr inbounds %str, ptr %t32, i32 0, i32 0
+  %t34 = load ptr, ptr %t33
+  %t35 = call i32 @puts(ptr %t34)
+  br label %l8
+l31:
+  %t36 = alloca %str, align 8
+  store %str { ptr @.s3, i64 3 }, ptr %t36
+  %t37 = getelementptr inbounds %str, ptr %t36, i32 0, i32 0
+  %t38 = load ptr, ptr %t37
+  %t39 = load i32, ptr %t0
+  %t40 = call i32 @printf(ptr %t38, i32 %t39)
   br label %l8
 l8:
   br label %l1
