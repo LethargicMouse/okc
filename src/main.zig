@@ -65,59 +65,72 @@ fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
     }
 }
 
-fn testFile(comptime name: []const u8) !void {
+fn testFile(comptime name: []const u8, output: []const u8) !void {
     const ok = std.fmt.comptimePrint("examples/{s}.ok", .{name});
-    const ll = std.fmt.comptimePrint("examples_compiled/{s}.ll", .{name});
-    const test_out_ll = std.fmt.comptimePrint("build/{s}.ll", .{name});
+    try compile(std.testing.io, std.testing.allocator, ok, out_ll);
 
-    try compile(std.testing.io, std.testing.allocator, ok, test_out_ll);
-
-    const dir = std.Io.Dir.cwd();
-
-    const expected = dir.readFileAlloc(std.testing.io, ll, std.testing.allocator, .unlimited) catch {
-        std.log.err("failed to read `{s}`", .{ll});
-        return error.Handled;
-    };
-    defer std.testing.allocator.free(expected);
-
-    const found = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, test_out_ll, std.testing.allocator, .unlimited);
-    defer std.testing.allocator.free(found);
-
-    try std.testing.expectEqualStrings(expected, found);
+    const run_res = try std.process.run(std.testing.allocator, std.testing.io, .{ .argv = &.{out} });
+    defer std.testing.allocator.free(run_res.stdout);
+    defer std.testing.allocator.free(run_res.stderr);
+    try std.testing.expect(run_res.term.exited == 0);
+    try std.testing.expectEqualStrings(output, run_res.stdout);
 }
 
 test "empty.ok" {
-    try testFile("empty");
+    const code = try runFile(std.testing.io, std.testing.allocator, "examples/empty.ok");
+    try std.testing.expectEqual(123, code);
 }
 
 test "simple_call.ok" {
-    try testFile("simple_call");
+    try testFile("simple_call", "hello\n");
 }
 
 test "simple_call_2.ok" {
-    try testFile("simple_call_2");
+    try testFile("simple_call_2", "123");
 }
 
 test "var.ok" {
-    try testFile("var");
+    try testFile("var", "wazzup niggas\n");
 }
 
 test "var_assign.ok" {
-    try testFile("var_assign");
+    try testFile("var_assign", "oh gotta go nvm bye\n");
 }
 
 test "arith.ok" {
-    try testFile("arith");
+    try testFile("arith", "1");
 }
 
 test "if.ok" {
-    try testFile("if");
+    try testFile("if", "SIXSEVEEEN!\n");
 }
 
 test "fizzbuzz.ok" {
-    try testFile("fizzbuzz");
+    try testFile("fizzbuzz",
+        \\1
+        \\2
+        \\fizz
+        \\4
+        \\buzz
+        \\fizz
+        \\7
+        \\8
+        \\fizz
+        \\buzz
+        \\11
+        \\fizz
+        \\13
+        \\14
+        \\fizzbuzz
+        \\16
+        \\17
+        \\fizz
+        \\19
+        \\buzz
+        \\
+    );
 }
 
 test "str.ok" {
-    try testFile("str");
+    try testFile("str", "6-7!!!\n");
 }
