@@ -283,6 +283,20 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary) Typ {
 
 fn checkVar(checker: *Checker, location: Location, name: []const u8) Typ {
     const vari = checker.vars.get(name) orelse {
+        var iter = checker.vars.keyIterator();
+        while (iter.next()) |vari| {
+            if (name.len >= vari.len + 5 and std.mem.startsWith(u8, name, vari.*[0..@min(5, vari.len)])) {
+                std.log.err(
+                    \\in {f}
+                    \\     seems like you've fallen asleep and
+                    \\     hit your keyboard while typing `{s}`
+                    \\
+                    \\     fix it later, time to get some sleep
+                , .{ location, vari.* });
+                checker.errors_cnt += 1;
+                return .err;
+            }
+        }
         std.log.err(
             \\in {f}
             \\     item `{s}` is not declared
