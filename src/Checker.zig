@@ -227,7 +227,7 @@ fn checkLiteralLoc(checker: *Checker, literal_loc: Ast.LiteralLoc) Typ {
     switch (literal_loc.literal) {
         .int => return .{ .prime = .i32 },
         .str => return .{ .name = "str" },
-        .vari => |name| return checker.checkVar(name),
+        .vari => |name| return checker.checkVar(literal_loc.location, name),
     }
 }
 
@@ -281,8 +281,15 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary) Typ {
     }
 }
 
-fn checkVar(checker: *Checker, name: []const u8) Typ {
-    const vari = checker.vars.get(name).?;
+fn checkVar(checker: *Checker, location: Location, name: []const u8) Typ {
+    const vari = checker.vars.get(name) orelse {
+        std.log.err(
+            \\in {f}
+            \\     item `{s}` is not declared
+        , .{ location, name });
+        checker.errors_cnt += 1;
+        return .err;
+    };
     return vari.typ;
 }
 
