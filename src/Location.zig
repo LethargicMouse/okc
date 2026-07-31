@@ -10,7 +10,10 @@ end: Pos,
 lines: []const []const u8,
 
 pub fn format(location: Location, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-    try writer.print("`{s}` at {f}:\n     |", .{ location.name, location.start });
+    try writer.print(
+        \\`{s}` at {f}:
+        \\     |
+    , .{ location.name, location.start });
     // for now we only deal with one-liners
     std.debug.assert(location.start.line == location.end.line);
     try line(writer, location.start.line, location.lines);

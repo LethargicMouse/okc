@@ -199,7 +199,10 @@ fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
             try gen.genParam(param);
         }
     }
-    try gen.print(") {{\nentry:", .{});
+    try gen.print(
+        \\) {{
+        \\entry:
+    , .{});
     for (fun.statements) |statement| {
         try gen.genStatement(statement);
     }
@@ -251,7 +254,11 @@ fn cond(
     then_label: u32,
     else_label: u32,
 ) !void {
-    try gen.print("\n  br i1 {f}, label %l{}, label %l{}\nl{}:", .{
+    try gen.print(
+        \\
+        \\  br i1 {f}, label %l{}, label %l{}
+        \\l{}:
+    , .{
         condition,
         then_label,
         else_label,
@@ -260,7 +267,11 @@ fn cond(
 }
 
 fn uncond(gen: *Codegen, to: u32, next: u32) !void {
-    try gen.print("\n  br label %l{}\nl{}:", .{ to, next });
+    try gen.print(
+        \\
+        \\  br label %l{}
+        \\l{}:
+    , .{ to, next });
 }
 
 fn genIf(gen: *Codegen, iff: Ast.If) !void {
@@ -317,7 +328,7 @@ fn toStack(gen: *Codegen, typ_val: TypVal) !Var {
 fn storeInto(gen: *Codegen, tmp: u32, typ_val: TypVal) !void {
     if (typ_val.typ == .name) {
         const loaded = try gen.load(typ_val.typ, typ_val.val.tmp);
-        try gen.print("\n  \n  store %{s} %t{}, ptr %t{}", .{
+        try gen.print("\n  store %{s} %t{}, ptr %t{}", .{
             typ_val.typ.name,
             loaded,
             tmp,
