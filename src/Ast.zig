@@ -35,6 +35,13 @@ pub const Prime = enum {
     i32,
     u64,
     bool,
+
+    pub fn isNumber(prime: Prime) bool {
+        switch (prime) {
+            .i32, .u8, .u64 => return true,
+            else => return false,
+        }
+    }
 };
 
 pub const Fun = struct {

@@ -7,12 +7,22 @@ const Typ = union(enum) {
     prime: Ast.Prime,
     name: []const u8,
     ptr: *const Typ,
+    err,
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (typ) {
             .prime => |prime| try writer.writeAll(@tagName(prime)),
             .name => |name| try writer.writeAll(name),
             .ptr => |inner| try writer.print("&{f}", .{inner}),
+            .err => try writer.writeAll("<err>"),
+        }
+    }
+
+    fn isNumber(typ: Typ) bool {
+        switch (typ) {
+            .prime => |prime| return prime.isNumber(),
+            .err => return true,
+            else => return false,
         }
     }
 };
@@ -183,6 +193,9 @@ fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) void {
 }
 
 fn canUnify(a: Typ, b: Typ) bool {
+    if (a == .err or b == .err) {
+        return true;
+    }
     if (@intFromEnum(a) != @intFromEnum(b)) {
         return false;
     }
@@ -190,6 +203,7 @@ fn canUnify(a: Typ, b: Typ) bool {
         .prime => |aprime| return aprime == b.prime,
         .name => |aname| return std.mem.eql(u8, aname, b.name),
         .ptr => |atyp| return canUnify(atyp.*, b.ptr.*),
+        else => unreachable,
     }
 }
 
@@ -225,11 +239,22 @@ fn checkField(checker: *Checker, field: Ast.Field) Typ {
 }
 
 fn checkBinary(checker: *Checker, binary: Ast.Binary) Typ {
-    const typ = checker.checkExpr(binary.left);
-    _ = checker.checkExpr(binary.right);
+    var left = checker.checkExpr(binary.left);
+    if (!left.isNumber()) {
+        std.log.err(
+            \\in {f}
+            \\     wrong type:
+            \\         expected  <number>
+            \\            found  {f}
+        , .{ binary.left.location(), left });
+        left = .err;
+        checker.errors_cnt += 1;
+    }
+    const right = checker.checkExpr(binary.right);
+    checker.unify(binary.right.location(), left, right);
     switch (binary.op) {
         .equ, .les => return .{ .prime = .bool },
-        else => return typ,
+        else => return left,
     }
 }
 
