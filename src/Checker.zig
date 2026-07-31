@@ -40,6 +40,7 @@ structs: std.StringHashMap(Struct),
 vars: std.StringHashMap(Var),
 fun_typs: std.StringHashMap(FunTyp),
 arena: std.heap.ArenaAllocator,
+ret_typ: Typ = undefined,
 errors_cnt: u32 = 0,
 
 pub fn init(gpa: std.mem.Allocator) Checker {
@@ -119,6 +120,7 @@ fn boxTyp(checker: *Checker, typ: Typ) !*Typ {
 }
 
 fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
+    checker.ret_typ = checker.fun_typs.get(fun.header.name).?.ret_typ;
     for (fun.statements) |statement| {
         try checker.checkStatement(statement);
     }
@@ -246,7 +248,8 @@ fn checkCall(checker: *Checker, call: Ast.Call) Typ {
 }
 
 fn checkRet(checker: *Checker, expr: Ast.Expr) void {
-    _ = checker.checkExpr(expr);
+    const typ = checker.checkExpr(expr);
+    checker.unify(expr.location(), checker.ret_typ, typ);
 }
 
 fn deinit(checker: *Checker) void {
