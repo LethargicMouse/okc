@@ -233,9 +233,32 @@ fn checkLiteralLoc(checker: *Checker, literal_loc: Ast.LiteralLoc) Typ {
 
 fn checkField(checker: *Checker, field: Ast.Field) Typ {
     const expr_typ = checker.checkExpr(field.expr);
-    const struc = checker.structs.get(expr_typ.name).?;
-    const fiel = struc.fields.get(field.name).?;
+    const name = if (expr_typ == .name) expr_typ.name else {
+        checker.failNoFields(field.expr.location(), expr_typ);
+        return .err;
+    };
+    const struc = checker.structs.get(name) orelse {
+        checker.failNoFields(field.expr.location(), expr_typ);
+        return .err;
+    };
+    const fiel = struc.fields.get(field.name) orelse {
+        std.log.err(
+            \\in {f}
+            \\     no field `{s}` in struct `{s}`
+            \\
+        , .{ field.location, field.name, name });
+        return .err;
+    };
     return fiel.typ;
+}
+
+fn failNoFields(checker: *Checker, location: Location, typ: Typ) void {
+    std.log.err(
+        \\in {f}
+        \\     type `{f}` does not have fields
+        \\
+    , .{ location, typ });
+    checker.errors_cnt += 1;
 }
 
 fn checkBinary(checker: *Checker, binary: Ast.Binary) Typ {
