@@ -223,6 +223,7 @@ fn genPrime(prime: Ast.Prime) Typ {
     switch (prime) {
         .i32 => return .i32,
         .u8 => return .i8,
+        .u64 => return .i64,
     }
 }
 

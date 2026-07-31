@@ -31,6 +31,7 @@ pub const Typ = union(enum) {
 pub const Prime = enum {
     u8,
     i32,
+    u64,
 };
 
 pub const Fun = struct {

@@ -4,6 +4,7 @@ const Codegen = @import("Codegen.zig");
 const Lexer = @import("Lexer.zig");
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
+const Checker = @import("Checker.zig");
 
 pub fn main(init: std.process.Init) !u8 {
     const code = run(init) catch |err| switch (err) {
@@ -44,6 +45,9 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8, comptime out_pa
     var parser = Parser.init(gpa, tokens);
     var ast = try parser.run();
     defer ast.deinit();
+
+    var checker = Checker.init(gpa);
+    try checker.run(ast);
 
     try std.Io.Dir.cwd().createDirPath(io, build_dir);
 
