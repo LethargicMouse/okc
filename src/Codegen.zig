@@ -38,6 +38,11 @@ const Val = union(enum) {
 const Var = struct {
     tmp: u32,
     inner_typ: Typ,
+
+    fn toTypVar(vari: Var) TypVal {
+        std.debug.assert(vari.inner_typ == .name);
+        return .{ .typ = vari.inner_typ, .val = .{ .tmp = vari.tmp } };
+    }
 };
 
 const Typ = union(enum) {
@@ -50,7 +55,7 @@ const Typ = union(enum) {
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (typ) {
-            .name => try format(.ptr, writer),
+            .name => |name| try writer.print("%{s}", .{name}),
             else => try writer.writeAll(@tagName(typ)),
         }
     }
@@ -297,9 +302,9 @@ fn genBranch(
 }
 
 fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
-    const tmp = gen.vars.get(assign.name).?;
-    const val = try gen.genExpr(assign.expr);
-    try gen.storeInto(tmp.tmp, val);
+    const vari = gen.vars.get(assign.name).?;
+    const typ_val = try gen.genExpr(assign.expr);
+    try gen.storeInto(vari.tmp, typ_val);
 }
 
 fn genLet(gen: *Codegen, let: Ast.Let) !void {
@@ -309,14 +314,26 @@ fn genLet(gen: *Codegen, let: Ast.Let) !void {
 }
 
 fn toStack(gen: *Codegen, typ_val: TypVal) !Var {
+    if (typ_val.typ == .name) {
+        return typ_val.toVar();
+    }
     const tmp = gen.newTmp();
     try gen.print("\n  %t{} = alloca {f}", .{ tmp, typ_val.typ });
     try gen.storeInto(tmp, typ_val);
     return .{ .tmp = tmp, .inner_typ = typ_val.typ };
 }
 
-fn storeInto(gen: *Codegen, tmp: u32, val: TypVal) !void {
-    try gen.print("\n  store {f}, ptr %t{}", .{ val, tmp });
+fn storeInto(gen: *Codegen, tmp: u32, typ_val: TypVal) !void {
+    if (typ_val.typ == .name) {
+        const loaded = try gen.load(typ_val.typ, typ_val.val.tmp);
+        try gen.print("\n  \n  store %{s} %t{}, ptr %t{}", .{
+            typ_val.typ.name,
+            loaded,
+            tmp,
+        });
+    } else {
+        try gen.print("\n  store {f}, ptr %t{}", .{ typ_val, tmp });
+    }
 }
 
 fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
@@ -369,16 +386,21 @@ fn genField(gen: *Codegen, field: Ast.Field) !TypVal {
     const struc = gen.structs.get(typ_val.typ.name).?;
     const fiel = struc.fields.get(field.name).?;
     const ptr_tmp = gen.newTmp();
-    const tmp = gen.newTmp();
     try gen.print(
-        \\
-        \\  %t{} = getelementptr inbounds %{s}, ptr %t{}, i32 0, i32 {}
-        \\  %t{} = load {f}, ptr %t{}
-    , .{ ptr_tmp, typ_val.typ.name, typ_val.val.tmp, fiel.index, tmp, fiel.typ, ptr_tmp });
+        "\n  %t{} = getelementptr inbounds %{s}, ptr %t{}, i32 0, i32 {}",
+        .{ ptr_tmp, typ_val.typ.name, typ_val.val.tmp, fiel.index },
+    );
+    const tmp = try gen.load(fiel.typ, ptr_tmp);
     return .{
         .typ = fiel.typ,
         .val = .{ .tmp = tmp },
     };
+}
+
+fn load(gen: *Codegen, typ: Typ, from: u32) !u32 {
+    const to = gen.newTmp();
+    try gen.print("\n  %t{} = load {f}, ptr %t{}", .{ to, typ, from });
+    return to;
 }
 
 fn genInt(int: []const u8) TypVal {
@@ -436,6 +458,9 @@ fn genBinOp(gen: *Codegen, bin_op: Ast.BinOp) !void {
 
 fn genVar(gen: *Codegen, name: []const u8) !TypVal {
     const vari = gen.vars.get(name).?;
+    if (vari.inner_typ == .name) {
+        return vari.toTypVar();
+    }
     const load_tmp = gen.newTmp();
     try gen.print("\n  %t{} = load {f}, ptr %t{}", .{ load_tmp, vari.inner_typ, vari.tmp });
     return .{
