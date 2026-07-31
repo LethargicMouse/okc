@@ -240,14 +240,7 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
 fn genWhile(gen: *Codegen, whi: Ast.While) !void {
     const condition_label = gen.newTmp();
     try gen.uncond(condition_label, condition_label);
-    const condition = try gen.genExpr(whi.condition);
-    const start_label = gen.newTmp();
-    const end_label = gen.newTmp();
-    try gen.cond(condition.val, start_label, end_label);
-    for (whi.statements) |statement| {
-        try gen.genStatement(statement);
-    }
-    try gen.uncond(condition_label, end_label);
+    try gen.genBranch(whi.branch, condition_label);
 }
 
 fn cond(
@@ -286,11 +279,7 @@ fn genIf(gen: *Codegen, iff: Ast.If) !void {
     try gen.uncond(end_label, end_label);
 }
 
-fn genBranch(
-    gen: *Codegen,
-    branch: Ast.CondBranch,
-    end_label: u32,
-) !void {
+fn genBranch(gen: *Codegen, branch: Ast.Branch, end_label: u32) !void {
     const condition = try gen.genExpr(branch.condition);
     const then_label = gen.newTmp();
     const else_label = gen.newTmp();

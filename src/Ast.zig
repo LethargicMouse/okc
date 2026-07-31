@@ -48,17 +48,16 @@ pub const Statement = union(enum) {
 };
 
 pub const While = struct {
-    condition: Expr,
-    statements: []const Statement,
+    branch: Branch,
 };
 
 pub const If = struct {
-    cond_branch: CondBranch,
-    else_ifs: []const CondBranch,
+    cond_branch: Branch,
+    else_ifs: []const Branch,
     else_branch: []const Statement,
 };
 
-pub const CondBranch = struct {
+pub const Branch = struct {
     condition: Expr,
     statements: []const Statement,
 };

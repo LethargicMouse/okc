@@ -228,20 +228,14 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
 
 fn parseWhileStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.whi);
-    try parser.expectLoud(.parl);
-    const condition = try parser.parseExprLoud();
-    try parser.expectLoud(.parr);
-    const statements = try parser.parseBlockLoud();
-    return .{ .whi = .{
-        .condition = condition,
-        .statements = statements,
-    } };
+    const branch = try parser.parseBranch();
+    return .{ .whi = .{ .branch = branch } };
 }
 
 fn parseIfStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.iff);
     const cond_branch = try parser.parseBranch();
-    const else_ifs = try parser.parseMany(Ast.CondBranch, parseElseIf);
+    const else_ifs = try parser.parseMany(Ast.Branch, parseElseIf);
     const else_branch = try parser.parseMaybe([]const Ast.Statement, parseElseLoud) orelse &.{};
     return .{ .iff = .{
         .cond_branch = cond_branch,
@@ -250,13 +244,13 @@ fn parseIfStatement(parser: *Parser) !Ast.Statement {
     } };
 }
 
-fn parseElseIf(parser: *Parser) !Ast.CondBranch {
+fn parseElseIf(parser: *Parser) !Ast.Branch {
     try parser.expect(.orr);
     const branch = try parser.parseBranch();
     return branch;
 }
 
-fn parseBranch(parser: *Parser) !Ast.CondBranch {
+fn parseBranch(parser: *Parser) !Ast.Branch {
     try parser.expectLoud(.parl);
     const condition = try parser.parseExprLoud();
     try parser.expectLoud(.parr);
