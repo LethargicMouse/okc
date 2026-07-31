@@ -29,23 +29,28 @@ const Var = struct {
     typ: Typ,
 };
 
+const FunTyp = struct {
+    params: []const Typ,
+    ret_typ: Typ,
+};
+
 const Checker = @This();
 
 structs: std.StringHashMap(Struct),
 vars: std.StringHashMap(Var),
-fun_ret_typs: std.StringHashMap(Typ),
+fun_typs: std.StringHashMap(FunTyp),
 arena: std.heap.ArenaAllocator,
 errors_cnt: u32 = 0,
 
 pub fn init(gpa: std.mem.Allocator) Checker {
     const structs = std.StringHashMap(Struct).init(gpa);
     const vars = std.StringHashMap(Var).init(gpa);
-    const fun_ret_typs = std.StringHashMap(Typ).init(gpa);
+    const fun_typs = std.StringHashMap(FunTyp).init(gpa);
     const arena = std.heap.ArenaAllocator.init(gpa);
     return .{
         .structs = structs,
         .vars = vars,
-        .fun_ret_typs = fun_ret_typs,
+        .fun_typs = fun_typs,
         .arena = arena,
     };
 }
@@ -74,8 +79,15 @@ fn checkAst(checker: *Checker, ast: Ast) !void {
 }
 
 fn regHeader(checker: *Checker, header: Ast.Header) !void {
-    const typ = try checker.checkTyp(header.ret_typ);
-    try checker.fun_ret_typs.put(header.name, typ);
+    const params = try checker.arena.allocator().alloc(Typ, header.params.len);
+    for (header.params, 0..) |param, i| {
+        params[i] = try checker.checkTyp(param.typ);
+    }
+    const ret_typ = try checker.checkTyp(header.ret_typ);
+    try checker.fun_typs.put(header.name, .{
+        .params = params,
+        .ret_typ = ret_typ,
+    });
 }
 
 fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
@@ -160,7 +172,11 @@ fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) void {
         \\     wrong type:
         \\         expected  {f}
         \\            found  {f}
+        \\
     , .{ location, a, b });
+    if (a == .ptr and a.ptr.* == .prime and a.ptr.*.prime == .u8 and b == .name and std.mem.eql(u8, b.name, "str")) {
+        std.log.info("append `.ptr` to get C-style string\n", .{});
+    }
     checker.errors_cnt += 1;
 }
 
@@ -221,11 +237,12 @@ fn checkVar(checker: *Checker, name: []const u8) Typ {
 }
 
 fn checkCall(checker: *Checker, call: Ast.Call) Typ {
-    for (call.args) |arg| {
-        _ = checker.checkExpr(arg);
+    const fun_typ = checker.fun_typs.get(call.name).?;
+    for (call.args, fun_typ.params) |arg, param| {
+        const typ = checker.checkExpr(arg);
+        checker.unify(arg.location(), param, typ);
     }
-    const typ = checker.fun_ret_typs.get(call.name).?;
-    return typ;
+    return fun_typ.ret_typ;
 }
 
 fn checkRet(checker: *Checker, expr: Ast.Expr) void {
@@ -239,7 +256,7 @@ fn deinit(checker: *Checker) void {
     }
     checker.structs.deinit();
     checker.vars.deinit();
-    checker.fun_ret_typs.deinit();
+    checker.fun_typs.deinit();
     checker.arena.deinit();
     checker.* = undefined;
 }
