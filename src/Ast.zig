@@ -63,7 +63,7 @@ pub const While = struct {
 };
 
 pub const If = struct {
-    cond_branch: Branch,
+    branch: Branch,
     else_ifs: []const Branch,
     else_branch: []const Statement,
 };

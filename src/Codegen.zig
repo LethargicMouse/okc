@@ -266,7 +266,7 @@ fn uncond(gen: *Codegen, to: u32, next: u32) !void {
 fn genIf(gen: *Codegen, iff: Ast.If) !void {
     const end_label = gen.newTmp();
     try gen.genBranch(
-        iff.cond_branch,
+        iff.branch,
         end_label,
     );
     for (iff.else_ifs) |branch| {

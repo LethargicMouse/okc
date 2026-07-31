@@ -240,11 +240,11 @@ fn parseWhileStatement(parser: *Parser) !Ast.Statement {
 
 fn parseIfStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.iff);
-    const cond_branch = try parser.parseBranch();
+    const branch = try parser.parseBranch();
     const else_ifs = try parser.parseMany(Ast.Branch, parseElseIf);
     const else_branch = try parser.parseMaybe([]const Ast.Statement, parseElseLoud) orelse &.{};
     return .{ .iff = .{
-        .cond_branch = cond_branch,
+        .branch = branch,
         .else_ifs = else_ifs,
         .else_branch = else_branch,
     } };

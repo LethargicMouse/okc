@@ -152,7 +152,7 @@ fn checkWhile(checker: *Checker, whi: Ast.While) !void {
 }
 
 fn checkIf(checker: *Checker, iff: Ast.If) !void {
-    try checker.checkBranch(iff.cond_branch);
+    try checker.checkBranch(iff.branch);
     for (iff.else_ifs) |branch| {
         try checker.checkBranch(branch);
     }
