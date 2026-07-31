@@ -3,6 +3,7 @@ const std = @import("std");
 const Ast = @import("Ast.zig");
 const Lexer = @import("Lexer.zig");
 const Lexeme = Lexer.Lexeme;
+const Location = @import("Location.zig");
 
 const BinPostfix = struct {
     bin_op: Ast.BinOp,
@@ -10,7 +11,12 @@ const BinPostfix = struct {
 };
 
 const Postfix = union(enum) {
-    field: []const u8,
+    field: FieldPostfix,
+};
+
+const FieldPostfix = struct {
+    name: []const u8,
+    location: Location,
 };
 
 const ErrMsgs = struct {
@@ -297,6 +303,7 @@ fn parseExprStatement(parser: *Parser) !Ast.Statement {
 }
 
 fn parseCall(parser: *Parser) !Ast.Call {
+    const location = parser.getLocation();
     const name = try parser.parseName();
     try parser.expect(.parl);
     const args = try parser.parseSep(Ast.Expr, parseExprLoud);
@@ -304,6 +311,7 @@ fn parseCall(parser: *Parser) !Ast.Call {
     return .{
         .name = name,
         .args = args,
+        .location = location,
     };
 }
 
@@ -340,6 +348,7 @@ fn parseExprPrior(parser: *Parser, prior: u8) Error!Ast.Expr {
             .left = res,
             .op = bin_postfix.bin_op,
             .right = bin_postfix.expr,
+            .location = res.location().combine(bin_postfix.expr.location()),
         };
         res = .{ .binary = binary };
     }
@@ -421,9 +430,13 @@ fn parseExprPosted(parser: *Parser) Error!Ast.Expr {
     var res = try parser.parseExprAtom();
     while (try parser.parseMaybe(Postfix, parsePostfix)) |postfix| {
         switch (postfix) {
-            .field => |name| {
+            .field => |field_postfix| {
                 const field = try parser.arena.allocator().create(Ast.Field);
-                field.* = .{ .expr = res, .name = name };
+                field.* = .{
+                    .expr = res,
+                    .name = field_postfix.name,
+                    .location = field_postfix.location,
+                };
                 res = .{ .field = field };
             },
         }
@@ -439,20 +452,35 @@ fn parsePostfix(parser: *Parser) !Postfix {
 
 fn parseFieldPostfix(parser: *Parser) !Postfix {
     try parser.expect(.dot);
+    const location = parser.getLocation();
     const name = try parser.parseNameLoud();
-    return .{ .field = name };
+    return .{ .field = .{
+        .name = name,
+        .location = location,
+    } };
+}
+
+fn getLocation(parser: Parser) Location {
+    return parser.tokens[parser.cursor].location;
 }
 
 fn parseExprAtom(parser: *Parser) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
-        parseIntExpr,
-        parseStrExpr,
         parseCallExpr,
-        parseVarExpr,
+        parseLiteralLocExpr,
     });
 }
 
-fn parseVarExpr(parser: *Parser) !Ast.Expr {
+fn parseLiteralLocExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
+    const literal = try parser.parseLiteral();
+    return .{ .literal_loc = .{
+        .literal = literal,
+        .location = location,
+    } };
+}
+
+fn parseVarLiteral(parser: *Parser) !Ast.Literal {
     const name = try parser.parseName();
     return .{ .vari = name };
 }
@@ -462,14 +490,22 @@ fn parseCallExpr(parser: *Parser) !Ast.Expr {
     return .{ .call = call };
 }
 
-fn parseStrExpr(parser: *Parser) !Ast.Expr {
+fn parseStrLiteral(parser: *Parser) !Ast.Literal {
     const str = try parser.parseStr();
     const index = parser.strs.items.len;
     try parser.strs.append(parser.gpa, str);
     return .{ .str = index };
 }
 
-fn parseIntExpr(parser: *Parser) !Ast.Expr {
+fn parseLiteral(parser: *Parser) !Ast.Literal {
+    return parser.parseEither(Ast.Literal, .{
+        parseIntLiteral,
+        parseStrLiteral,
+        parseVarLiteral,
+    });
+}
+
+fn parseIntLiteral(parser: *Parser) !Ast.Literal {
     const int = try parser.parseInt();
     return .{ .int = int };
 }

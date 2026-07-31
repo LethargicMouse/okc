@@ -359,12 +359,18 @@ fn genRet(gen: *Codegen, expr: Ast.Expr) !void {
 
 fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
     switch (expr) {
-        .int => |int| return genInt(int),
-        .str => |str| return gen.genStr(str),
+        .literal_loc => |literal_loc| return gen.genLiteral(literal_loc.literal),
         .call => |call| return gen.genCall(call),
-        .vari => |name| return gen.genVar(name),
         .binary => |binary| return gen.genBinary(binary.*),
         .field => |field| return gen.genField(field.*),
+    }
+}
+
+fn genLiteral(gen: *Codegen, literal: Ast.Literal) !TypVal {
+    switch (literal) {
+        .int => |int| return genInt(int),
+        .str => |str| return gen.genStr(str),
+        .vari => |name| return gen.genVar(name),
     }
 }
 

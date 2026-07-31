@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Location = @import("Location.zig");
+
 pub const ExtFun = struct {
     header: Header,
 };
@@ -76,26 +78,47 @@ pub const Let = struct {
 pub const Call = struct {
     name: []const u8,
     args: []const Expr,
+    location: Location,
 };
 
 pub const Expr = union(enum) {
-    int: []const u8,
-    str: usize,
+    literal_loc: LiteralLoc,
     call: Call,
-    vari: []const u8,
     binary: *const Binary,
     field: *const Field,
+
+    pub fn location(expr: Expr) Location {
+        switch (expr) {
+            .literal_loc => |literal_loc| return literal_loc.location,
+            .call => |call| return call.location,
+            .binary => |binary| return binary.location,
+            .field => |field| return field.location,
+        }
+    }
+};
+
+pub const LiteralLoc = struct {
+    literal: Literal,
+    location: Location,
+};
+
+pub const Literal = union(enum) {
+    int: []const u8,
+    str: usize,
+    vari: []const u8,
 };
 
 pub const Field = struct {
     expr: Expr,
     name: []const u8,
+    location: Location,
 };
 
 pub const Binary = struct {
     left: Expr,
     op: BinOp,
     right: Expr,
+    location: Location,
 };
 
 pub const BinOp = enum {

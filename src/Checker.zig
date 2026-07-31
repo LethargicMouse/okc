@@ -1,11 +1,20 @@
 const std = @import("std");
 
 const Ast = @import("Ast.zig");
+const Location = @import("Location.zig");
 
 const Typ = union(enum) {
     prime: Ast.Prime,
     name: []const u8,
     ptr: *const Typ,
+
+    pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        switch (typ) {
+            .prime => |prime| try writer.writeAll(@tagName(prime)),
+            .name => |name| try writer.writeAll(name),
+            .ptr => |inner| try writer.print("&{f}", .{inner}),
+        }
+    }
 };
 
 const Field = struct {
@@ -136,7 +145,33 @@ fn checkBranch(checker: *Checker, branch: Ast.Branch) !void {
 }
 
 fn checkAssign(checker: *Checker, assign: Ast.Assign) void {
-    _ = checker.checkExpr(assign.expr);
+    const typ = checker.checkExpr(assign.expr);
+    const vari = checker.vars.get(assign.name).?;
+    checker.unify(assign.expr.location(), vari.typ, typ);
+}
+
+fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) void {
+    if (canUnify(a, b)) {
+        return;
+    }
+    std.log.err(
+        \\in {f}
+        \\     wrong type:
+        \\         expected  {f}
+        \\            found  {f}
+    , .{ location, a, b });
+    checker.errors_cnt += 1;
+}
+
+fn canUnify(a: Typ, b: Typ) bool {
+    if (@intFromEnum(a) != @intFromEnum(b)) {
+        return false;
+    }
+    switch (a) {
+        .prime => |aprime| return aprime == b.prime,
+        .name => |aname| return std.mem.eql(u8, aname, b.name),
+        .ptr => |atyp| return canUnify(atyp.*, b.ptr.*),
+    }
 }
 
 fn checkLet(checker: *Checker, let: Ast.Let) !void {
@@ -148,12 +183,18 @@ fn checkLet(checker: *Checker, let: Ast.Let) !void {
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr) Typ {
     switch (expr) {
-        .int => return .{ .prime = .i32 },
-        .str => return .{ .name = "str" },
+        .literal_loc => |literal_loc| return checker.checkLiteralLoc(literal_loc),
         .call => |call| return checker.checkCall(call),
-        .vari => |name| return checker.checkVar(name),
         .binary => |binary| return checker.checkBinary(binary.*),
         .field => |field| return checker.checkField(field.*),
+    }
+}
+
+fn checkLiteralLoc(checker: *Checker, literal_loc: Ast.LiteralLoc) Typ {
+    switch (literal_loc.literal) {
+        .int => return .{ .prime = .i32 },
+        .str => return .{ .name = "str" },
+        .vari => |name| return checker.checkVar(name),
     }
 }
 

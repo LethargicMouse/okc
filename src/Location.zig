@@ -30,3 +30,12 @@ fn underline(writer: *std.Io.Writer, start: u32, end: u32) std.Io.Writer.Error!v
         try writer.writeByte('`');
     }
 }
+
+pub fn combine(a: Location, b: Location) Location {
+    return .{
+        .name = a.name,
+        .lines = a.lines,
+        .start = a.start,
+        .end = b.end,
+    };
+}
