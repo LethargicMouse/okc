@@ -34,6 +34,7 @@ pub const Prime = enum {
     u8,
     i32,
     u64,
+    bool,
 };
 
 pub const Fun = struct {

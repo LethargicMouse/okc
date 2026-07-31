@@ -138,7 +138,8 @@ fn checkIf(checker: *Checker, iff: Ast.If) !void {
 }
 
 fn checkBranch(checker: *Checker, branch: Ast.Branch) !void {
-    _ = checker.checkExpr(branch.condition);
+    const typ = checker.checkExpr(branch.condition);
+    checker.unify(branch.condition.location(), .{ .prime = .bool }, typ);
     for (branch.statements) |statement| {
         try checker.checkStatement(statement);
     }
@@ -208,7 +209,10 @@ fn checkField(checker: *Checker, field: Ast.Field) Typ {
 fn checkBinary(checker: *Checker, binary: Ast.Binary) Typ {
     const typ = checker.checkExpr(binary.left);
     _ = checker.checkExpr(binary.right);
-    return typ;
+    switch (binary.op) {
+        .equ, .les => return .{ .prime = .bool },
+        else => return typ,
+    }
 }
 
 fn checkVar(checker: *Checker, name: []const u8) Typ {
