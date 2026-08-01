@@ -84,9 +84,18 @@ fn checkAst(checker: *Checker, ast: Ast) !void {
     for (ast.funs) |fun| {
         try checker.regHeader(fun.header);
     }
+    checker.checkMain();
     for (ast.funs) |fun| {
         try checker.checkFun(fun);
     }
+}
+
+fn checkMain(checker: *Checker) void {
+    _ = checker.fun_typs.get("main") orelse {
+        std.log.err("`main` function not found\n", .{});
+        checker.errors_cnt += 1;
+        return;
+    };
 }
 
 fn regHeader(checker: *Checker, header: Ast.Header) !void {
