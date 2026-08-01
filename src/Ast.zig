@@ -154,6 +154,7 @@ funs: []const Fun,
 strs: []const []const u8,
 arena: std.heap.ArenaAllocator,
 
-pub fn deinit(ast: Ast) void {
+pub fn deinit(ast: *Ast) void {
     ast.arena.deinit();
+    ast.* = undefined;
 }

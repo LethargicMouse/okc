@@ -24,7 +24,8 @@ pub fn read(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !Source {
     };
 }
 
-pub fn deinit(source: Source, gpa: std.mem.Allocator) void {
+pub fn deinit(source: *Source, gpa: std.mem.Allocator) void {
     gpa.free(source.code);
     gpa.free(source.lines);
+    source.* = undefined;
 }

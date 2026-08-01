@@ -78,11 +78,11 @@ const LexPair = struct { str: []const u8, lexeme: Lexeme };
 
 const Lexer = @This();
 
-source: Source,
+source: *const Source,
 poses: []const Pos,
 cursor: usize = 0,
 
-pub fn init(gpa: std.mem.Allocator, source: Source) !Lexer {
+pub fn init(gpa: std.mem.Allocator, source: *const Source) !Lexer {
     const poses = try Pos.makePoses(gpa, source.code);
     return .{ .source = source, .poses = poses };
 }
@@ -239,6 +239,7 @@ fn makeToken(lexer: *Lexer, lexeme: Lexeme, len: usize) Token {
     return .{ .lexeme = lexeme, .location = location };
 }
 
-fn deinit(lexer: Lexer, gpa: std.mem.Allocator) void {
+fn deinit(lexer: *Lexer, gpa: std.mem.Allocator) void {
     gpa.free(lexer.poses);
+    lexer.* = undefined;
 }

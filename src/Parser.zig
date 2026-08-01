@@ -41,6 +41,7 @@ const ErrMsgs = struct {
 
     fn deinit(err_msgs: *ErrMsgs, gpa: std.mem.Allocator) void {
         err_msgs.inner.deinit(gpa);
+        err_msgs.* = undefined;
     }
 };
 
@@ -542,6 +543,7 @@ fn deinit(parser: *Parser) void {
     parser.gpa.free(parser.tokens);
     parser.err_msgs.deinit(parser.gpa);
     parser.strs.deinit(parser.gpa);
+    parser.* = undefined;
 }
 
 fn expectLoud(parser: *Parser, lexeme: Lexeme) !void {
