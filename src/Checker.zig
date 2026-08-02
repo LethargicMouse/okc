@@ -234,10 +234,21 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr) Typ {
 
 fn checkLiteralLoc(checker: *Checker, literal_loc: Ast.LiteralLoc) Typ {
     switch (literal_loc.literal) {
-        .int => return .{ .prime = .i32 },
+        .int => |int| return checker.checkInt(literal_loc.location, int),
         .str => return .{ .name = "str" },
         .vari => |name| return checker.checkVar(literal_loc.location, name),
     }
+}
+
+fn checkInt(checker: *Checker, location: Location, int: []const u8) Typ {
+    _ = std.fmt.parseInt(i64, int, 10) catch {
+        std.log.err(
+            \\in {f}
+            \\     integer is too large
+        , .{location});
+        checker.errors_cnt += 1;
+    };
+    return .{ .prime = .i32 };
 }
 
 fn checkField(checker: *Checker, field: Ast.Field) Typ {
