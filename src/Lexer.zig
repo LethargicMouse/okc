@@ -10,6 +10,7 @@ pub const Lexeme = union(enum) {
     name: []const u8,
     int: []const u8,
     str: []const u8,
+    char: u8,
     dot,
     orr,
     rem,
@@ -40,6 +41,7 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .char => "<char>",
             .dot => "`.`",
             .orr => "`or`",
             .rem => "`%`",
@@ -119,7 +121,15 @@ fn skipSpaces(lexer: *Lexer) void {
 }
 
 fn lexNext(lexer: *Lexer) ?Token {
-    return lexer.lexByList() orelse lexer.lexVerbal() orelse lexer.lexInt() orelse lexer.lexStr();
+    return lexer.lexByList() orelse lexer.lexVerbal() orelse lexer.lexInt() orelse lexer.lexStr() orelse lexer.lexChar();
+}
+
+fn lexChar(lexer: *Lexer) ?Token {
+    const rest = lexer.getRest();
+    if (rest.len >= 3 and rest[0] == '\'' and rest[0] == '\'') {
+        return lexer.makeToken(.{ .char = rest[1] }, 3);
+    }
+    return null;
 }
 
 fn lexStr(lexer: *Lexer) ?Token {
@@ -173,7 +183,7 @@ const verbal_list = [_]LexPair{
 
 fn lexByList(lexer: *Lexer) ?Token {
     inline for (lex_list) |pair| {
-        if (std.mem.startsWith(u8, lexer.rest(), pair.str)) {
+        if (std.mem.startsWith(u8, lexer.getRest(), pair.str)) {
             return lexer.makeToken(pair.lexeme, pair.str.len);
         }
     }
@@ -200,7 +210,7 @@ const lex_list = [_]LexPair{
     .{ .str = "}", .lexeme = .curr },
 };
 
-fn rest(lexer: Lexer) []const u8 {
+fn getRest(lexer: Lexer) []const u8 {
     return lexer.source.code[lexer.cursor..];
 }
 
