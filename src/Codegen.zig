@@ -447,13 +447,14 @@ fn genBinary(gen: *Codegen, binary: Ast.Binary) !TypVal {
 
 fn binOpRetTyp(bin_op: Ast.BinOp, child_typ: Typ) Typ {
     switch (bin_op) {
-        .sub, .add, .mul, .div, .rem => return child_typ,
+        .sub, .add, .mul, .div, .rem, .andb => return child_typ,
         .equ, .les => return .i1,
     }
 }
 
 fn genBinOp(gen: *Codegen, bin_op: Ast.BinOp) !void {
     switch (bin_op) {
+        .andb => try gen.print("and", .{}),
         .add => try gen.print("add", .{}),
         .sub => try gen.print("sub", .{}),
         .mul => try gen.print("mul", .{}),

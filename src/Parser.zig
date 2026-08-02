@@ -384,12 +384,18 @@ fn parseBinOp(parser: *Parser, prior: u8) !Ast.BinOp {
         parseEqu,
         parseLes,
         parseRem,
+        parseBitAnd,
     });
     if (res.prior() < prior) {
         parser.cursor -= 1;
         return error.ParseFailed;
     }
     return res;
+}
+
+fn parseBitAnd(parser: *Parser) !Ast.BinOp {
+    try parser.expect(.amp);
+    return .andb;
 }
 
 fn parseRem(parser: *Parser) !Ast.BinOp {

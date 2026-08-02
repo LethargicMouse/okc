@@ -130,6 +130,7 @@ pub const Binary = struct {
 };
 
 pub const BinOp = enum {
+    andb,
     equ,
     add,
     sub,
@@ -141,8 +142,9 @@ pub const BinOp = enum {
     pub fn prior(bin_op: BinOp) u8 {
         switch (bin_op) {
             .equ, .les => return 0,
-            .add, .sub => return 1,
-            .mul, .div, .rem => return 2,
+            .andb => return 1,
+            .add, .sub => return 2,
+            .mul, .div, .rem => return 3,
         }
     }
 };
