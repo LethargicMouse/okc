@@ -138,3 +138,7 @@ test "fizzbuzz.ok" {
 test "str.ok" {
     try testFile("str", "6-7!!!\n");
 }
+
+test "void_fun.ok" {
+    try testFile("void_fun", "hello\n");
+}

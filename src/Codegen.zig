@@ -192,7 +192,8 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
 }
 
 fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
-    try gen.print("\ndefine i32 @{s}(", .{fun.header.name});
+    const ret_typ = genTyp(fun.header.ret_typ);
+    try gen.print("\ndefine {f} @{s}(", .{ ret_typ, fun.header.name });
     if (fun.header.params.len != 0) {
         try gen.genParam(fun.header.params[0]);
         for (fun.header.params[1..]) |param| {
@@ -206,6 +207,9 @@ fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
     , .{});
     for (fun.statements) |statement| {
         try gen.genStatement(statement);
+    }
+    if (ret_typ == .void) {
+        try gen.print("\n  ret void", .{});
     }
     try gen.print("\n}}", .{});
 }
@@ -351,6 +355,8 @@ fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
     const ret_tmp = gen.newTmp();
     if (ret_typ != .void) {
         try gen.print("\n  %{} =", .{ret_tmp});
+    } else {
+        try gen.print("\n  ", .{});
     }
     try gen.print("call {f} @{s}(", .{ ret_typ, call.name });
     if (call.args.len != 0) {
