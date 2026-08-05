@@ -52,6 +52,7 @@ const Typ = union(enum) {
     i32,
     i64,
     ptr,
+    void,
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (typ) {
@@ -228,6 +229,7 @@ fn genPrime(prime: Ast.Prime) Typ {
         .u8 => return .i8,
         .u64 => return .i64,
         .bool => return .i1,
+        .void => return .void,
     }
 }
 
@@ -345,10 +347,12 @@ fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
         const typ_val = try gen.genExpr(arg);
         try arg_typ_vals.append(gen.gpa, typ_val);
     }
-    const ret_tmp = gen.newTmp();
-    try gen.print("\n  %{} = call ", .{ret_tmp});
     const ret_typ = gen.fun_ret_typs.get(call.name).?;
-    try gen.print("{f} @{s}(", .{ ret_typ, call.name });
+    const ret_tmp = gen.newTmp();
+    if (ret_typ != .void) {
+        try gen.print("\n  %{} =", .{ret_tmp});
+    }
+    try gen.print("call {f} @{s}(", .{ ret_typ, call.name });
     if (call.args.len != 0) {
         try gen.print("{f}", .{arg_typ_vals.items[0]});
         for (arg_typ_vals.items[1..]) |val| {

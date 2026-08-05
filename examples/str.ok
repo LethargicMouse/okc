@@ -1,4 +1,4 @@
-extern fn printf(fmt: &u8, n: u64) i32;
+extern fn printf(fmt: &u8, n: u64) void;
 
 fn main() i32 {
   let first = "siiiix";

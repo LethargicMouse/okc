@@ -35,6 +35,7 @@ pub const Prime = enum {
     i32,
     u64,
     bool,
+    void,
 
     pub fn isNumber(prime: Prime) bool {
         switch (prime) {

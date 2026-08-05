@@ -148,12 +148,17 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
 fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
     switch (statement) {
         .ret => |expr| checker.checkRet(expr),
-        .expr => |expr| _ = checker.checkExpr(expr),
+        .expr => |expr| checker.checkExprStatement(expr),
         .let => |let| try checker.checkLet(let),
         .assign => |assign| checker.checkAssign(assign),
         .iff => |iff| try checker.checkIf(iff),
         .whi => |whi| try checker.checkWhile(whi),
     }
+}
+
+fn checkExprStatement(checker: *Checker, expr: Ast.Expr) void {
+    const typ = checker.checkExpr(expr);
+    checker.unify(expr.location(), .{ .prime = .void }, typ);
 }
 
 fn checkWhile(checker: *Checker, whi: Ast.While) !void {
