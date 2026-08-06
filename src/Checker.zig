@@ -276,6 +276,9 @@ fn checkInt(checker: *Checker, location: Location, int: []const u8) Typ {
 
 fn checkField(checker: *Checker, field: Ast.Field) Typ {
     const expr_typ = checker.checkExpr(field.expr);
+    if (expr_typ == .err) {
+        return .err;
+    }
     const name = if (expr_typ == .name) expr_typ.name else {
         checker.failNoFields(field.expr.location(), expr_typ);
         return .err;
