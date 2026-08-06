@@ -142,3 +142,7 @@ test "str.ok" {
 test "void_fun.ok" {
     try testFile("void_fun", "hello\n");
 }
+
+test "ignore.ok" {
+    try testFile("ignore", "");
+}

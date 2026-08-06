@@ -23,6 +23,10 @@ const ErrMsgs = struct {
     inner: std.ArrayList([]const u8),
 
     pub fn format(err_msgs: ErrMsgs, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        if (err_msgs.inner.items.len == 1) {
+            try writer.print("     expected  {s}", .{err_msgs.inner.items[0]});
+            return;
+        }
         try writer.writeAll("     expected:");
         for (err_msgs.inner.items) |msg| {
             try writer.print("\n       - {s}", .{msg});
@@ -69,7 +73,7 @@ pub fn run(parser: *Parser) !Ast {
     const res = try parser.parseMaybe(Ast, parseAst) orelse {
         // arena is not passed to ast, freeing it
         parser.arena.deinit();
-        std.log.err("failed to parse {f}\n{f}\n     found {s}", .{
+        std.log.err("failed to parse {f}\n{f}\n        found  {s}", .{
             parser.tokens[parser.err_cursor].location,
             parser.err_msgs,
             parser.tokens[parser.err_cursor].lexeme.describe(),
@@ -227,10 +231,19 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
         parseWhileStatement,
         parseAssignStatement,
         parseExprStatement,
+        parseIgnoreStatement,
     }) catch |err| {
         try parser.fail("<statement>");
         return err;
     };
+}
+
+fn parseIgnoreStatement(parser: *Parser) !Ast.Statement {
+    try parser.expect(.wild);
+    try parser.expectLoud(.equ);
+    const expr = try parser.parseExprLoud();
+    try parser.expectLoud(.semi);
+    return .{ .ignore = expr };
 }
 
 fn parseWhileStatement(parser: *Parser) !Ast.Statement {

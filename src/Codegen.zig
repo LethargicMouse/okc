@@ -245,6 +245,7 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
         .assign => |assign| try gen.genAssign(assign),
         .iff => |iff| try gen.genIf(iff),
         .whi => |whi| try gen.genWhile(whi),
+        .ignore => |expr| _ = try gen.genExpr(expr),
     }
 }
 
@@ -354,7 +355,7 @@ fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
     const ret_typ = gen.fun_ret_typs.get(call.name).?;
     const ret_tmp = gen.newTmp();
     if (ret_typ != .void) {
-        try gen.print("\n  %{} =", .{ret_tmp});
+        try gen.print("\n  %{} = ", .{ret_tmp});
     } else {
         try gen.print("\n  ", .{});
     }

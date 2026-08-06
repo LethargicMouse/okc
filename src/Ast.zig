@@ -57,6 +57,7 @@ pub const Statement = union(enum) {
     assign: Assign,
     iff: If,
     whi: While,
+    ignore: Expr,
 };
 
 pub const While = struct {

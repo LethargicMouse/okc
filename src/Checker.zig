@@ -153,6 +153,7 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
         .assign => |assign| checker.checkAssign(assign),
         .iff => |iff| try checker.checkIf(iff),
         .whi => |whi| try checker.checkWhile(whi),
+        .ignore => |expr| _ = checker.checkExpr(expr),
     }
 }
 
