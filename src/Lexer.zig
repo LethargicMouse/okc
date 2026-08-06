@@ -23,7 +23,7 @@ pub const Lexeme = union(enum) {
     plus,
     equ2,
     equ,
-    let,
+    val,
     comma,
     unclosed_str,
     amp,
@@ -55,7 +55,7 @@ pub const Lexeme = union(enum) {
             .minus => "`-`",
             .plus => "`+`",
             .equ => "`=`",
-            .let => "`let`",
+            .val => "`val`",
             .comma => "`,`",
             .str => "<str>",
             .unclosed_str => "<unclosed string>",
@@ -180,7 +180,7 @@ const verbal_list = [_]LexPair{
     .{ .str = "extern", .lexeme = .ext },
     .{ .str = "fn", .lexeme = .fun },
     .{ .str = "if", .lexeme = .iff },
-    .{ .str = "let", .lexeme = .let },
+    .{ .str = "val", .lexeme = .val },
     .{ .str = "return", .lexeme = .ret },
 };
 

@@ -149,7 +149,7 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
     switch (statement) {
         .ret => |expr| checker.checkRet(expr),
         .expr => |expr| checker.checkExprStatement(expr),
-        .let => |let| try checker.checkLet(let),
+        .val => |val_statement| try checker.checkValStatement(val_statement),
         .assign => |assign| checker.checkAssign(assign),
         .iff => |iff| try checker.checkIf(iff),
         .whi => |whi| try checker.checkWhile(whi),
@@ -222,9 +222,9 @@ fn canUnify(a: Typ, b: Typ) bool {
     }
 }
 
-fn checkLet(checker: *Checker, let: Ast.Let) !void {
-    const typ = checker.checkExpr(let.expr);
-    try checker.vars.put(let.name, .{
+fn checkValStatement(checker: *Checker, val_statement: Ast.ValStatement) !void {
+    const typ = checker.checkExpr(val_statement.expr);
+    try checker.vars.put(val_statement.name, .{
         .typ = typ,
     });
 }

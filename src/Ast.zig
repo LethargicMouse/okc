@@ -53,7 +53,7 @@ pub const Fun = struct {
 pub const Statement = union(enum) {
     ret: Expr,
     expr: Expr,
-    let: Let,
+    val: ValStatement,
     assign: Assign,
     iff: If,
     whi: While,
@@ -80,7 +80,7 @@ pub const Assign = struct {
     expr: Expr,
 };
 
-pub const Let = struct {
+pub const ValStatement = struct {
     name: []const u8,
     expr: Expr,
 };
