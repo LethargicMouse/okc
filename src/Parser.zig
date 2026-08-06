@@ -226,7 +226,8 @@ fn parseBlockLoud(parser: *Parser) Error![]const Ast.Statement {
 fn parseStatementLoud(parser: *Parser) !Ast.Statement {
     return parser.parseEither(Ast.Statement, .{
         parseRetStatement,
-        parseValDeclareStatement,
+        parseDeclareStatement,
+        parseMutDeclareStatement,
         parseIfStatement,
         parseWhileStatement,
         parseAssignStatement,
@@ -288,6 +289,7 @@ fn parseElseLoud(parser: *Parser) ![]const Ast.Statement {
 }
 
 fn parseAssignStatement(parser: *Parser) !Ast.Statement {
+    const location = parser.getLocation();
     const name = try parser.parseName();
     try parser.expect(.equ);
     const expr = try parser.parseExprLoud();
@@ -295,18 +297,36 @@ fn parseAssignStatement(parser: *Parser) !Ast.Statement {
     return .{ .assign = .{
         .name = name,
         .expr = expr,
+        .location = location,
     } };
 }
 
-fn parseValDeclareStatement(parser: *Parser) !Ast.Statement {
-    try parser.expect(.val);
+fn parseDeclareStatement(parser: *Parser) !Ast.Statement {
+    try parser.expect(.let);
+    const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.equ);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
-    return .{ .val_declare = .{
+    return .{ .declare = .{
         .name = name,
         .expr = expr,
+        .location = location,
+    } };
+}
+
+fn parseMutDeclareStatement(parser: *Parser) !Ast.Statement {
+    try parser.expect(.let);
+    try parser.expect(.mut);
+    const location = parser.getLocation();
+    const name = try parser.parseNameLoud();
+    try parser.expectLoud(.equ);
+    const expr = try parser.parseExprLoud();
+    try parser.expectLoud(.semi);
+    return .{ .mut_declare = .{
+        .name = name,
+        .expr = expr,
+        .location = location,
     } };
 }
 

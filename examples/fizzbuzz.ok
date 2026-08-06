@@ -2,7 +2,7 @@ extern fn printf(fmt: &u8, n: i32) void;
 extern fn puts(s: &u8) void;
 
 fn main() i32 {
-  val i = 0;
+  let mut i = 0;
   while (i < 20) {
     i = i + 1;
     if (i % 15 == 0) {

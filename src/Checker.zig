@@ -37,6 +37,7 @@ const Struct = struct {
 
 const Var = struct {
     typ: Typ,
+    location: Location,
     mutable: bool,
 };
 
@@ -150,11 +151,12 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
     switch (statement) {
         .ret => |expr| checker.checkRet(expr),
         .expr => |expr| checker.checkExprStatement(expr),
-        .val_declare => |declare| try checker.checkDeclare(declare, false),
+        .declare => |declare| try checker.checkDeclare(declare, false),
         .assign => |assign| checker.checkAssign(assign),
         .iff => |iff| try checker.checkIf(iff),
         .whi => |whi| try checker.checkWhile(whi),
         .ignore => |expr| _ = checker.checkExpr(expr),
+        .mut_declare => |declare| try checker.checkDeclare(declare, true),
     }
 }
 
@@ -189,6 +191,18 @@ fn checkAssign(checker: *Checker, assign: Ast.Assign) void {
     const typ = checker.checkExpr(assign.expr);
     const vari = checker.vars.get(assign.name).?;
     checker.unify(assign.expr.location(), vari.typ, typ);
+    if (!vari.mutable) {
+        std.log.err(
+            \\in {f}
+            \\     item `{s}` is immutable
+            \\
+        , .{ assign.location, assign.name });
+        std.log.info(
+            "try inserting `mut` before name in {f}\n",
+            .{vari.location},
+        );
+        checker.errors_cnt += 1;
+    }
 }
 
 fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) void {
@@ -227,6 +241,7 @@ fn checkDeclare(checker: *Checker, declare: Ast.Declare, mutable: bool) !void {
     const typ = checker.checkExpr(declare.expr);
     try checker.vars.put(declare.name, .{
         .typ = typ,
+        .location = declare.location,
         .mutable = mutable,
     });
 }

@@ -1,8 +1,8 @@
 extern fn printf(fmt: &u8, n: u64) void;
 
 fn main() i32 {
-  val first = "siiiix";
-  val second = "seveeen";
+  let first = "siiiix";
+  let second = "seveeen";
   printf("%zu-".ptr, first.len);
   printf("%zu!!!\n".ptr, second.len);
   return 0;

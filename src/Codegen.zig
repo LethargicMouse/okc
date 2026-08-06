@@ -241,11 +241,12 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
     switch (statement) {
         .ret => |expr| try gen.genRet(expr),
         .expr => |expr| _ = try gen.genExpr(expr),
-        .val_declare => |declare| try gen.genDeclare(declare),
+        .declare => |declare| try gen.genDeclare(declare),
         .assign => |assign| try gen.genAssign(assign),
         .iff => |iff| try gen.genIf(iff),
         .whi => |whi| try gen.genWhile(whi),
         .ignore => |expr| _ = try gen.genExpr(expr),
+        .mut_declare => |declare| try gen.genDeclare(declare),
     }
 }
 

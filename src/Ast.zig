@@ -53,11 +53,12 @@ pub const Fun = struct {
 pub const Statement = union(enum) {
     ret: Expr,
     expr: Expr,
-    val_declare: Declare,
+    declare: Declare,
     assign: Assign,
     iff: If,
     whi: While,
     ignore: Expr,
+    mut_declare: Declare,
 };
 
 pub const While = struct {
@@ -78,11 +79,13 @@ pub const Branch = struct {
 pub const Assign = struct {
     name: []const u8,
     expr: Expr,
+    location: Location,
 };
 
 pub const Declare = struct {
     name: []const u8,
     expr: Expr,
+    location: Location,
 };
 
 pub const Call = struct {

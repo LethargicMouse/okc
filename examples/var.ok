@@ -1,7 +1,7 @@
 extern fn puts(s: &u8) void;
 
 fn main() i32 {
-  val msg = "wazzup niggas".ptr;
+  let msg = "wazzup niggas".ptr;
   puts(msg);
   return 0;
 }
