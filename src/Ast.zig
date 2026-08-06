@@ -53,7 +53,7 @@ pub const Fun = struct {
 pub const Statement = union(enum) {
     ret: Expr,
     expr: Expr,
-    declare: Declare,
+    val_declare: Declare,
     assign: Assign,
     iff: If,
     whi: While,

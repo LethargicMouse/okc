@@ -226,7 +226,7 @@ fn parseBlockLoud(parser: *Parser) Error![]const Ast.Statement {
 fn parseStatementLoud(parser: *Parser) !Ast.Statement {
     return parser.parseEither(Ast.Statement, .{
         parseRetStatement,
-        parseDeclareStatement,
+        parseValDeclareStatement,
         parseIfStatement,
         parseWhileStatement,
         parseAssignStatement,
@@ -298,13 +298,13 @@ fn parseAssignStatement(parser: *Parser) !Ast.Statement {
     } };
 }
 
-fn parseDeclareStatement(parser: *Parser) !Ast.Statement {
+fn parseValDeclareStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.val);
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.equ);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
-    return .{ .declare = .{
+    return .{ .val_declare = .{
         .name = name,
         .expr = expr,
     } };

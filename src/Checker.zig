@@ -150,7 +150,7 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
     switch (statement) {
         .ret => |expr| checker.checkRet(expr),
         .expr => |expr| checker.checkExprStatement(expr),
-        .declare => |declare| try checker.checkDeclare(declare),
+        .val_declare => |declare| try checker.checkDeclare(declare, false),
         .assign => |assign| checker.checkAssign(assign),
         .iff => |iff| try checker.checkIf(iff),
         .whi => |whi| try checker.checkWhile(whi),
@@ -223,9 +223,12 @@ fn canUnify(a: Typ, b: Typ) bool {
     }
 }
 
-fn checkDeclare(checker: *Checker, declare: Ast.Declare) !void {
+fn checkDeclare(checker: *Checker, declare: Ast.Declare, mutable: bool) !void {
     const typ = checker.checkExpr(declare.expr);
-    try checker.vars.put(declare.name, .{ .typ = typ, .mutable = false });
+    try checker.vars.put(declare.name, .{
+        .typ = typ,
+        .mutable = mutable,
+    });
 }
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr) Typ {
