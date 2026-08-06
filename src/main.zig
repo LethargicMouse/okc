@@ -146,3 +146,7 @@ test "void_fun.ok" {
 test "ignore.ok" {
     try testFile("ignore", "");
 }
+
+test "fun_arg.ok" {
+    try testFile("fun_arg", "hello there\n");
+}

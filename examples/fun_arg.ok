@@ -1,0 +1,10 @@
+extern fn write(fd: i32, s: &u8, n: u64) void;
+
+fn main() i32 {
+  put_str("hello there\n");
+  return 0;
+}
+
+fn put_str(msg: str) void {
+  write(1, msg.ptr, msg.len);
+}
