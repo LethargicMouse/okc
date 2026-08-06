@@ -51,7 +51,7 @@ const Typ = union(enum) {
     i8,
     i32,
     i64,
-    ptr,
+    ptr: *const Typ,
     void,
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
@@ -77,6 +77,7 @@ io: std.Io,
 gpa: std.mem.Allocator,
 file: std.Io.File,
 writer: std.Io.File.Writer,
+arena: std.heap.ArenaAllocator,
 fun_ret_typs: std.StringHashMap(Typ),
 vars: std.StringHashMap(Var),
 structs: std.StringHashMap(Struct),
@@ -90,6 +91,7 @@ pub fn init(io: std.Io, gpa: std.mem.Allocator, write_buf: []u8, comptime path: 
         .gpa = gpa,
         .file = file,
         .writer = file.writer(io, write_buf),
+        .arena = std.heap.ArenaAllocator.init(gpa),
         .fun_ret_typs = std.StringHashMap(Typ).init(gpa),
         .vars = std.StringHashMap(Var).init(gpa),
         .structs = std.StringHashMap(Struct).init(gpa),
@@ -124,28 +126,30 @@ fn genAst(gen: *Codegen, ast: Ast) !void {
     try gen.print("\n", .{});
 }
 
+const i8_typ: Typ = .i8;
+
 fn genStrStruct(gen: *Codegen) !void {
     try gen.print("\n%str = type {{ ptr, i64 }}", .{});
     var struc = Struct{
         .fields = std.StringHashMap(Field).init(gen.gpa),
     };
-    try struc.fields.put("ptr", .{ .typ = .ptr, .index = 0 });
+    try struc.fields.put("ptr", .{ .typ = .{ .ptr = &i8_typ }, .index = 0 });
     try struc.fields.put("len", .{ .typ = .i64, .index = 1 });
     try gen.structs.put("str", struc);
 }
 
 fn registerHeader(gen: *Codegen, header: Ast.Header) !void {
-    const typ = genTyp(header.ret_typ);
+    const typ = try gen.genTyp(header.ret_typ);
     try gen.fun_ret_typs.put(header.name, typ);
 }
 
 fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
     try gen.print("\ndeclare i32 @{s}(", .{ext_fun.header.name});
     if (ext_fun.header.params.len != 0) {
-        const first_typ = genTyp(ext_fun.header.params[0].typ);
+        const first_typ = try gen.genTyp(ext_fun.header.params[0].typ);
         try gen.print("{f}", .{first_typ});
         for (ext_fun.header.params[1..]) |param| {
-            const typ = genTyp(param.typ);
+            const typ = try gen.genTyp(param.typ);
             try gen.print(", {f}", .{typ});
         }
     }
@@ -192,19 +196,27 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
 }
 
 fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
-    const ret_typ = genTyp(fun.header.ret_typ);
+    const ret_typ = try gen.genTyp(fun.header.ret_typ);
     try gen.print("\ndefine {f} @{s}(", .{ ret_typ, fun.header.name });
+    var param_typ_vals: [10]TypVal = undefined;
     if (fun.header.params.len != 0) {
-        try gen.genParam(fun.header.params[0]);
-        for (fun.header.params[1..]) |param| {
+        param_typ_vals[0] = try gen.genParam(fun.header.params[0]);
+        for (fun.header.params[1..], 1..) |param, i| {
             try gen.print(", ", .{});
-            try gen.genParam(param);
+            param_typ_vals[i] = try gen.genParam(param);
         }
     }
     try gen.print(
         \\) {{
         \\entry:
     , .{});
+    for (
+        param_typ_vals[0..fun.header.params.len],
+        fun.header.params,
+    ) |typ_val, param| {
+        const vari = try gen.toStack(typ_val);
+        try gen.vars.put(param.name, vari);
+    }
     for (fun.statements) |statement| {
         try gen.genStatement(statement);
     }
@@ -214,16 +226,26 @@ fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
     try gen.print("\n}}", .{});
 }
 
-fn genParam(gen: *Codegen, param: Ast.Param) !void {
-    const typ = genTyp(param.typ);
-    try gen.print("{f} {s}", .{ typ, param.name });
+fn genParam(gen: *Codegen, param: Ast.Param) !TypVal {
+    const typ = try gen.genTyp(param.typ);
+    const tmp = gen.newTmp();
+    try gen.print("{f} %{}", .{ typ, tmp });
+    return .{ .typ = typ, .val = .{ .tmp = tmp } };
 }
 
-fn genTyp(typ: Ast.Typ) Typ {
+fn genTyp(gen: *Codegen, typ: Ast.Typ) !Typ {
     switch (typ) {
-        .name => return .ptr,
+        .name => |name| {
+            const typ_ptr = try gen.arena.allocator().create(Typ);
+            typ_ptr.* = .{ .name = name };
+            return .{ .ptr = typ_ptr };
+        },
         .prime => |prime| return genPrime(prime),
-        .ptr => return .ptr,
+        .ptr => |ptr_typ| {
+            const typ_ptr = try gen.arena.allocator().create(Typ);
+            typ_ptr.* = try gen.genTyp(ptr_typ.*);
+            return .{ .ptr = typ_ptr };
+        },
     }
 }
 
@@ -319,8 +341,8 @@ fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
 
 fn genDeclare(gen: *Codegen, declare: Ast.Declare) !void {
     const typ_val = try gen.genExpr(declare.expr);
-    const tmp = try gen.toStack(typ_val);
-    try gen.vars.put(declare.name, tmp);
+    const vari = try gen.toStack(typ_val);
+    try gen.vars.put(declare.name, vari);
 }
 
 fn toStack(gen: *Codegen, typ_val: TypVal) !Var {
@@ -403,12 +425,12 @@ fn genField(gen: *Codegen, field: Ast.Field) !TypVal {
     // cuz the latter evals to the former for structs
     // and we expect a struct
     const typ_val = try gen.genExpr(field.expr);
-    const struc = gen.structs.get(typ_val.typ.name).?;
+    const struc = gen.structs.get(typ_val.typ.ptr.name).?;
     const fiel = struc.fields.get(field.name).?;
     const ptr_tmp = gen.newTmp();
     try gen.print(
         "\n  %{} = getelementptr inbounds %{s}, ptr %{}, i32 0, i32 {}",
-        .{ ptr_tmp, typ_val.typ.name, typ_val.val.tmp, fiel.index },
+        .{ ptr_tmp, typ_val.typ.ptr.name, typ_val.val.tmp, fiel.index },
     );
     const tmp = try gen.load(fiel.typ, ptr_tmp);
     return .{
@@ -430,6 +452,8 @@ fn genInt(int: []const u8) TypVal {
     };
 }
 
+const str_typ = Typ{ .name = "str" };
+
 fn genStr(gen: *Codegen, str: usize) !TypVal {
     const len = gen.str_lens.items[str];
     const tmp = gen.newTmp();
@@ -438,8 +462,9 @@ fn genStr(gen: *Codegen, str: usize) !TypVal {
         \\  %{} = alloca %str, align 8
         \\  store %str {{ ptr @.s{}, i64 {} }}, ptr %{}
     , .{ tmp, str, len, tmp });
+
     return .{
-        .typ = .{ .name = "str" },
+        .typ = .{ .ptr = &str_typ },
         .val = .{ .tmp = tmp },
     };
 }
@@ -482,8 +507,7 @@ fn genVar(gen: *Codegen, name: []const u8) !TypVal {
     if (vari.inner_typ == .name) {
         return vari.toTypVar();
     }
-    const load_tmp = gen.newTmp();
-    try gen.print("\n  %{} = load {f}, ptr %{}", .{ load_tmp, vari.inner_typ, vari.tmp });
+    const load_tmp = try gen.load(vari.inner_typ, vari.tmp);
     return .{
         .typ = vari.inner_typ,
         .val = .{ .tmp = load_tmp },
@@ -506,5 +530,6 @@ fn deinit(gen: *Codegen) void {
         struc.fields.deinit();
     }
     gen.structs.deinit();
+    gen.arena.deinit();
     gen.* = undefined;
 }

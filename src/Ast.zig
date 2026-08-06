@@ -15,6 +15,7 @@ pub const Header = struct {
 pub const Param = struct {
     name: []const u8,
     typ: Typ,
+    location: Location,
 };
 
 pub const Typ = union(enum) {

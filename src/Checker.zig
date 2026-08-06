@@ -142,6 +142,13 @@ fn boxTyp(checker: *Checker, typ: Typ) !*Typ {
 
 fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
     checker.ret_typ = checker.fun_typs.get(fun.header.name).?.ret_typ;
+    for (fun.header.params) |param| {
+        try checker.vars.put(param.name, .{
+            .typ = try checker.checkTyp(param.typ),
+            .location = param.location,
+            .mutable = false,
+        });
+    }
     for (fun.statements) |statement| {
         try checker.checkStatement(statement);
     }

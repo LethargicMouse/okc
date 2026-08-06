@@ -144,12 +144,14 @@ fn parseSep(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) ![]const 
 }
 
 fn parseParamLoud(parser: *Parser) !Ast.Param {
+    const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.colon);
     const typ = try parser.parseTypLoud();
     return .{
         .name = name,
         .typ = typ,
+        .location = location,
     };
 }
 
