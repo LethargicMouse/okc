@@ -37,6 +37,7 @@ const Struct = struct {
 
 const Var = struct {
     typ: Typ,
+    mutable: bool,
 };
 
 const FunTyp = struct {
@@ -149,7 +150,7 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
     switch (statement) {
         .ret => |expr| checker.checkRet(expr),
         .expr => |expr| checker.checkExprStatement(expr),
-        .val => |val_statement| try checker.checkValStatement(val_statement),
+        .declare => |declare| try checker.checkDeclare(declare),
         .assign => |assign| checker.checkAssign(assign),
         .iff => |iff| try checker.checkIf(iff),
         .whi => |whi| try checker.checkWhile(whi),
@@ -222,11 +223,9 @@ fn canUnify(a: Typ, b: Typ) bool {
     }
 }
 
-fn checkValStatement(checker: *Checker, val_statement: Ast.ValStatement) !void {
-    const typ = checker.checkExpr(val_statement.expr);
-    try checker.vars.put(val_statement.name, .{
-        .typ = typ,
-    });
+fn checkDeclare(checker: *Checker, declare: Ast.Declare) !void {
+    const typ = checker.checkExpr(declare.expr);
+    try checker.vars.put(declare.name, .{ .typ = typ, .mutable = false });
 }
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr) Typ {

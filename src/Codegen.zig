@@ -241,7 +241,7 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
     switch (statement) {
         .ret => |expr| try gen.genRet(expr),
         .expr => |expr| _ = try gen.genExpr(expr),
-        .val => |val_statement| try gen.genValStatement(val_statement),
+        .declare => |declare| try gen.genDeclare(declare),
         .assign => |assign| try gen.genAssign(assign),
         .iff => |iff| try gen.genIf(iff),
         .whi => |whi| try gen.genWhile(whi),
@@ -316,10 +316,10 @@ fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
     try gen.storeInto(vari.tmp, typ_val);
 }
 
-fn genValStatement(gen: *Codegen, val_statement: Ast.ValStatement) !void {
-    const typ_val = try gen.genExpr(val_statement.expr);
+fn genDeclare(gen: *Codegen, declare: Ast.Declare) !void {
+    const typ_val = try gen.genExpr(declare.expr);
     const tmp = try gen.toStack(typ_val);
-    try gen.vars.put(val_statement.name, tmp);
+    try gen.vars.put(declare.name, tmp);
 }
 
 fn toStack(gen: *Codegen, typ_val: TypVal) !Var {
