@@ -20,12 +20,14 @@ const Val = union(enum) {
     int: []const u8,
     str: usize,
     tmp: u32,
+    undef,
 
     pub fn format(val: Val, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (val) {
             .int => |int| try writer.print("{s}", .{int}),
             .str => |str| try writer.print("@.s{}", .{str}),
             .tmp => |tmp| try writer.print("%{}", .{tmp}),
+            .undef => try writer.writeAll("poison"),
         }
     }
 };
@@ -53,7 +55,7 @@ const Typ = union(enum) {
 };
 
 const Field = struct {
-    index: u32,
+    index: usize,
     typ: Typ,
 };
 
@@ -97,6 +99,9 @@ pub fn run(gen: *Codegen, ast: Ast) !void {
 fn genAst(gen: *Codegen, ast: Ast) !void {
     try gen.print("target triple = \"x86_64-pc-linux-gnu\"", .{});
     try gen.genStrStruct();
+    for (ast.strucs) |struc| {
+        try gen.genStruct(struc);
+    }
     for (ast.strs, 0..) |str, i| {
         const len = try gen.genStrDecl(i, str);
         try gen.str_lens.append(gen.gpa, len);
@@ -117,6 +122,26 @@ fn genAst(gen: *Codegen, ast: Ast) !void {
 }
 
 const i8_typ: Typ = .i8;
+
+fn genStruct(gen: *Codegen, struc: Ast.Struct) !void {
+    var res = Struct{
+        .fields = std.StringHashMap(Field).init(gen.gpa),
+    };
+    try gen.print("\n%{s} = type {{", .{struc.name});
+    for (struc.fields, 0..) |field, i| {
+        const typ = try gen.genTyp(field.typ);
+        try res.fields.put(field.name, .{
+            .typ = typ,
+            .index = i,
+        });
+        if (i != 0) {
+            try gen.print(",", .{});
+        }
+        try gen.print("\n  {f}", .{typ});
+    }
+    try gen.print("\n}}", .{});
+    try gen.structs.put(struc.name, res);
+}
 
 fn genStrStruct(gen: *Codegen) !void {
     try gen.print("\n%str = type {{ ptr, i64 }}", .{});
@@ -383,6 +408,7 @@ fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
         .call => |call| return gen.genCall(call),
         .binary => |binary| return gen.genBinary(binary.*),
         .field => |field| return gen.genField(field.*),
+        .struc => |struc| return gen.genStructExpr(struc),
     }
 }
 
@@ -460,6 +486,23 @@ fn genStr(gen: *Codegen, str: usize) !TypVal {
     return .{
         .typ = .{ .name = "str" },
         .val = .{ .tmp = tmp },
+    };
+}
+
+fn genStructExpr(gen: *Codegen, struc: Ast.StructExpr) !TypVal {
+    var val: Val = .undef;
+    for (struc.fields, 0..) |field, i| {
+        const typ_val = try gen.genExpr(field.expr);
+        const tmp = gen.newTmp();
+        try gen.print(
+            "\n  %{} = insertvalue %{s} {f}, {f}, {d}",
+            .{ tmp, struc.name, val, typ_val, i },
+        );
+        val = .{ .tmp = tmp };
+    }
+    return .{
+        .typ = .{ .name = struc.name },
+        .val = val,
     };
 }
 

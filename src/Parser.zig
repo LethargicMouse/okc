@@ -91,6 +91,7 @@ pub fn run(parser: *Parser) !Ast {
 
 fn parseAst(parser: *Parser) !Ast {
     const ext_funs = try parser.parseMany(Ast.ExtFun, parseExtFunLoud);
+    const strucs = try parser.parseMany(Ast.Struct, parseStructLoud);
     const funs = try parser.parseMany(Ast.Fun, parseFunLoud);
     try parser.expectLoud(.eof);
     const strs = try parser.arena.allocator().alloc([]const u8, parser.strs.items.len);
@@ -98,8 +99,29 @@ fn parseAst(parser: *Parser) !Ast {
     return .{
         .funs = funs,
         .ext_funs = ext_funs,
+        .strucs = strucs,
         .strs = strs,
         .arena = parser.arena,
+    };
+}
+
+fn parseStructLoud(parser: *Parser) !Ast.Struct {
+    try parser.expectLoud(.struc);
+    const name = try parser.parseNameLoud();
+    try parser.expectLoud(.curl);
+    const fields = try parser.parseSep(Ast.FieldDecl, parseFieldDeclLoud);
+    try parser.expect(.curr);
+    return .{
+        .name = name,
+        .fields = fields,
+    };
+}
+
+fn parseFieldDeclLoud(parser: *Parser) !Ast.FieldDecl {
+    const param = try parser.parseParamLoud();
+    return .{
+        .name = param.name,
+        .typ = param.typ,
     };
 }
 
@@ -508,9 +530,33 @@ fn getLocation(parser: Parser) Location {
 
 fn parseExprAtom(parser: *Parser) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
+        parseStructExpr,
         parseCallExpr,
         parseLiteralLocExpr,
     });
+}
+
+fn parseStructExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
+    const name = try parser.parseName();
+    try parser.expectLoud(.curl);
+    const fields = try parser.parseSep(Ast.NewField, parseNewFieldLoud);
+    try parser.expect(.curr);
+    return .{ .struc = .{
+        .name = name,
+        .fields = fields,
+        .location = location,
+    } };
+}
+
+fn parseNewFieldLoud(parser: *Parser) !Ast.NewField {
+    const name = try parser.parseNameLoud();
+    try parser.expectLoud(.colon);
+    const expr = try parser.parseExprLoud();
+    return .{
+        .name = name,
+        .expr = expr,
+    };
 }
 
 fn parseLiteralLocExpr(parser: *Parser) !Ast.Expr {

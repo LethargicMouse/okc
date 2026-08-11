@@ -150,3 +150,7 @@ test "ignore.ok" {
 test "fun_arg.ok" {
     try testFile("fun_arg", "hello there\n");
 }
+
+test "struct.ok" {
+    try testFile("struct", "six seven\n");
+}

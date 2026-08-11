@@ -79,7 +79,10 @@ pub fn run(checker: *Checker, ast: Ast) !void {
 }
 
 fn checkAst(checker: *Checker, ast: Ast) !void {
-    try checker.makeStrStruct();
+    try checker.regStrStruct();
+    for (ast.strucs) |struc| {
+        try checker.regStruct(struc);
+    }
     for (ast.ext_funs) |ext_fun| {
         try checker.regHeader(ext_fun.header);
     }
@@ -124,7 +127,20 @@ fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
     }
 }
 
-fn makeStrStruct(checker: *Checker) !void {
+fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
+    var res = Struct{
+        .fields = std.StringHashMap(Field).init(checker.structs.allocator),
+    };
+    for (struc.fields) |field| {
+        const typ = try checker.checkTyp(field.typ);
+        try res.fields.put(field.name, .{
+            .typ = typ,
+        });
+    }
+    try checker.structs.put(struc.name, res);
+}
+
+fn regStrStruct(checker: *Checker) !void {
     var struc = Struct{
         .fields = std.StringHashMap(Field).init(checker.structs.allocator),
     };
@@ -259,7 +275,15 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr) Typ {
         .call => |call| return checker.checkCall(call),
         .binary => |binary| return checker.checkBinary(binary.*),
         .field => |field| return checker.checkField(field.*),
+        .struc => |struc| return checker.checkStruc(struc),
     }
+}
+
+fn checkStruc(checker: *Checker, struc: Ast.StructExpr) Typ {
+    for (struc.fields) |field| {
+        _ = checker.checkExpr(field.expr);
+    }
+    return .{ .name = struc.name };
 }
 
 fn checkLiteralLoc(checker: *Checker, literal_loc: Ast.LiteralLoc) Typ {

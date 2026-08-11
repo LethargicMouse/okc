@@ -100,6 +100,7 @@ pub const Expr = union(enum) {
     call: Call,
     binary: *const Binary,
     field: *const Field,
+    struc: StructExpr,
 
     pub fn location(expr: Expr) Location {
         switch (expr) {
@@ -107,8 +108,20 @@ pub const Expr = union(enum) {
             .call => |call| return call.location,
             .binary => |binary| return binary.location,
             .field => |field| return field.location,
+            .struc => |struc| return struc.location,
         }
     }
+};
+
+pub const StructExpr = struct {
+    name: []const u8,
+    fields: []const NewField,
+    location: Location,
+};
+
+pub const NewField = struct {
+    name: []const u8,
+    expr: Expr,
 };
 
 pub const LiteralLoc = struct {
@@ -155,10 +168,21 @@ pub const BinOp = enum {
     }
 };
 
+pub const Struct = struct {
+    name: []const u8,
+    fields: []const FieldDecl,
+};
+
+pub const FieldDecl = struct {
+    name: []const u8,
+    typ: Typ,
+};
+
 const Ast = @This();
 
 ext_funs: []const ExtFun,
 funs: []const Fun,
+strucs: []const Struct,
 strs: []const []const u8,
 arena: std.heap.ArenaAllocator,
 
