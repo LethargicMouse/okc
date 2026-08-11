@@ -339,31 +339,36 @@ fn parseAssignStatement(parser: *Parser) !Ast.Statement {
 
 fn parseDeclareStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.let);
-    const location = parser.getLocation();
-    const name = try parser.parseNameLoud();
-    try parser.expectLoud(.equ);
-    const expr = try parser.parseExprLoud();
-    try parser.expectLoud(.semi);
-    return .{ .declare = .{
-        .name = name,
-        .expr = expr,
-        .location = location,
-    } };
+    const declare = try parser.parseDeclareLoud();
+    return .{ .declare = declare };
 }
 
 fn parseMutDeclareStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.let);
     try parser.expect(.mut);
+    const declare = try parser.parseDeclareLoud();
+    return .{ .mut_declare = declare };
+}
+
+fn parseDeclareLoud(parser: *Parser) !Ast.Declare {
     const location = parser.getLocation();
     const name = try parser.parseNameLoud();
+    const typ = try parser.parseMaybe(Ast.Typ, parseTypAnnotLoud);
     try parser.expectLoud(.equ);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
-    return .{ .mut_declare = .{
+    return .{
         .name = name,
+        .typ = typ,
         .expr = expr,
         .location = location,
-    } };
+    };
+}
+
+fn parseTypAnnotLoud(parser: *Parser) !Ast.Typ {
+    try parser.expectLoud(.colon);
+    const typ = try parser.parseTypLoud();
+    return typ;
 }
 
 fn parseExprStatement(parser: *Parser) !Ast.Statement {

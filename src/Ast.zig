@@ -91,6 +91,7 @@ pub const Assign = struct {
 
 pub const Declare = struct {
     name: []const u8,
+    typ: ?Typ,
     expr: Expr,
     location: Location,
 };
