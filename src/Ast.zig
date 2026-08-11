@@ -18,10 +18,16 @@ pub const Param = struct {
     location: Location,
 };
 
+pub const ArrayTyp = struct {
+    len: []const u8,
+    typ: Typ,
+};
+
 pub const Typ = union(enum) {
     prime: Prime,
     name: []const u8,
     ptr: *const Typ,
+    array: *const ArrayTyp,
 
     pub fn fromName(name: []const u8) Typ {
         if (std.meta.stringToEnum(Prime, name)) |prime| {

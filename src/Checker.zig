@@ -3,10 +3,16 @@ const std = @import("std");
 const Ast = @import("Ast.zig");
 const Location = @import("Location.zig");
 
+const ArrayTyp = struct {
+    len: []const u8,
+    typ: Typ,
+};
+
 const Typ = union(enum) {
     prime: Ast.Prime,
     name: []const u8,
     ptr: *const Typ,
+    array: *const ArrayTyp,
     err,
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
@@ -14,6 +20,7 @@ const Typ = union(enum) {
             .prime => |prime| try writer.writeAll(@tagName(prime)),
             .name => |name| try writer.writeAll(name),
             .ptr => |inner| try writer.print("&{f}", .{inner}),
+            .array => |array| try writer.print("[{s}]{f}", .{ array.len, array.typ }),
             .err => try writer.writeAll("<err>"),
         }
     }
@@ -123,6 +130,13 @@ fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
             const inner_typ = try checker.checkTyp(inner.*);
             const ptr = try checker.boxTyp(inner_typ);
             return .{ .ptr = ptr };
+        },
+        .array => |array| {
+            const inner_typ = try checker.checkTyp(array.typ);
+            const array_typ = try checker.arena.allocator().create(ArrayTyp);
+            array_typ.len = array.len;
+            array_typ.typ = inner_typ;
+            return .{ .array = array_typ };
         },
     }
 }

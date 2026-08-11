@@ -37,18 +37,25 @@ const Var = struct {
     inner_typ: Typ,
 };
 
+const ArrayTyp = struct {
+    len: []const u8,
+    typ: Typ,
+};
+
 const Typ = union(enum) {
     name: []const u8,
+    ptr: *const Typ,
+    array: *const ArrayTyp,
     i1,
     i8,
     i32,
     i64,
-    ptr: *const Typ,
     void,
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (typ) {
             .name => |name| try writer.print("%{s}", .{name}),
+            .array => |array| try writer.print("[{s} x {f}]", .{ array.len, array.typ }),
             else => try writer.writeAll(@tagName(typ)),
         }
     }
@@ -256,6 +263,13 @@ fn genTyp(gen: *Codegen, typ: Ast.Typ) !Typ {
             const typ_ptr = try gen.arena.allocator().create(Typ);
             typ_ptr.* = try gen.genTyp(ptr_typ.*);
             return .{ .ptr = typ_ptr };
+        },
+        .array => |array| {
+            const inner_typ = try gen.genTyp(array.typ);
+            const array_typ = try gen.arena.allocator().create(ArrayTyp);
+            array_typ.len = array.len;
+            array_typ.typ = inner_typ;
+            return .{ .array = array_typ };
         },
     }
 }

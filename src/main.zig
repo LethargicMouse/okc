@@ -154,3 +154,7 @@ test "fun_arg.ok" {
 test "struct.ok" {
     try testFile("struct", "six seven\n");
 }
+
+test "raw_term.ok" {
+    try compile(std.testing.io, std.testing.allocator, "examples/raw_term.ok", "build/out.ll");
+}

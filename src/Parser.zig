@@ -181,10 +181,22 @@ fn parseTypLoud(parser: *Parser) Error!Ast.Typ {
     return parser.parseEither(Ast.Typ, .{
         parseVerbalTyp,
         parsePtrTyp,
+        parseArrayTyp,
     }) catch |err| {
         try parser.fail("<type>");
         return err;
     };
+}
+
+fn parseArrayTyp(parser: *Parser) !Ast.Typ {
+    try parser.expect(.bral);
+    const len = try parser.parseIntLoud();
+    try parser.expectLoud(.brar);
+    const typ = try parser.parseTypLoud();
+    const array_typ = try parser.arena.allocator().create(Ast.ArrayTyp);
+    array_typ.len = len;
+    array_typ.typ = typ;
+    return .{ .array = array_typ };
 }
 
 fn parseEither(parser: *Parser, typ: type, comptime parses: anytype) !typ {
@@ -607,6 +619,13 @@ fn parseNameLoud(parser: *Parser) ![]const u8 {
 
 fn parseName(parser: *Parser) ![]const u8 {
     return parser.parseLexeme(.name);
+}
+
+fn parseIntLoud(parser: *Parser) ![]const u8 {
+    return parser.parseInt() catch |err| {
+        try parser.fail("<int>");
+        return err;
+    };
 }
 
 fn parseInt(parser: *Parser) ![]const u8 {

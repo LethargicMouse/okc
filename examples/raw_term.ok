@@ -1,0 +1,34 @@
+struct termios {
+  iflag: u32,
+  oflag: u32,
+  cflag: u32,
+  lflag: u32,
+  line: u8,
+  cc: [32]u8,
+  ispeed: u32,
+  ospeed: u32,
+}
+
+fn main() i32 {
+  let termios: termios = undefined;
+  tcgetattr(stdin, &termios_before);
+  let termios_before = termios;
+  termios.lflag &= ~(echo | icanon);
+  termios.oflag &= ~(opost);
+  let vtime = 5;
+  termios.cc[vtime] = 1;
+  let vmin = 6;
+  termios.cc[vmin] = 0;
+  let flush = 2;
+  tcsetattr(stdin, flush, &termios);
+  put_str("\x1b[2H");
+  while (true) {
+    let input: u8 = 0;
+    read(stdin, &input, 1);
+    if (input == 'q') {
+      break;
+    }
+  }
+
+  return 0;
+}
