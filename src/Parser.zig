@@ -267,12 +267,41 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
         parseIfStatement,
         parseWhileStatement,
         parseAssignStatement,
-        parseExprStatement,
+        parseAndAssignStatement,
         parseIgnoreStatement,
+        parseExprStatement,
     }) catch |err| {
         try parser.fail("<statement>");
         return err;
     };
+}
+
+fn parseAndAssignStatement(parser: *Parser) !Ast.Statement {
+    return parser.parseOpAssignStatement(.amp, .andb);
+}
+
+fn parseOpAssignStatement(
+    parser: *Parser,
+    lexeme: Lexeme,
+    op: Ast.BinOp,
+) !Ast.Statement {
+    const location = parser.getLocation();
+    const left = try parser.parseExpr();
+    try parser.expect(lexeme);
+    try parser.expect(.equ);
+    const expr = try parser.parseExprLoud();
+    try parser.expectLoud(.semi);
+    const binary = try parser.arena.allocator().create(Ast.Binary);
+    binary.left = left;
+    binary.op = op;
+    binary.right = expr;
+    // it is never read from here
+    binary.location = location;
+    return .{ .assign = .{
+        .left = left,
+        .expr = .{ .binary = binary },
+        .location = location,
+    } };
 }
 
 fn parseIgnoreStatement(parser: *Parser) !Ast.Statement {
@@ -326,12 +355,12 @@ fn parseElseLoud(parser: *Parser) ![]const Ast.Statement {
 
 fn parseAssignStatement(parser: *Parser) !Ast.Statement {
     const location = parser.getLocation();
-    const name = try parser.parseName();
+    const left = try parser.parseExpr();
     try parser.expect(.equ);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
     return .{ .assign = .{
-        .name = name,
+        .left = left,
         .expr = expr,
         .location = location,
     } };
@@ -398,25 +427,19 @@ fn parseRetStatement(parser: *Parser) !Ast.Statement {
 }
 
 fn parseExprLoud(parser: *Parser) !Ast.Expr {
-    return parser.parseExpr() catch |err| {
+    const mexpr = try parser.parseMaybe(Ast.Expr, parseExpr);
+    return mexpr orelse {
         try parser.fail("<expr>");
-        return err;
+        return error.ParseFailed;
     };
 }
 
 fn parseExpr(parser: *Parser) !Ast.Expr {
-    return parser.parseExprPrior(0);
+    return parser.parseExprPrior(0, false);
 }
 
-fn parseExprPriorLoud(parser: *Parser, prior: u8) Error!Ast.Expr {
-    return parser.parseExprPrior(prior) catch |err| {
-        try parser.fail("<expr>");
-        return err;
-    };
-}
-
-fn parseExprPrior(parser: *Parser, prior: u8) Error!Ast.Expr {
-    var res = try parser.parseExprPosted();
+fn parseExprPrior(parser: *Parser, prior: u8, loud: bool) Error!Ast.Expr {
+    var res = try parser.parseExprPosted(loud);
     while (try parser.parseBinPostfix(prior)) |bin_postfix| {
         const binary = try parser.arena.allocator().create(Ast.Binary);
         binary.* = .{
@@ -436,7 +459,7 @@ fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
         error.ParseFailed => return null,
         else => return err,
     };
-    const expr = parser.parseExprPriorLoud(bin_op.prior() + 1) catch |err| switch (err) {
+    const expr = parser.parseExprPrior(bin_op.prior() + 1, true) catch |err| switch (err) {
         error.ParseFailed => {
             parser.cursor = cursor_before;
             return null;
@@ -459,12 +482,18 @@ fn parseBinOp(parser: *Parser, prior: u8) !Ast.BinOp {
         parseLes,
         parseRem,
         parseBitAnd,
+        parseBitOr,
     });
     if (res.prior() < prior) {
         parser.cursor -= 1;
         return error.ParseFailed;
     }
     return res;
+}
+
+fn parseBitOr(parser: *Parser) !Ast.BinOp {
+    try parser.expect(.pipe);
+    return .orb;
 }
 
 fn parseBitAnd(parser: *Parser) !Ast.BinOp {
@@ -507,8 +536,12 @@ fn parseDiv(parser: *Parser) !Ast.BinOp {
     return .div;
 }
 
-fn parseExprPosted(parser: *Parser) Error!Ast.Expr {
-    var res = try parser.parseExprAtom();
+fn parseExprPostedLoud(parser: *Parser) Error!Ast.Expr {
+    return parser.parseExprPosted(true);
+}
+
+fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
+    var res = try parser.parseExprAtom(loud);
     while (try parser.parseMaybe(Postfix, parsePostfix)) |postfix| {
         switch (postfix) {
             .field => |field_postfix| {
@@ -545,18 +578,51 @@ fn getLocation(parser: Parser) Location {
     return parser.tokens[parser.cursor].location;
 }
 
-fn parseExprAtom(parser: *Parser) Error!Ast.Expr {
+fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
+        parseParExpr,
+        parsePtrExpr,
+        parseNotbExpr,
         parseStructExpr,
         parseCallExpr,
         parseLiteralLocExpr,
-    });
+    }) catch |err| {
+        if (loud) {
+            try parser.fail("<expr>");
+        }
+        return err;
+    };
+}
+
+fn parseParExpr(parser: *Parser) !Ast.Expr {
+    try parser.expect(.parl);
+    const expr = try parser.parseExprLoud();
+    try parser.expectLoud(.parr);
+    return expr;
+}
+
+fn parseNotbExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
+    try parser.expect(.tild);
+    const notb = try parser.arena.allocator().create(Ast.Notb);
+    notb.expr = try parser.parseExprPostedLoud();
+    notb.location = location;
+    return .{ .notb = notb };
+}
+
+fn parsePtrExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
+    try parser.expect(.amp);
+    const ptr = try parser.arena.allocator().create(Ast.Ptr);
+    ptr.expr = try parser.parseExprPostedLoud();
+    ptr.location = location;
+    return .{ .ptr = ptr };
 }
 
 fn parseStructExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     const name = try parser.parseName();
-    try parser.expectLoud(.curl);
+    try parser.expect(.curl);
     const fields = try parser.parseSep(Ast.NewField, parseNewFieldLoud);
     try parser.expect(.curr);
     return .{ .struc = .{

@@ -56,7 +56,7 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8, comptime out_pa
     try gen.run(ast);
 
     const code = try runCmd(io, &.{ "clang", "-o", out, out_path });
-    // `Analyser` should prevent incorrect IR
+    // `Checker` should prevent incorrect IR
     std.debug.assert(code == 0);
 }
 

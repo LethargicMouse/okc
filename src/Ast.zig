@@ -84,7 +84,7 @@ pub const Branch = struct {
 };
 
 pub const Assign = struct {
-    name: []const u8,
+    left: Expr,
     expr: Expr,
     location: Location,
 };
@@ -102,12 +102,24 @@ pub const Call = struct {
     location: Location,
 };
 
+pub const Ptr = struct {
+    expr: Expr,
+    location: Location,
+};
+
+pub const Notb = struct {
+    expr: Expr,
+    location: Location,
+};
+
 pub const Expr = union(enum) {
     literal_loc: LiteralLoc,
     call: Call,
     binary: *const Binary,
     field: *const Field,
     struc: StructExpr,
+    ptr: *const Ptr,
+    notb: *const Notb,
 
     pub fn location(expr: Expr) Location {
         switch (expr) {
@@ -116,6 +128,8 @@ pub const Expr = union(enum) {
             .binary => |binary| return binary.location,
             .field => |field| return field.location,
             .struc => |struc| return struc.location,
+            .ptr => |ptr| return ptr.location,
+            .notb => |notb| return notb.location,
         }
     }
 };
@@ -156,6 +170,7 @@ pub const Binary = struct {
 };
 
 pub const BinOp = enum {
+    orb,
     andb,
     equ,
     add,
@@ -168,9 +183,10 @@ pub const BinOp = enum {
     pub fn prior(bin_op: BinOp) u8 {
         switch (bin_op) {
             .equ, .les => return 0,
-            .andb => return 1,
-            .add, .sub => return 2,
-            .mul, .div, .rem => return 3,
+            .orb => return 1,
+            .andb => return 2,
+            .add, .sub => return 3,
+            .mul, .div, .rem => return 4,
         }
     }
 };
