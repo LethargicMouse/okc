@@ -234,6 +234,7 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
     switch (expr) {
         .literal_loc => |literal_loc| return checker.checkLiteralLocMut(literal_loc),
         .field => |field| return checker.checkField(field.*, true),
+        .elem => |elem| return checker.checkElem(elem.*, true),
         .call, .binary, .struc, .ptr, .notb => {
             const typ = try checker.checkExpr(expr);
             std.log.err(
@@ -242,6 +243,22 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
             , .{expr.location()});
             checker.errors_cnt += 1;
             return typ;
+        },
+    }
+}
+
+fn checkElem(checker: *Checker, elem: Ast.Elem, mutable: bool) !Typ {
+    const typ = try checker.checkExprWith(elem.expr, mutable);
+    switch (typ) {
+        .array => |array| return array.typ,
+        .err => return .err,
+        .prime, .name, .ptr => {
+            std.log.err(
+                \\in {f}
+                \\     type `{f}` does not support indexing
+            , .{ elem.location, typ });
+            checker.errors_cnt += 1;
+            return .err;
         },
     }
 }
@@ -311,6 +328,7 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
         .struc => |struc| return checker.checkStruc(struc),
         .ptr => |ptr| return checker.checkPtr(ptr.*),
         .notb => |notb| return checker.checkNotb(notb.*),
+        .elem => |elem| return checker.checkElem(elem.*, false),
     }
 }
 

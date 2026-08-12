@@ -425,6 +425,7 @@ fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
         .struc => |struc| return gen.genStructExpr(struc),
         .ptr => |ptr| return gen.genPtr(ptr.*),
         .notb => |notb| return gen.genNotb(notb.*),
+        .elem => |elem| return gen.genElem(elem.*),
     }
 }
 
@@ -467,9 +468,29 @@ fn genFieldRef(gen: *Codegen, field: Ast.Field) !Var {
 
 fn genField(gen: *Codegen, field: Ast.Field) !TypVal {
     const ref = try gen.genFieldRef(field);
-    const tmp = try gen.load(ref.inner_typ, ref.tmp);
+    const tmp = try gen.load(ref);
     return .{
         .typ = ref.inner_typ,
+        .val = .{ .tmp = tmp },
+    };
+}
+
+fn genElemRef(gen: *Codegen, elem: Ast.Elem) !Var {
+    const ref = try gen.genExprRef(elem.expr);
+    const index = try gen.genExpr(elem.index);
+    const tmp = gen.newTmp();
+    try gen.print(
+        "\n  %{} = getelementptr inbounds {f}, ptr %{d}, i32 0, {f}",
+        .{ tmp, ref.inner_typ, ref.tmp, index },
+    );
+    return .{ .inner_typ = ref.inner_typ.array.typ, .tmp = tmp };
+}
+
+fn genElem(gen: *Codegen, elem: Ast.Elem) !TypVal {
+    const ref = try gen.genElemRef(elem);
+    const tmp = try gen.load(ref);
+    return .{
+        .typ = ref.inner_typ.array.typ,
         .val = .{ .tmp = tmp },
     };
 }
@@ -480,6 +501,7 @@ fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Var {
             return try gen.genLiteralRef(literal_loc.literal);
         },
         .field => |field| return gen.genFieldRef(field.*),
+        .elem => |elem| return gen.genElemRef(elem.*),
         .call, .binary, .struc, .ptr, .notb => {
             const typ_val = try gen.genExpr(expr);
             const vari = try gen.toStack(typ_val);
@@ -499,9 +521,12 @@ fn genLiteralRef(gen: *Codegen, literal: Ast.Literal) !Var {
     }
 }
 
-fn load(gen: *Codegen, typ: Typ, from: u32) !u32 {
+fn load(gen: *Codegen, vari: Var) !u32 {
     const to = gen.newTmp();
-    try gen.print("\n  %{} = load {f}, ptr %{}", .{ to, typ, from });
+    try gen.print(
+        "\n  %{} = load {f}, ptr %{}",
+        .{ to, vari.inner_typ, vari.tmp },
+    );
     return to;
 }
 
@@ -581,7 +606,7 @@ fn genBinOp(gen: *Codegen, bin_op: Ast.BinOp) !void {
 
 fn genVar(gen: *Codegen, name: []const u8) !TypVal {
     const vari = gen.vars.get(name).?;
-    const load_tmp = try gen.load(vari.inner_typ, vari.tmp);
+    const load_tmp = try gen.load(vari);
     return .{
         .typ = vari.inner_typ,
         .val = .{ .tmp = load_tmp },

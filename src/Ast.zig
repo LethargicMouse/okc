@@ -112,6 +112,12 @@ pub const Notb = struct {
     location: Location,
 };
 
+pub const Elem = struct {
+    expr: Expr,
+    index: Expr,
+    location: Location,
+};
+
 pub const Expr = union(enum) {
     literal_loc: LiteralLoc,
     call: Call,
@@ -120,9 +126,11 @@ pub const Expr = union(enum) {
     struc: StructExpr,
     ptr: *const Ptr,
     notb: *const Notb,
+    elem: *const Elem,
 
     pub fn location(expr: Expr) Location {
         switch (expr) {
+            .elem => |elem| return elem.location,
             .literal_loc => |literal_loc| return literal_loc.location,
             .call => |call| return call.location,
             .binary => |binary| return binary.location,

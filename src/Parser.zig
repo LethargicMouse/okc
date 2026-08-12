@@ -12,6 +12,12 @@ const BinPostfix = struct {
 
 const Postfix = union(enum) {
     field: FieldPostfix,
+    elem: ElemPostfix,
+};
+
+const ElemPostfix = struct {
+    index: Ast.Expr,
+    location: Location,
 };
 
 const FieldPostfix = struct {
@@ -546,12 +552,17 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
         switch (postfix) {
             .field => |field_postfix| {
                 const field = try parser.arena.allocator().create(Ast.Field);
-                field.* = .{
-                    .expr = res,
-                    .name = field_postfix.name,
-                    .location = field_postfix.location,
-                };
+                field.expr = res;
+                field.name = field_postfix.name;
+                field.location = field_postfix.location;
                 res = .{ .field = field };
+            },
+            .elem => |elem_postfix| {
+                const elem = try parser.arena.allocator().create(Ast.Elem);
+                elem.expr = res;
+                elem.index = elem_postfix.index;
+                elem.location = res.location().combine(elem_postfix.location);
+                res = .{ .elem = elem };
             },
         }
     }
@@ -561,7 +572,21 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
 fn parsePostfix(parser: *Parser) !Postfix {
     return parser.parseEither(Postfix, .{
         parseFieldPostfix,
+        parseElemPostfix,
     });
+}
+
+fn parseElemPostfix(parser: *Parser) !Postfix {
+    try parser.expect(.bral);
+    const index = try parser.parseExprLoud();
+    const location = parser.getLocation();
+    try parser.expectLoud(.brar);
+    return .{
+        .elem = .{
+            .index = index,
+            .location = location,
+        },
+    };
 }
 
 fn parseFieldPostfix(parser: *Parser) !Postfix {
