@@ -162,6 +162,7 @@ pub const Literal = union(enum) {
     int: []const u8,
     str: usize,
     vari: []const u8,
+    char: u8,
 };
 
 pub const Field = struct {

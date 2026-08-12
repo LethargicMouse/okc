@@ -17,14 +17,14 @@ const TypVal = struct {
 };
 
 const Val = union(enum) {
-    int: []const u8,
+    int: u64,
     str: usize,
     tmp: u32,
     undef,
 
     pub fn format(val: Val, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (val) {
-            .int => |int| try writer.print("{s}", .{int}),
+            .int => |int| try writer.print("{d}", .{int}),
             .str => |str| try writer.print("@.s{}", .{str}),
             .tmp => |tmp| try writer.print("%{}", .{tmp}),
             .undef => try writer.writeAll("poison"),
@@ -451,6 +451,7 @@ fn genLiteral(gen: *Codegen, literal: Ast.Literal) !TypVal {
         .int => |int| return genInt(int),
         .str => |str| return gen.genStr(str),
         .vari => |name| return gen.genVar(name),
+        .char => |char| return genChar(char),
     }
 }
 
@@ -530,10 +531,18 @@ fn load(gen: *Codegen, vari: Var) !u32 {
     return to;
 }
 
-fn genInt(int: []const u8) TypVal {
+fn genInt(int_str: []const u8) TypVal {
+    const int = std.fmt.parseInt(u64, int_str, 10) catch unreachable;
     return .{
         .typ = .i32,
         .val = .{ .int = int },
+    };
+}
+
+fn genChar(char: u8) TypVal {
+    return .{
+        .typ = .i8,
+        .val = .{ .int = char },
     };
 }
 

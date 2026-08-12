@@ -697,8 +697,14 @@ fn parseLiteral(parser: *Parser) !Ast.Literal {
     return parser.parseEither(Ast.Literal, .{
         parseIntLiteral,
         parseStrLiteral,
+        parseCharLiteral,
         parseVarLiteral,
     });
+}
+
+fn parseCharLiteral(parser: *Parser) !Ast.Literal {
+    const char = try parser.parseChar();
+    return .{ .char = char };
 }
 
 fn parseIntLiteral(parser: *Parser) !Ast.Literal {
@@ -728,11 +734,18 @@ fn parseInt(parser: *Parser) ![]const u8 {
     return parser.parseLexeme(.int);
 }
 
+fn parseChar(parser: *Parser) !u8 {
+    return parser.parseLexeme(.char);
+}
+
 fn parseStr(parser: *Parser) ![]const u8 {
     return parser.parseLexeme(.str);
 }
 
-fn parseLexeme(parser: *Parser, comptime tag: @typeInfo(Lexeme).@"union".tag_type.?) ![]const u8 {
+fn parseLexeme(
+    parser: *Parser,
+    comptime tag: @typeInfo(Lexeme).@"union".tag_type.?,
+) !std.meta.fieldInfo(Lexeme, tag).type {
     const next = parser.tokens[parser.cursor].lexeme;
     if (next == tag) {
         parser.cursor += 1;

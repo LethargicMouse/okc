@@ -266,7 +266,7 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, mutable: bool) !Typ {
 fn checkLiteralLocMut(checker: *Checker, literal_loc: Ast.LiteralLoc) !Typ {
     switch (literal_loc.literal) {
         .vari => |name| return checker.checkVar(literal_loc.location, name, true),
-        .int, .str => {
+        .int, .str, .char => {
             const typ = checker.checkLiteralLoc(literal_loc);
             std.log.err(
                 \\in {f}
@@ -355,6 +355,7 @@ fn checkLiteralLoc(checker: *Checker, literal_loc: Ast.LiteralLoc) Typ {
         .int => |int| return checker.checkInt(literal_loc.location, int),
         .str => return .{ .name = "str" },
         .vari => |name| return checker.checkVar(literal_loc.location, name, false),
+        .char => return .{ .prime = .u8 },
     }
 }
 
