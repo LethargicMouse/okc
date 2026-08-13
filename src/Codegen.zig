@@ -488,7 +488,6 @@ fn genUndef(gen: *Codegen, undef: Ast.Undef) !TypVal {
 
 fn genTyp(gen: *Codegen, typ: Info.Typ) !Typ {
     switch (typ) {
-        .lazy => |inner| return gen.genTyp(inner.*),
         .name => |name| return .{ .name = name },
         .prime => |prime| return genPrime(prime),
         .ptr => |ptr_typ| {
@@ -503,7 +502,7 @@ fn genTyp(gen: *Codegen, typ: Info.Typ) !Typ {
             array_typ.typ = inner_typ;
             return .{ .array = array_typ };
         },
-        .any, .err, .int => unreachable,
+        .any, .err, .int, .lazy => unreachable,
     }
 }
 

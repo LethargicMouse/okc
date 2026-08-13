@@ -405,7 +405,8 @@ fn checkField(checker: *Checker, field: Ast.Field, mutable: bool) !Typ {
     if (expr_typ == .err) {
         return .err;
     }
-    const name = if (expr_typ == .name) expr_typ.name else {
+    const norm = expr_typ.normalise();
+    const name = if (norm == .name) norm.name else {
         checker.failNoFields(field.expr.location(), expr_typ);
         return .err;
     };

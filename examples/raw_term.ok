@@ -15,7 +15,7 @@ struct termios {
 }
 
 fn main() i32 {
-  let mut termios: termios = undefined;
+  let mut termios = undefined;
   let stdin = 0;
   tcgetattr(stdin, &termios);
   let termios_before = termios;
@@ -30,7 +30,7 @@ fn main() i32 {
   termios.cc[vmin] = 0;
   let flush = 2;
   tcsetattr(stdin, flush, &termios);
-  put_str("\x1b[2J");
+  put_str("\x1b[2J    six seven");
   while (true) {
     let input: u8 = 0;
     read(stdin, &input, 1);
