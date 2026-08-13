@@ -64,6 +64,7 @@ err_msgs: ErrMsgs = .empty,
 strs: std.ArrayList([]const u8) = .empty,
 cursor: usize = 0,
 err_cursor: usize = 0,
+next_typ_id: usize = 0,
 
 pub fn init(gpa: std.mem.Allocator, tokens: []const Lexer.Token) Parser {
     const arena = std.heap.ArenaAllocator.init(gpa);
@@ -74,9 +75,9 @@ pub fn init(gpa: std.mem.Allocator, tokens: []const Lexer.Token) Parser {
     };
 }
 
-pub fn run(parser: *Parser) !Ast {
+pub fn run(parser: *Parser) !struct { Ast, Ast.Info } {
     defer parser.deinit();
-    const res = try parser.parseMaybe(Ast, parseAst) orelse {
+    const ast = try parser.parseMaybe(Ast, parseAst) orelse {
         // arena is not passed to ast, freeing it
         parser.arena.deinit();
         std.log.err("failed to parse {f}\n{f}\n        found  {s}", .{
@@ -92,7 +93,10 @@ pub fn run(parser: *Parser) !Ast {
         }
         return error.Handled;
     };
-    return res;
+    const ast_info = Ast.Info{
+        .typ_ids = parser.next_typ_id,
+    };
+    return .{ ast, ast_info };
 }
 
 fn parseAst(parser: *Parser) !Ast {
@@ -699,7 +703,27 @@ fn parseLiteral(parser: *Parser) !Ast.Literal {
         parseStrLiteral,
         parseCharLiteral,
         parseVarLiteral,
+        parseUndefinedLiteral,
+        parseTrueLiteral,
     });
+}
+
+fn parseUndefinedLiteral(parser: *Parser) !Ast.Literal {
+    try parser.expect(.undef);
+    const typ_id = parser.newTypId();
+    return .{ .undef = .{
+        .typ_id = typ_id,
+    } };
+}
+
+fn parseTrueLiteral(parser: *Parser) !Ast.Literal {
+    try parser.expect(.tru);
+    return .{ .bool = true };
+}
+
+fn newTypId(parser: *Parser) usize {
+    parser.next_typ_id += 1;
+    return parser.next_typ_id - 1;
 }
 
 fn parseCharLiteral(parser: *Parser) !Ast.Literal {

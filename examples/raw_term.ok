@@ -1,3 +1,7 @@
+extern fn tcgetattr(fd: i32, termios: &termios) void;
+extern fn tcsetattr(fd: i32, action: i32, termios: &termios) void;
+extern fn read(fd: i32, ptr: &u8, len: u64) void;
+
 struct termios {
   iflag: u32,
   oflag: u32,
@@ -10,10 +14,14 @@ struct termios {
 }
 
 fn main() i32 {
-  let termios: termios = undefined;
-  tcgetattr(stdin, &termios_before);
+  let mut termios: termios = undefined;
+  let stdin = 0;
+  tcgetattr(stdin, &termios);
   let termios_before = termios;
+  let echo = 8;
+  let icanon = 2;
   termios.lflag &= ~(echo | icanon);
+  let opost = 1;
   termios.oflag &= ~(opost);
   let vtime = 5;
   termios.cc[vtime] = 1;
@@ -31,4 +39,9 @@ fn main() i32 {
   }
 
   return 0;
+}
+
+fn put_str(str: str) void {
+  let stdout = 1;
+  write(stdout, str.ptr, str.len);
 }

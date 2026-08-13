@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Ast = @import("Ast.zig");
+const Info = @import("Info.zig");
 
 const Unescaped = struct { len: usize, repr: []const u8 };
 
@@ -74,6 +75,7 @@ const Codegen = @This();
 
 io: std.Io,
 gpa: std.mem.Allocator,
+info: Info,
 file: std.Io.File,
 writer: std.Io.File.Writer,
 arena: std.heap.ArenaAllocator,
@@ -83,11 +85,18 @@ structs: std.StringHashMap(Struct),
 str_lens: std.ArrayList(usize) = .empty,
 next_tmp: u32 = 0,
 
-pub fn init(io: std.Io, gpa: std.mem.Allocator, write_buf: []u8, comptime path: []const u8) !Codegen {
+pub fn init(
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    write_buf: []u8,
+    path: []const u8,
+    info: Info,
+) !Codegen {
     const file = try std.Io.Dir.cwd().createFile(io, path, .{});
     return .{
         .io = io,
         .gpa = gpa,
+        .info = info,
         .file = file,
         .writer = file.writer(io, write_buf),
         .arena = std.heap.ArenaAllocator.init(gpa),
@@ -136,7 +145,7 @@ fn genStruct(gen: *Codegen, struc: Ast.Struct) !void {
     };
     try gen.print("\n%{s} = type {{", .{struc.name});
     for (struc.fields, 0..) |field, i| {
-        const typ = try gen.genTyp(field.typ);
+        const typ = try gen.genAstTyp(field.typ);
         try res.fields.put(field.name, .{
             .typ = typ,
             .index = i,
@@ -161,17 +170,17 @@ fn genStrStruct(gen: *Codegen) !void {
 }
 
 fn registerHeader(gen: *Codegen, header: Ast.Header) !void {
-    const typ = try gen.genTyp(header.ret_typ);
+    const typ = try gen.genAstTyp(header.ret_typ);
     try gen.fun_ret_typs.put(header.name, typ);
 }
 
 fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
     try gen.print("\ndeclare i32 @{s}(", .{ext_fun.header.name});
     if (ext_fun.header.params.len != 0) {
-        const first_typ = try gen.genTyp(ext_fun.header.params[0].typ);
+        const first_typ = try gen.genAstTyp(ext_fun.header.params[0].typ);
         try gen.print("{f}", .{first_typ});
         for (ext_fun.header.params[1..]) |param| {
-            const typ = try gen.genTyp(param.typ);
+            const typ = try gen.genAstTyp(param.typ);
             try gen.print(", {f}", .{typ});
         }
     }
@@ -218,7 +227,7 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
 }
 
 fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
-    const ret_typ = try gen.genTyp(fun.header.ret_typ);
+    const ret_typ = try gen.genAstTyp(fun.header.ret_typ);
     try gen.print("\ndefine {f} @{s}(", .{ ret_typ, fun.header.name });
     var param_typ_vals: [10]TypVal = undefined;
     if (fun.header.params.len != 0) {
@@ -249,23 +258,23 @@ fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
 }
 
 fn genParam(gen: *Codegen, param: Ast.Param) !TypVal {
-    const typ = try gen.genTyp(param.typ);
+    const typ = try gen.genAstTyp(param.typ);
     const tmp = gen.newTmp();
     try gen.print("{f} %{}", .{ typ, tmp });
     return .{ .typ = typ, .val = .{ .tmp = tmp } };
 }
 
-fn genTyp(gen: *Codegen, typ: Ast.Typ) !Typ {
+fn genAstTyp(gen: *Codegen, typ: Ast.Typ) !Typ {
     switch (typ) {
         .name => |name| return .{ .name = name },
         .prime => |prime| return genPrime(prime),
         .ptr => |ptr_typ| {
             const typ_ptr = try gen.arena.allocator().create(Typ);
-            typ_ptr.* = try gen.genTyp(ptr_typ.*);
+            typ_ptr.* = try gen.genAstTyp(ptr_typ.*);
             return .{ .ptr = typ_ptr };
         },
         .array => |array| {
-            const inner_typ = try gen.genTyp(array.typ);
+            const inner_typ = try gen.genAstTyp(array.typ);
             const array_typ = try gen.arena.allocator().create(ArrayTyp);
             array_typ.len = array.len;
             array_typ.typ = inner_typ;
@@ -278,6 +287,7 @@ fn genPrime(prime: Ast.Prime) Typ {
     switch (prime) {
         .i32 => return .i32,
         .u8 => return .i8,
+        .u32 => return .i32,
         .u64 => return .i64,
         .bool => return .i1,
         .void => return .void,
@@ -452,6 +462,33 @@ fn genLiteral(gen: *Codegen, literal: Ast.Literal) !TypVal {
         .str => |str| return gen.genStr(str),
         .vari => |name| return gen.genVar(name),
         .char => |char| return genChar(char),
+        .bool => |boo| return genBool(boo),
+        .undef => |undef| return gen.genUndef(undef),
+    }
+}
+
+fn genUndef(gen: *Codegen, undef: Ast.Undef) !TypVal {
+    const typ = try gen.genTyp(gen.info.typs[undef.typ_id]);
+    return .{ .typ = typ, .val = .undef };
+}
+
+fn genTyp(gen: *Codegen, typ: Info.Typ) !Typ {
+    switch (typ) {
+        .name => |name| return .{ .name = name },
+        .prime => |prime| return genPrime(prime),
+        .ptr => |ptr_typ| {
+            const typ_ptr = try gen.arena.allocator().create(Typ);
+            typ_ptr.* = try gen.genTyp(ptr_typ.*);
+            return .{ .ptr = typ_ptr };
+        },
+        .array => |array| {
+            const inner_typ = try gen.genTyp(array.typ);
+            const array_typ = try gen.arena.allocator().create(ArrayTyp);
+            array_typ.len = array.len;
+            array_typ.typ = inner_typ;
+            return .{ .array = array_typ };
+        },
+        .any, .err, .int => unreachable,
     }
 }
 
@@ -544,6 +581,10 @@ fn genChar(char: u8) TypVal {
         .typ = .i8,
         .val = .{ .int = char },
     };
+}
+
+fn genBool(boo: bool) TypVal {
+    return .{ .typ = .i1, .val = .{ .int = @intFromBool(boo) } };
 }
 
 fn genStr(gen: *Codegen, str: usize) !TypVal {

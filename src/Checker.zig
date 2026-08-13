@@ -2,37 +2,8 @@ const std = @import("std");
 
 const Ast = @import("Ast.zig");
 const Location = @import("Location.zig");
-
-const ArrayTyp = struct {
-    len: []const u8,
-    typ: Typ,
-};
-
-const Typ = union(enum) {
-    prime: Ast.Prime,
-    name: []const u8,
-    ptr: *const Typ,
-    array: *const ArrayTyp,
-    err,
-
-    pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        switch (typ) {
-            .prime => |prime| try writer.writeAll(@tagName(prime)),
-            .name => |name| try writer.writeAll(name),
-            .ptr => |inner| try writer.print("&{f}", .{inner}),
-            .array => |array| try writer.print("[{s}]{f}", .{ array.len, array.typ }),
-            .err => try writer.writeAll("<err>"),
-        }
-    }
-
-    fn isNumber(typ: Typ) bool {
-        switch (typ) {
-            .prime => |prime| return prime.isNumber(),
-            .err => return true,
-            else => return false,
-        }
-    }
-};
+const Info = @import("Info.zig");
+const Typ = Info.Typ;
 
 const Field = struct {
     typ: Typ,
@@ -61,25 +32,28 @@ fun_typs: std.StringHashMap(FunTyp),
 arena: std.heap.ArenaAllocator,
 ret_typ: Typ = undefined,
 errors_cnt: u32 = 0,
+info: Info,
 
-pub fn init(gpa: std.mem.Allocator) Checker {
+pub fn init(gpa: std.mem.Allocator, ast_info: Ast.Info) !Checker {
     const structs = std.StringHashMap(Struct).init(gpa);
     const vars = std.StringHashMap(Var).init(gpa);
     const fun_typs = std.StringHashMap(FunTyp).init(gpa);
     const arena = std.heap.ArenaAllocator.init(gpa);
+    const info = try Info.init(gpa, ast_info);
     return .{
         .structs = structs,
         .vars = vars,
         .fun_typs = fun_typs,
         .arena = arena,
+        .info = info,
     };
 }
 
-pub fn run(checker: *Checker, ast: Ast) !void {
+pub fn run(checker: *Checker, ast: Ast) !Info {
     defer checker.deinit();
     try checker.checkAst(ast);
     if (checker.errors_cnt == 0) {
-        return;
+        return checker.info;
     }
     std.log.err("check failed with {} errors", .{checker.errors_cnt});
     return error.Handled;
@@ -133,7 +107,7 @@ fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
         },
         .array => |array| {
             const inner_typ = try checker.checkTyp(array.typ);
-            const array_typ = try checker.arena.allocator().create(ArrayTyp);
+            const array_typ = try checker.arena.allocator().create(Typ.Array);
             array_typ.len = array.len;
             array_typ.typ = inner_typ;
             return .{ .array = array_typ };
@@ -252,7 +226,7 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, mutable: bool) !Typ {
     switch (typ) {
         .array => |array| return array.typ,
         .err => return .err,
-        .prime, .name, .ptr => {
+        .prime, .name, .ptr, .any, .int => {
             std.log.err(
                 \\in {f}
                 \\     type `{f}` does not support indexing
@@ -265,8 +239,9 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, mutable: bool) !Typ {
 
 fn checkLiteralLocMut(checker: *Checker, literal_loc: Ast.LiteralLoc) !Typ {
     switch (literal_loc.literal) {
-        .vari => |name| return checker.checkVar(literal_loc.location, name, true),
-        .int, .str, .char => {
+        .vari,
+        => |name| return checker.checkVar(literal_loc.location, name, true),
+        .int, .str, .char, .undef, .bool => {
             const typ = checker.checkLiteralLoc(literal_loc);
             std.log.err(
                 \\in {f}
@@ -299,6 +274,12 @@ fn canUnify(a: Typ, b: Typ) bool {
     if (a == .err or b == .err) {
         return true;
     }
+    if (a == .any or b == .any) {
+        return true;
+    }
+    if (a == .int and b.isNumber() or b == .int and a.isNumber()) {
+        return true;
+    }
     if (@intFromEnum(a) != @intFromEnum(b)) {
         return false;
     }
@@ -311,7 +292,22 @@ fn canUnify(a: Typ, b: Typ) bool {
 }
 
 fn checkDeclare(checker: *Checker, declare: Ast.Declare, mutable: bool) !void {
-    const typ = try checker.checkExpr(declare.expr);
+    const expr_typ = try checker.checkExpr(declare.expr);
+    var typ = expr_typ;
+    if (declare.typ) |typ_decl| {
+        const decl_typ = try checker.checkTyp(typ_decl);
+        checker.unify(declare.expr.location(), decl_typ, expr_typ);
+        // if expr_typ is `<any>`
+        typ = decl_typ;
+    }
+    if (typ == .any) {
+        std.log.err(
+            \\in {f}
+            \\     type of `{s}` should be known
+        , .{ declare.location, declare.name });
+        checker.errors_cnt += 1;
+        typ = .err;
+    }
     try checker.vars.put(declare.name, .{
         .typ = typ,
         .location = declare.location,
@@ -356,18 +352,20 @@ fn checkLiteralLoc(checker: *Checker, literal_loc: Ast.LiteralLoc) Typ {
         .str => return .{ .name = "str" },
         .vari => |name| return checker.checkVar(literal_loc.location, name, false),
         .char => return .{ .prime = .u8 },
+        .bool => return .{ .prime = .bool },
+        .undef => return .any,
     }
 }
 
 fn checkInt(checker: *Checker, location: Location, int: []const u8) Typ {
-    _ = std.fmt.parseInt(i64, int, 10) catch {
+    _ = std.fmt.parseInt(u64, int, 10) catch {
         std.log.err(
             \\in {f}
             \\     integer is too large
         , .{location});
         checker.errors_cnt += 1;
     };
-    return .{ .prime = .i32 };
+    return .int;
 }
 
 fn checkExprWith(checker: *Checker, expr: Ast.Expr, mutable: bool) !Typ {
@@ -432,20 +430,6 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {
 
 fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bool) Typ {
     const vari = checker.vars.get(name) orelse {
-        var iter = checker.vars.keyIterator();
-        while (iter.next()) |vari| {
-            if (name.len >= vari.len + 5 and std.mem.startsWith(u8, name, vari.*[0..@min(5, vari.len)])) {
-                std.log.err(
-                    \\in {f}
-                    \\     seems like you've fallen asleep and
-                    \\     hit your keyboard while typing `{s}`
-                    \\
-                    \\     fix it later, time to get some sleep
-                , .{ location, vari.* });
-                checker.errors_cnt += 1;
-                return .err;
-            }
-        }
         std.log.err(
             \\in {f}
             \\     item `{s}` is not declared
@@ -465,7 +449,17 @@ fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bo
 }
 
 fn checkCall(checker: *Checker, call: Ast.Call) !Typ {
-    const fun_typ = checker.fun_typs.get(call.name).?;
+    const fun_typ = checker.fun_typs.get(call.name) orelse {
+        std.log.err(
+            \\in {f}
+            \\     item `{s}` is not declared
+        , .{ call.location, call.name });
+        checker.errors_cnt += 1;
+        for (call.args) |arg| {
+            _ = try checker.checkExpr(arg);
+        }
+        return .err;
+    };
     for (call.args, fun_typ.params) |arg, param| {
         const typ = try checker.checkExpr(arg);
         checker.unify(arg.location(), param, typ);

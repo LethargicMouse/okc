@@ -40,14 +40,15 @@ pub const Typ = union(enum) {
 pub const Prime = enum {
     u8,
     i32,
+    u32,
     u64,
     bool,
     void,
 
     pub fn isNumber(prime: Prime) bool {
         switch (prime) {
-            .i32, .u8, .u64 => return true,
-            else => return false,
+            .i32, .u8, .u32, .u64 => return true,
+            .bool, .void => return false,
         }
     }
 };
@@ -163,6 +164,12 @@ pub const Literal = union(enum) {
     str: usize,
     vari: []const u8,
     char: u8,
+    undef: Undef,
+    bool: bool,
+};
+
+pub const Undef = struct {
+    typ_id: usize,
 };
 
 pub const Field = struct {
@@ -208,6 +215,10 @@ pub const Struct = struct {
 pub const FieldDecl = struct {
     name: []const u8,
     typ: Typ,
+};
+
+pub const Info = struct {
+    typ_ids: usize,
 };
 
 const Ast = @This();
