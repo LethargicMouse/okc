@@ -271,6 +271,7 @@ fn parseBlockLoud(parser: *Parser) Error![]const Ast.Statement {
 
 fn parseStatementLoud(parser: *Parser) !Ast.Statement {
     return parser.parseEither(Ast.Statement, .{
+        parseBreakStatement,
         parseRetStatement,
         parseDeclareStatement,
         parseMutDeclareStatement,
@@ -284,6 +285,15 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
         try parser.fail("<statement>");
         return err;
     };
+}
+
+fn parseBreakStatement(parser: *Parser) !Ast.Statement {
+    const location = parser.getLocation();
+    try parser.expect(.brek);
+    try parser.expectLoud(.semi);
+    return .{ .brek = .{
+        .location = location,
+    } };
 }
 
 fn parseAndAssignStatement(parser: *Parser) !Ast.Statement {

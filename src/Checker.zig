@@ -30,9 +30,10 @@ structs: std.StringHashMap(Struct),
 vars: std.StringHashMap(Var),
 fun_typs: std.StringHashMap(FunTyp),
 arena: std.heap.ArenaAllocator,
-ret_typ: Typ = undefined,
-errors_cnt: u32 = 0,
 info: Info,
+ret_typ: Typ = undefined,
+errors_cnt: u16 = 0,
+loops_nested: u16 = 0,
 
 pub fn init(gpa: std.mem.Allocator, ast_info: Ast.Info) !Checker {
     const structs = std.StringHashMap(Struct).init(gpa);
@@ -160,6 +161,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
 
 fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
     switch (statement) {
+        .brek => |brek| try checker.checkBreak(brek),
         .ret => |expr| try checker.checkRet(expr),
         .expr => |expr| try checker.checkExprStatement(expr),
         .declare => |declare| try checker.checkDeclare(declare, false),
@@ -171,30 +173,45 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
     }
 }
 
+fn checkBreak(checker: *Checker, brek: Ast.Break) Error!void {
+    if (checker.loops_nested == 0) {
+        std.log.err(
+            \\in {f}
+            \\     `break` outside of loop
+        , .{brek.location});
+    }
+}
+
 fn checkExprStatement(checker: *Checker, expr: Ast.Expr) !void {
     const typ = try checker.checkExpr(expr);
     checker.unify(expr.location(), .{ .prime = .void }, typ);
 }
 
 fn checkWhile(checker: *Checker, whi: Ast.While) !void {
-    try checker.checkBranch(whi.branch);
+    try checker.checkBranch(whi.branch, true);
 }
 
 fn checkIf(checker: *Checker, iff: Ast.If) !void {
-    try checker.checkBranch(iff.branch);
+    try checker.checkBranch(iff.branch, false);
     for (iff.else_ifs) |branch| {
-        try checker.checkBranch(branch);
+        try checker.checkBranch(branch, false);
     }
     for (iff.else_branch) |statement| {
         try checker.checkStatement(statement);
     }
 }
 
-fn checkBranch(checker: *Checker, branch: Ast.Branch) !void {
+fn checkBranch(checker: *Checker, branch: Ast.Branch, loop: bool) !void {
     const typ = try checker.checkExpr(branch.condition);
     checker.unify(branch.condition.location(), .{ .prime = .bool }, typ);
+    if (loop) {
+        checker.loops_nested += 1;
+    }
     for (branch.statements) |statement| {
         try checker.checkStatement(statement);
+    }
+    if (loop) {
+        checker.loops_nested -= 1;
     }
 }
 
@@ -223,7 +240,8 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
 
 fn checkElem(checker: *Checker, elem: Ast.Elem, mutable: bool) !Typ {
     const typ = try checker.checkExprWith(elem.expr, mutable);
-    switch (typ) {
+    const red = typ.normalise();
+    switch (red) {
         .array => |array| return array.typ,
         .err => return .err,
         .prime, .name, .ptr, .any, .int => {
@@ -234,6 +252,7 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, mutable: bool) !Typ {
             checker.errors_cnt += 1;
             return .err;
         },
+        .lazy => unreachable,
     }
 }
 
@@ -242,7 +261,7 @@ fn checkLiteralLocMut(checker: *Checker, literal_loc: Ast.LiteralLoc) !Typ {
         .vari,
         => |name| return checker.checkVar(literal_loc.location, name, true),
         .int, .str, .char, .undef, .bool => {
-            const typ = checker.checkLiteralLoc(literal_loc);
+            const typ = try checker.checkLiteralLoc(literal_loc);
             std.log.err(
                 \\in {f}
                 \\     cannot assign to constant
@@ -254,7 +273,7 @@ fn checkLiteralLocMut(checker: *Checker, literal_loc: Ast.LiteralLoc) !Typ {
 }
 
 fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) void {
-    if (canUnify(a, b)) {
+    if (canUnify(a, b, true)) {
         return;
     }
     std.log.err(
@@ -270,7 +289,7 @@ fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) void {
     checker.errors_cnt += 1;
 }
 
-fn canUnify(a: Typ, b: Typ) bool {
+fn canUnify(a: Typ, b: Typ, active: bool) bool {
     if (a == .err or b == .err) {
         return true;
     }
@@ -280,13 +299,20 @@ fn canUnify(a: Typ, b: Typ) bool {
     if (a == .int and b.isNumber() or b == .int and a.isNumber()) {
         return true;
     }
+    if (b == .lazy) {
+        const res = canUnify(a, b.lazy.*, active);
+        if (res and active) {
+            b.lazy.* = a;
+        }
+        return res;
+    }
     if (@intFromEnum(a) != @intFromEnum(b)) {
         return false;
     }
     switch (a) {
         .prime => |aprime| return aprime == b.prime,
         .name => |aname| return std.mem.eql(u8, aname, b.name),
-        .ptr => |atyp| return canUnify(atyp.*, b.ptr.*),
+        .ptr => |atyp| return canUnify(atyp.*, b.ptr.*, active),
         else => unreachable,
     }
 }
@@ -299,14 +325,6 @@ fn checkDeclare(checker: *Checker, declare: Ast.Declare, mutable: bool) !void {
         checker.unify(declare.expr.location(), decl_typ, expr_typ);
         // if expr_typ is `<any>`
         typ = decl_typ;
-    }
-    if (typ == .any) {
-        std.log.err(
-            \\in {f}
-            \\     type of `{s}` should be known
-        , .{ declare.location, declare.name });
-        checker.errors_cnt += 1;
-        typ = .err;
     }
     try checker.vars.put(declare.name, .{
         .typ = typ,
@@ -346,15 +364,22 @@ fn checkStruc(checker: *Checker, struc: Ast.StructExpr) !Typ {
     return .{ .name = struc.name };
 }
 
-fn checkLiteralLoc(checker: *Checker, literal_loc: Ast.LiteralLoc) Typ {
+fn checkLiteralLoc(checker: *Checker, literal_loc: Ast.LiteralLoc) !Typ {
     switch (literal_loc.literal) {
         .int => |int| return checker.checkInt(literal_loc.location, int),
         .str => return .{ .name = "str" },
         .vari => |name| return checker.checkVar(literal_loc.location, name, false),
         .char => return .{ .prime = .u8 },
         .bool => return .{ .prime = .bool },
-        .undef => return .any,
+        .undef => |undef| return checker.checkUndef(undef),
     }
+}
+
+fn checkUndef(checker: *Checker, undef: Ast.Undef) !Typ {
+    const typ = try checker.arena.allocator().create(Typ);
+    typ.* = .any;
+    checker.info.typs[undef.typ_id] = typ;
+    return .{ .lazy = typ };
 }
 
 fn checkInt(checker: *Checker, location: Location, int: []const u8) Typ {

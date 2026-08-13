@@ -83,6 +83,7 @@ fun_ret_typs: std.StringHashMap(Typ),
 vars: std.StringHashMap(Var),
 structs: std.StringHashMap(Struct),
 str_lens: std.ArrayList(usize) = .empty,
+loop_ends: std.ArrayList(u32),
 next_tmp: u32 = 0,
 
 pub fn init(
@@ -103,6 +104,7 @@ pub fn init(
         .fun_ret_typs = std.StringHashMap(Typ).init(gpa),
         .vars = std.StringHashMap(Var).init(gpa),
         .structs = std.StringHashMap(Struct).init(gpa),
+        .loop_ends = std.ArrayList(u32).empty,
     };
 }
 
@@ -209,8 +211,14 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
                 len -= 1;
                 switch (str[i]) {
                     'n' => try vec.appendSlice(gpa, "\\0A"),
+                    'x' => {
+                        try vec.append(gpa, '\\');
+                        try vec.appendSlice(gpa, str[i + 1 .. i + 3]);
+                        i += 2;
+                        len -= 2;
+                    },
                     else => {
-                        std.log.err("bad escape symbol: `\\{}`", .{str[i]});
+                        std.log.err("bad escape symbol: `\\{c}`", .{str[i]});
                         // supposed to be checked by `Checker`
                         unreachable;
                     },
@@ -304,13 +312,19 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
         .whi => |whi| try gen.genWhile(whi),
         .ignore => |expr| _ = try gen.genExpr(expr),
         .mut_declare => |declare| try gen.genDeclare(declare),
+        .brek => try gen.genBreak(),
     }
+}
+
+fn genBreak(gen: *Codegen) !void {
+    const label = gen.newTmp();
+    try gen.uncond(gen.loop_ends.getLast(), label);
 }
 
 fn genWhile(gen: *Codegen, whi: Ast.While) !void {
     const condition_label = gen.newTmp();
     try gen.uncond(condition_label, condition_label);
-    try gen.genBranch(whi.branch, condition_label);
+    try gen.genBranch(whi.branch, condition_label, true);
 }
 
 fn cond(
@@ -341,15 +355,9 @@ fn uncond(gen: *Codegen, to: u32, next: u32) !void {
 
 fn genIf(gen: *Codegen, iff: Ast.If) !void {
     const end_label = gen.newTmp();
-    try gen.genBranch(
-        iff.branch,
-        end_label,
-    );
+    try gen.genBranch(iff.branch, end_label, false);
     for (iff.else_ifs) |branch| {
-        try gen.genBranch(
-            branch,
-            end_label,
-        );
+        try gen.genBranch(branch, end_label, false);
     }
     for (iff.else_branch) |statement| {
         try gen.genStatement(statement);
@@ -357,15 +365,21 @@ fn genIf(gen: *Codegen, iff: Ast.If) !void {
     try gen.uncond(end_label, end_label);
 }
 
-fn genBranch(gen: *Codegen, branch: Ast.Branch, end_label: u32) !void {
+fn genBranch(gen: *Codegen, branch: Ast.Branch, end_label: u32, loop: bool) !void {
     const condition = try gen.genExpr(branch.condition);
     const then_label = gen.newTmp();
     const else_label = gen.newTmp();
+    if (loop) {
+        try gen.loop_ends.append(gen.gpa, else_label);
+    }
     try gen.cond(condition.val, then_label, else_label);
     for (branch.statements) |statement| {
         try gen.genStatement(statement);
     }
     try gen.uncond(end_label, else_label);
+    if (loop) {
+        _ = gen.loop_ends.pop();
+    }
 }
 
 fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
@@ -468,12 +482,13 @@ fn genLiteral(gen: *Codegen, literal: Ast.Literal) !TypVal {
 }
 
 fn genUndef(gen: *Codegen, undef: Ast.Undef) !TypVal {
-    const typ = try gen.genTyp(gen.info.typs[undef.typ_id]);
+    const typ = try gen.genTyp(gen.info.typs[undef.typ_id].*);
     return .{ .typ = typ, .val = .undef };
 }
 
 fn genTyp(gen: *Codegen, typ: Info.Typ) !Typ {
     switch (typ) {
+        .lazy => |inner| return gen.genTyp(inner.*),
         .name => |name| return .{ .name = name },
         .prime => |prime| return genPrime(prime),
         .ptr => |ptr_typ| {
@@ -680,5 +695,7 @@ fn deinit(gen: *Codegen) void {
     }
     gen.structs.deinit();
     gen.arena.deinit();
+    gen.loop_ends.deinit(gen.gpa);
+    gen.info.deinit();
     gen.* = undefined;
 }

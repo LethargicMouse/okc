@@ -1,6 +1,7 @@
 extern fn tcgetattr(fd: i32, termios: &termios) void;
 extern fn tcsetattr(fd: i32, action: i32, termios: &termios) void;
 extern fn read(fd: i32, ptr: &u8, len: u64) void;
+extern fn write(fd: i32, ptr: &u8, len: u64) void;
 
 struct termios {
   iflag: u32,
@@ -29,7 +30,7 @@ fn main() i32 {
   termios.cc[vmin] = 0;
   let flush = 2;
   tcsetattr(stdin, flush, &termios);
-  put_str("\x1b[2H");
+  put_str("\x1b[2J");
   while (true) {
     let input: u8 = 0;
     read(stdin, &input, 1);
