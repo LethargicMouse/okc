@@ -17,6 +17,7 @@ const Var = struct {
     typ: Typ,
     location: Location,
     mutable: bool,
+    mutated: bool = false,
 };
 
 const FunTyp = struct {
@@ -71,9 +72,25 @@ fn checkAst(checker: *Checker, ast: Ast) !void {
     for (ast.funs) |fun| {
         try checker.regHeader(fun.header);
     }
-    checker.checkMain();
     for (ast.funs) |fun| {
         try checker.checkFun(fun);
+    }
+    checker.checkVars();
+    checker.checkMain();
+}
+
+fn checkVars(checker: *Checker) void {
+    var iter = checker.vars.valueIterator();
+    while (iter.next()) |vari| {
+        if (vari.mutable and !vari.mutated) {
+            std.log.err(
+                \\in {f}
+                \\     variable is never mutated
+                \\
+            , .{vari.location});
+            std.log.info("remove `mut` before name\n", .{});
+            checker.errors_cnt += 1;
+        }
     }
 }
 
@@ -178,6 +195,7 @@ fn checkBreak(checker: *Checker, brek: Ast.Break) Error!void {
         std.log.err(
             \\in {f}
             \\     `break` outside of loop
+            \\
         , .{brek.location});
     }
 }
@@ -231,6 +249,7 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
             std.log.err(
                 \\in {f}
                 \\     cannot assign to constant
+                \\
             , .{expr.location()});
             checker.errors_cnt += 1;
             return typ;
@@ -248,6 +267,7 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, mutable: bool) !Typ {
             std.log.err(
                 \\in {f}
                 \\     type `{f}` does not support indexing
+                \\
             , .{ elem.location, typ });
             checker.errors_cnt += 1;
             return .err;
@@ -265,6 +285,7 @@ fn checkLiteralLocMut(checker: *Checker, literal_loc: Ast.LiteralLoc) !Typ {
             std.log.err(
                 \\in {f}
                 \\     cannot assign to constant
+                \\
             , .{literal_loc.location});
             checker.errors_cnt += 1;
             return typ;
@@ -387,6 +408,7 @@ fn checkInt(checker: *Checker, location: Location, int: []const u8) Typ {
         std.log.err(
             \\in {f}
             \\     integer is too large
+            \\
         , .{location});
         checker.errors_cnt += 1;
     };
@@ -442,6 +464,7 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {
             \\     wrong type:
             \\         expected  <number>
             \\            found  {f}
+            \\
         , .{ binary.left.location(), left });
         left = .err;
         checker.errors_cnt += 1;
@@ -455,21 +478,27 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {
 }
 
 fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bool) Typ {
-    const vari = checker.vars.get(name) orelse {
+    const vari = checker.vars.getPtr(name) orelse {
         std.log.err(
             \\in {f}
             \\     item `{s}` is not declared
+            \\
         , .{ location, name });
         checker.errors_cnt += 1;
         return .err;
     };
-    if (mutable and !vari.mutable) {
-        std.log.err(
-            \\in {f}
-            \\     cannot assign to constant
-        , .{location});
-        checker.errors_cnt += 1;
-        std.log.info("try addung `mut` before name in {f}", .{vari.location});
+    if (mutable) {
+        if (vari.mutable) {
+            vari.mutated = true;
+        } else {
+            std.log.err(
+                \\in {f}
+                \\     cannot assign to constant
+                \\
+            , .{location});
+            checker.errors_cnt += 1;
+            std.log.info("add `mut` before name in {f}\n", .{vari.location});
+        }
     }
     return vari.typ;
 }
@@ -479,6 +508,7 @@ fn checkCall(checker: *Checker, call: Ast.Call) !Typ {
         std.log.err(
             \\in {f}
             \\     item `{s}` is not declared
+            \\
         , .{ call.location, call.name });
         checker.errors_cnt += 1;
         for (call.args) |arg| {
