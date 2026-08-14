@@ -442,7 +442,7 @@ fn genRet(gen: *Codegen, expr: Ast.Expr) !void {
 
 fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
     switch (expr) {
-        .literal_loc => |literal_loc| return gen.genLiteral(literal_loc.literal),
+        .lit_loc => |lit_loc| return gen.genLiteral(lit_loc.literal),
         .call => |call| return gen.genCall(call),
         .binary => |binary| return gen.genBinary(binary.*),
         .field => |field| return gen.genField(field.*),
@@ -549,8 +549,8 @@ fn genElem(gen: *Codegen, elem: Ast.Elem) !TypVal {
 
 fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Var {
     switch (expr) {
-        .literal_loc => |literal_loc| {
-            return try gen.genLiteralRef(literal_loc.literal);
+        .lit_loc => |lit_loc| {
+            return try gen.genLiteralRef(lit_loc.literal);
         },
         .field => |field| return gen.genFieldRef(field.*),
         .elem => |elem| return gen.genElemRef(elem.*),

@@ -241,7 +241,7 @@ fn checkAssign(checker: *Checker, assign: Ast.Assign) !void {
 
 fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
     switch (expr) {
-        .literal_loc => |literal_loc| return checker.checkLiteralLocMut(literal_loc),
+        .lit_loc => |lit_loc| return checker.checkLitLocMut(lit_loc),
         .field => |field| return checker.checkField(field.*, true),
         .elem => |elem| return checker.checkElem(elem.*, true),
         .call, .binary, .struc, .ptr, .notb => {
@@ -276,17 +276,17 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, mutable: bool) !Typ {
     }
 }
 
-fn checkLiteralLocMut(checker: *Checker, literal_loc: Ast.LiteralLoc) !Typ {
-    switch (literal_loc.literal) {
+fn checkLitLocMut(checker: *Checker, lit_loc: Ast.LitLoc) !Typ {
+    switch (lit_loc.literal) {
         .vari,
-        => |name| return checker.checkVar(literal_loc.location, name, true),
+        => |name| return checker.checkVar(lit_loc.location, name, true),
         .int, .str, .char, .undef, .bool => {
-            const typ = try checker.checkLiteralLoc(literal_loc);
+            const typ = try checker.checkLitLoc(lit_loc);
             std.log.err(
                 \\in {f}
                 \\     cannot assign to constant
                 \\
-            , .{literal_loc.location});
+            , .{lit_loc.location});
             checker.errors_cnt += 1;
             return typ;
         },
@@ -356,7 +356,7 @@ fn checkDeclare(checker: *Checker, declare: Ast.Declare, mutable: bool) !void {
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
     switch (expr) {
-        .literal_loc => |literal_loc| return checker.checkLiteralLoc(literal_loc),
+        .lit_loc => |lit_loc| return checker.checkLitLoc(lit_loc),
         .call => |call| return checker.checkCall(call),
         .binary => |binary| return checker.checkBinary(binary.*),
         .field => |field| return checker.checkField(field.*, false),
@@ -385,11 +385,11 @@ fn checkStruc(checker: *Checker, struc: Ast.StructExpr) !Typ {
     return .{ .name = struc.name };
 }
 
-fn checkLiteralLoc(checker: *Checker, literal_loc: Ast.LiteralLoc) !Typ {
-    switch (literal_loc.literal) {
-        .int => |int| return checker.checkInt(literal_loc.location, int),
+fn checkLitLoc(checker: *Checker, lit_loc: Ast.LitLoc) !Typ {
+    switch (lit_loc.literal) {
+        .int => |int| return checker.checkInt(lit_loc.location, int),
         .str => return .{ .name = "str" },
-        .vari => |name| return checker.checkVar(literal_loc.location, name, false),
+        .vari => |name| return checker.checkVar(lit_loc.location, name, false),
         .char => return .{ .prime = .u8 },
         .bool => return .{ .prime = .bool },
         .undef => |undef| return checker.checkUndef(undef),

@@ -125,7 +125,7 @@ pub const Elem = struct {
 };
 
 pub const Expr = union(enum) {
-    literal_loc: LiteralLoc,
+    lit_loc: LitLoc,
     call: Call,
     binary: *const Binary,
     field: *const Field,
@@ -137,7 +137,7 @@ pub const Expr = union(enum) {
     pub fn location(expr: Expr) Location {
         switch (expr) {
             .elem => |elem| return elem.location,
-            .literal_loc => |literal_loc| return literal_loc.location,
+            .lit_loc => |lit_loc| return lit_loc.location,
             .call => |call| return call.location,
             .binary => |binary| return binary.location,
             .field => |field| return field.location,
@@ -159,7 +159,7 @@ pub const NewField = struct {
     expr: Expr,
 };
 
-pub const LiteralLoc = struct {
+pub const LitLoc = struct {
     literal: Literal,
     location: Location,
 };

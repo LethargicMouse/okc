@@ -624,7 +624,7 @@ fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
         parseNotbExpr,
         parseStructExpr,
         parseCallExpr,
-        parseLiteralLocExpr,
+        parseLitLocExpr,
     }) catch |err| {
         if (loud) {
             try parser.fail("<expr>");
@@ -681,10 +681,10 @@ fn parseNewFieldLoud(parser: *Parser) !Ast.NewField {
     };
 }
 
-fn parseLiteralLocExpr(parser: *Parser) !Ast.Expr {
+fn parseLitLocExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     const literal = try parser.parseLiteral();
-    return .{ .literal_loc = .{
+    return .{ .lit_loc = .{
         .literal = literal,
         .location = location,
     } };
