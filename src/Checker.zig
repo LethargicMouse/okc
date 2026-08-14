@@ -374,7 +374,7 @@ fn checkNotb(checker: *Checker, notb: Ast.Notb) !Typ {
 
 fn checkPtr(checker: *Checker, ptr: Ast.Ptr) !Typ {
     const typ = try checker.arena.allocator().create(Typ);
-    typ.* = try checker.checkExpr(ptr.expr);
+    typ.* = try checker.checkExprMut(ptr.expr);
     return .{ .ptr = typ };
 }
 

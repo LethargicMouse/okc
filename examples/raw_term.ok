@@ -32,7 +32,7 @@ fn main() i32 {
   tcsetattr(stdin, flush, &termios);
   put_str("\x1b[2J    six seven");
   while (true) {
-    let input: u8 = 0;
+    let mut input: u8 = 0;
     read(stdin, &input, 1);
     if (input == 'q') {
       break;
