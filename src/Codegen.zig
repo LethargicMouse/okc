@@ -445,8 +445,13 @@ fn genRet(gen: *Codegen, ret: Ast.Return) !void {
 }
 
 fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
-    switch (expr) {
-        .lit_loc => |lit_loc| return gen.genLiteral(lit_loc.literal),
+    switch (expr.kind) {
+        .int => |int| return genInt(int),
+        .str => |str| return gen.genStr(str),
+        .vari => |name| return gen.genVar(name),
+        .char => |char| return genChar(char),
+        .bool => |boo| return genBool(boo),
+        .undef => |undef| return gen.genUndef(undef),
         .call => |call| return gen.genCall(call),
         .binary => |binary| return gen.genBinary(binary.*),
         .field => |field| return gen.genField(field.*),
@@ -472,17 +477,6 @@ fn genPtr(gen: *Codegen, ptr: Ast.Ptr) !TypVal {
     const typ = try gen.arena.allocator().create(Typ);
     typ.* = vari.inner_typ;
     return .{ .typ = .{ .ptr = typ }, .val = .{ .tmp = vari.tmp } };
-}
-
-fn genLiteral(gen: *Codegen, literal: Ast.Literal) !TypVal {
-    switch (literal) {
-        .int => |int| return genInt(int),
-        .str => |str| return gen.genStr(str),
-        .vari => |name| return gen.genVar(name),
-        .char => |char| return genChar(char),
-        .bool => |boo| return genBool(boo),
-        .undef => |undef| return gen.genUndef(undef),
-    }
 }
 
 fn genUndef(gen: *Codegen, undef: Ast.Undef) !TypVal {
@@ -552,25 +546,12 @@ fn genElem(gen: *Codegen, elem: Ast.Elem) !TypVal {
 }
 
 fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Var {
-    switch (expr) {
-        .lit_loc => |lit_loc| {
-            return try gen.genLiteralRef(lit_loc.literal);
-        },
+    switch (expr.kind) {
+        .vari => |name| return gen.vars.get(name).?,
         .field => |field| return gen.genFieldRef(field.*),
         .elem => |elem| return gen.genElemRef(elem.*),
-        .call, .binary, .struc, .ptr, .notb => {
+        .call, .binary, .struc, .ptr, .notb, .int, .str, .char, .undef, .bool => {
             const typ_val = try gen.genExpr(expr);
-            const vari = try gen.toStack(typ_val);
-            return vari;
-        },
-    }
-}
-
-fn genLiteralRef(gen: *Codegen, literal: Ast.Literal) !Var {
-    switch (literal) {
-        .vari => |name| return gen.vars.get(name).?,
-        else => {
-            const typ_val = try gen.genLiteral(literal);
             const vari = try gen.toStack(typ_val);
             return vari;
         },

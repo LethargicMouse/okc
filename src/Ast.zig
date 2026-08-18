@@ -115,72 +115,48 @@ pub const Declare = struct {
 pub const Call = struct {
     name: []const u8,
     args: []const Expr,
-    location: Location,
 };
 
 pub const Ptr = struct {
     expr: Expr,
-    location: Location,
 };
 
 pub const Notb = struct {
     expr: Expr,
-    location: Location,
 };
 
 pub const Elem = struct {
     expr: Expr,
     index: Expr,
-    location: Location,
 };
 
-pub const Expr = union(enum) {
-    lit_loc: LitLoc,
-    call: Call,
-    binary: *const Binary,
-    field: *const Field,
-    struc: StructExpr,
-    ptr: *const Ptr,
-    notb: *const Notb,
-    elem: *const Elem,
-
-    pub fn location(expr: Expr) Location {
-        switch (expr) {
-            .elem => |elem| return elem.location,
-            .lit_loc => |lit_loc| return lit_loc.location,
-            .call => |call| return call.location,
-            .binary => |binary| return binary.location,
-            .field => |field| return field.location,
-            .struc => |struc| return struc.location,
-            .ptr => |ptr| return ptr.location,
-            .notb => |notb| return notb.location,
-        }
-    }
+pub const Expr = struct {
+    location: Location,
+    kind: union(enum) {
+        int: []const u8,
+        str: usize,
+        vari: []const u8,
+        char: u8,
+        undef: Undef,
+        bool: bool,
+        call: Call,
+        binary: *const Binary,
+        field: *const Field,
+        struc: StructExpr,
+        ptr: *const Ptr,
+        notb: *const Notb,
+        elem: *const Elem,
+    },
 };
 
 pub const StructExpr = struct {
     name: []const u8,
     fields: []const NewField,
-    location: Location,
 };
 
 pub const NewField = struct {
     name: []const u8,
     expr: Expr,
-};
-
-pub const LitLoc = struct {
-    literal: Literal,
-    location: Location,
-};
-
-pub const Literal = union(enum) {
-    int: []const u8,
-    str: usize,
-    vari: []const u8,
-    char: u8,
-    undef: Undef,
-    bool: bool,
 };
 
 pub const Undef = struct {
@@ -190,14 +166,12 @@ pub const Undef = struct {
 pub const Field = struct {
     expr: Expr,
     name: []const u8,
-    location: Location,
 };
 
 pub const Binary = struct {
     left: Expr,
     op: BinOp,
     right: Expr,
-    location: Location,
 };
 
 pub const BinOp = enum {

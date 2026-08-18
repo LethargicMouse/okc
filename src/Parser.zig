@@ -315,13 +315,17 @@ fn parseOpAssignStatement(
     binary.left = left;
     binary.op = op;
     binary.right = expr;
-    // it is never read from here
-    binary.location = location;
-    return .{ .assign = .{
-        .left = left,
-        .expr = .{ .binary = binary },
-        .location = location,
-    } };
+    return .{
+        .assign = .{
+            .left = left,
+            .expr = .{
+                // never read
+                .location = location,
+                .kind = .{ .binary = binary },
+            },
+            .location = location,
+        },
+    };
 }
 
 fn parseIgnoreStatement(parser: *Parser) !Ast.Statement {
@@ -429,7 +433,6 @@ fn parseExprStatement(parser: *Parser) !Ast.Statement {
 }
 
 fn parseCall(parser: *Parser) !Ast.Call {
-    const location = parser.getLocation();
     const name = try parser.parseName();
     try parser.expect(.parl);
     const args = try parser.parseSep(Ast.Expr, parseExprLoud);
@@ -437,7 +440,6 @@ fn parseCall(parser: *Parser) !Ast.Call {
     return .{
         .name = name,
         .args = args,
-        .location = location,
     };
 }
 
@@ -470,9 +472,11 @@ fn parseExprPrior(parser: *Parser, prior: u8, loud: bool) Error!Ast.Expr {
             .left = res,
             .op = bin_postfix.bin_op,
             .right = bin_postfix.expr,
-            .location = res.location().combine(bin_postfix.expr.location()),
         };
-        res = .{ .binary = binary };
+        res = .{
+            .location = res.location.combine(bin_postfix.expr.location),
+            .kind = .{ .binary = binary },
+        };
     }
     return res;
 }
@@ -572,15 +576,19 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
                 const field = try parser.arena.allocator().create(Ast.Field);
                 field.expr = res;
                 field.name = field_postfix.name;
-                field.location = field_postfix.location;
-                res = .{ .field = field };
+                res = .{
+                    .location = field_postfix.location,
+                    .kind = .{ .field = field },
+                };
             },
             .elem => |elem_postfix| {
                 const elem = try parser.arena.allocator().create(Ast.Elem);
                 elem.expr = res;
                 elem.index = elem_postfix.index;
-                elem.location = res.location().combine(elem_postfix.location);
-                res = .{ .elem = elem };
+                res = .{
+                    .location = res.location.combine(elem_postfix.location),
+                    .kind = .{ .elem = elem },
+                };
             },
         }
     }
@@ -628,7 +636,12 @@ fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
         parseNotbExpr,
         parseStructExpr,
         parseCallExpr,
-        parseLitLocExpr,
+        parseIntExpr,
+        parseStrExpr,
+        parseCharExpr,
+        parseVarExpr,
+        parseUndefinedExpr,
+        parseTrueExpr,
     }) catch |err| {
         if (loud) {
             try parser.fail("<expr>");
@@ -649,8 +662,10 @@ fn parseNotbExpr(parser: *Parser) !Ast.Expr {
     try parser.expect(.tild);
     const notb = try parser.arena.allocator().create(Ast.Notb);
     notb.expr = try parser.parseExprPostedLoud();
-    notb.location = location;
-    return .{ .notb = notb };
+    return .{
+        .location = location,
+        .kind = .{ .notb = notb },
+    };
 }
 
 fn parsePtrExpr(parser: *Parser) !Ast.Expr {
@@ -658,8 +673,10 @@ fn parsePtrExpr(parser: *Parser) !Ast.Expr {
     try parser.expect(.amp);
     const ptr = try parser.arena.allocator().create(Ast.Ptr);
     ptr.expr = try parser.parseExprPostedLoud();
-    ptr.location = location;
-    return .{ .ptr = ptr };
+    return .{
+        .location = location,
+        .kind = .{ .ptr = ptr },
+    };
 }
 
 fn parseStructExpr(parser: *Parser) !Ast.Expr {
@@ -668,11 +685,13 @@ fn parseStructExpr(parser: *Parser) !Ast.Expr {
     try parser.expect(.curl);
     const fields = try parser.parseSep(Ast.NewField, parseNewFieldLoud);
     try parser.expect(.curr);
-    return .{ .struc = .{
-        .name = name,
-        .fields = fields,
+    return .{
         .location = location,
-    } };
+        .kind = .{ .struc = .{
+            .name = name,
+            .fields = fields,
+        } },
+    };
 }
 
 fn parseNewFieldLoud(parser: *Parser) !Ast.NewField {
@@ -694,45 +713,54 @@ fn parseLitLocExpr(parser: *Parser) !Ast.Expr {
     } };
 }
 
-fn parseVarLiteral(parser: *Parser) !Ast.Literal {
+fn parseVarExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
     const name = try parser.parseName();
-    return .{ .vari = name };
+    return .{
+        .location = location,
+        .kind = .{ .vari = name },
+    };
 }
 
 fn parseCallExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
     const call = try parser.parseCall();
-    return .{ .call = call };
+    return .{
+        .location = location,
+        .kind = .{ .call = call },
+    };
 }
 
-fn parseStrLiteral(parser: *Parser) !Ast.Literal {
+fn parseStrExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
     const str = try parser.parseStr();
     const index = parser.strs.items.len;
     try parser.strs.append(parser.gpa, str);
-    return .{ .str = index };
+    return .{
+        .location = location,
+        .kind = .{ .str = index },
+    };
 }
 
-fn parseLiteral(parser: *Parser) !Ast.Literal {
-    return parser.parseEither(Ast.Literal, .{
-        parseIntLiteral,
-        parseStrLiteral,
-        parseCharLiteral,
-        parseVarLiteral,
-        parseUndefinedLiteral,
-        parseTrueLiteral,
-    });
-}
-
-fn parseUndefinedLiteral(parser: *Parser) !Ast.Literal {
+fn parseUndefinedExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
     try parser.expect(.undef);
     const typ_id = parser.newTypId();
-    return .{ .undef = .{
-        .typ_id = typ_id,
-    } };
+    return .{
+        .location = location,
+        .kind = .{ .undef = .{
+            .typ_id = typ_id,
+        } },
+    };
 }
 
-fn parseTrueLiteral(parser: *Parser) !Ast.Literal {
+fn parseTrueExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
     try parser.expect(.tru);
-    return .{ .bool = true };
+    return .{
+        .location = location,
+        .kind = .{ .bool = true },
+    };
 }
 
 fn newTypId(parser: *Parser) usize {
@@ -740,14 +768,22 @@ fn newTypId(parser: *Parser) usize {
     return parser.next_typ_id - 1;
 }
 
-fn parseCharLiteral(parser: *Parser) !Ast.Literal {
+fn parseCharExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
     const char = try parser.parseChar();
-    return .{ .char = char };
+    return .{
+        .location = location,
+        .kind = .{ .char = char },
+    };
 }
 
-fn parseIntLiteral(parser: *Parser) !Ast.Literal {
+fn parseIntExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
     const int = try parser.parseInt();
-    return .{ .int = int };
+    return .{
+        .location = location,
+        .kind = .{ .int = int },
+    };
 }
 
 fn parseNameLoud(parser: *Parser) ![]const u8 {
