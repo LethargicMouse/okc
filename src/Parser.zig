@@ -11,18 +11,18 @@ const BinPostfix = struct {
 };
 
 const Postfix = union(enum) {
-    field: FieldPostfix,
-    elem: ElemPostfix,
-};
+    const Elem = struct {
+        index: Ast.Expr,
+        location: Location,
+    };
 
-const ElemPostfix = struct {
-    index: Ast.Expr,
-    location: Location,
-};
+    const Field = struct {
+        name: []const u8,
+        location: Location,
+    };
 
-const FieldPostfix = struct {
-    name: []const u8,
-    location: Location,
+    field: Field,
+    elem: Elem,
 };
 
 const ErrMsgs = struct {
@@ -203,7 +203,7 @@ fn parseArrayTyp(parser: *Parser) !Ast.Typ {
     const len = try parser.parseIntLoud();
     try parser.expectLoud(.brar);
     const typ = try parser.parseTypLoud();
-    const array_typ = try parser.arena.allocator().create(Ast.ArrayTyp);
+    const array_typ = try parser.arena.allocator().create(Ast.Typ.Array);
     array_typ.len = len;
     array_typ.typ = typ;
     return .{ .array = array_typ };
