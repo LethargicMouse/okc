@@ -329,7 +329,9 @@ fn parseIgnoreStatement(parser: *Parser) !Ast.Statement {
     try parser.expectLoud(.equ);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
-    return .{ .ignore = expr };
+    return .{ .ignore = .{
+        .expr = expr,
+    } };
 }
 
 fn parseWhileStatement(parser: *Parser) !Ast.Statement {

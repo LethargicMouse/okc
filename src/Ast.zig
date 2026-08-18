@@ -68,8 +68,12 @@ pub const Statement = union(enum) {
     assign: Assign,
     iff: If,
     whi: While,
-    ignore: Expr,
+    ignore: Ignore,
     mut_declare: Declare,
+};
+
+pub const Ignore = struct {
+    expr: Expr,
 };
 
 pub const Return = struct {

@@ -310,10 +310,14 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
         .assign => |assign| try gen.genAssign(assign),
         .iff => |iff| try gen.genIf(iff),
         .whi => |whi| try gen.genWhile(whi),
-        .ignore => |expr| _ = try gen.genExpr(expr),
+        .ignore => |ignore| try gen.genIgnore(ignore),
         .mut_declare => |declare| try gen.genDeclare(declare),
         .brek => try gen.genBreak(),
     }
+}
+
+fn genIgnore(gen: *Codegen, ignore: Ast.Ignore) !void {
+    _ = try gen.genExpr(ignore.expr);
 }
 
 fn genBreak(gen: *Codegen) !void {

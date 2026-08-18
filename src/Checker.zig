@@ -185,9 +185,13 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
         .assign => |assign| try checker.checkAssign(assign),
         .iff => |iff| try checker.checkIf(iff),
         .whi => |whi| try checker.checkWhile(whi),
-        .ignore => |expr| _ = try checker.checkExpr(expr),
+        .ignore => |ignore| try checker.checkIgnore(ignore),
         .mut_declare => |declare| try checker.checkDeclare(declare, true),
     }
+}
+
+fn checkIgnore(checker: *Checker, ignore: Ast.Ignore) !void {
+    _ = try checker.checkExpr(ignore.expr);
 }
 
 fn checkBreak(checker: *Checker, brek: Ast.Break) Error!void {
