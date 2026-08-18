@@ -171,7 +171,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
             .mutable = false,
         });
     }
-    for (fun.statements) |statement| {
+    for (fun.body) |statement| {
         try checker.checkStatement(statement);
     }
 }

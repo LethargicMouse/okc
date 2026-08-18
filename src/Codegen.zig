@@ -256,7 +256,7 @@ fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
         const vari = try gen.toStack(typ_val);
         try gen.vars.put(param.name, vari);
     }
-    for (fun.statements) |statement| {
+    for (fun.body) |statement| {
         try gen.genStatement(statement);
     }
     if (ret_typ == .void) {

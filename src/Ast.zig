@@ -53,9 +53,11 @@ pub const Prime = enum {
     }
 };
 
+const Block = []const Statement;
+
 pub const Fun = struct {
     header: Header,
-    statements: []const Statement,
+    body: Block,
 };
 
 pub const Statement = union(enum) {

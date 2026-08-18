@@ -255,10 +255,10 @@ fn parseMaybe(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) !?typ {
 
 fn parseFunLoud(parser: *Parser) !Ast.Fun {
     const header = try parser.parseHeaderLoud();
-    const statements = try parser.parseBlockLoud();
+    const block = try parser.parseBlockLoud();
     return .{
         .header = header,
-        .statements = statements,
+        .body = block,
     };
 }
 
