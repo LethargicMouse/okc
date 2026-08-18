@@ -26,16 +26,16 @@ fn run(init: std.process.Init) !u8 {
     }
 }
 
-const build_dir = "build";
-const out_ll = build_dir ++ "/out.ll";
-const out = build_dir ++ "/out";
+const build_dir_path = "build";
+const out_ll_path = build_dir_path ++ "/out.ll";
+const out_path = build_dir_path ++ "/out";
 
 fn runFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !u8 {
-    try compile(io, gpa, path, out_ll);
-    return runCmd(io, &.{out});
+    try compile(io, gpa, path);
+    return runCmd(io, &.{out_path});
 }
 
-fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8, comptime out_path: []const u8) !void {
+fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var source = try Source.read(io, gpa, path);
     defer source.deinit(gpa);
 
@@ -51,13 +51,13 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8, comptime out_pa
     var checker = try Checker.init(gpa, ast_info);
     const info = try checker.run(ast);
 
-    try std.Io.Dir.cwd().createDirPath(io, build_dir);
+    try std.Io.Dir.cwd().createDirPath(io, build_dir_path);
 
     var write_buf: [256]u8 = undefined;
-    var gen = try Codegen.init(io, gpa, &write_buf, out_path, info);
+    var gen = try Codegen.init(io, gpa, &write_buf, out_ll_path, info);
     try gen.run(ast);
 
-    const code = try runCmd(io, &.{ "clang", "-o", out, out_path });
+    const code = try runCmd(io, &.{ "clang", "-o", out_path, out_ll_path });
     // `Checker` should prevent incorrect IR
     std.debug.assert(code == 0);
 }
@@ -73,9 +73,9 @@ fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
 
 fn testFile(comptime name: []const u8, output: []const u8) !void {
     const ok = std.fmt.comptimePrint("examples/{s}.ok", .{name});
-    try compile(std.testing.io, std.testing.allocator, ok, out_ll);
+    try compile(std.testing.io, std.testing.allocator, ok);
 
-    const run_res = try std.process.run(std.testing.allocator, std.testing.io, .{ .argv = &.{out} });
+    const run_res = try std.process.run(std.testing.allocator, std.testing.io, .{ .argv = &.{out_path} });
     defer std.testing.allocator.free(run_res.stdout);
     defer std.testing.allocator.free(run_res.stderr);
     try std.testing.expect(run_res.term.exited == 0);
@@ -158,5 +158,5 @@ test "struct.ok" {
 }
 
 test "raw_term.ok" {
-    try compile(std.testing.io, std.testing.allocator, "examples/raw_term.ok", "build/out.ll");
+    try compile(std.testing.io, std.testing.allocator, "examples/raw_term.ok");
 }
