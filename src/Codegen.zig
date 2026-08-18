@@ -304,7 +304,7 @@ fn genPrime(prime: Ast.Prime) Typ {
 
 fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
     switch (statement) {
-        .ret => |expr| try gen.genRet(expr),
+        .ret => |ret| try gen.genRet(ret),
         .expr => |expr| _ = try gen.genExpr(expr),
         .declare => |declare| try gen.genDeclare(declare),
         .assign => |assign| try gen.genAssign(assign),
@@ -435,8 +435,8 @@ fn newTmp(gen: *Codegen) u32 {
     return gen.next_tmp - 1;
 }
 
-fn genRet(gen: *Codegen, expr: Ast.Expr) !void {
-    const val = try gen.genExpr(expr);
+fn genRet(gen: *Codegen, ret: Ast.Return) !void {
+    const val = try gen.genExpr(ret.expr);
     try gen.print("\n  ret {f}", .{val});
 }
 

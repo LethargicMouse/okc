@@ -443,7 +443,9 @@ fn parseRetStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.ret);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
-    return .{ .ret = expr };
+    return .{ .ret = .{
+        .expr = expr,
+    } };
 }
 
 fn parseExprLoud(parser: *Parser) !Ast.Expr {

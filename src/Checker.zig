@@ -179,7 +179,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
 fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
     switch (statement) {
         .brek => |brek| try checker.checkBreak(brek),
-        .ret => |expr| try checker.checkRet(expr),
+        .ret => |ret| try checker.checkRet(ret),
         .expr => |expr| try checker.checkExprStatement(expr),
         .declare => |declare| try checker.checkDeclare(declare, false),
         .assign => |assign| try checker.checkAssign(assign),
@@ -523,9 +523,9 @@ fn checkCall(checker: *Checker, call: Ast.Call) !Typ {
     return fun_typ.ret_typ;
 }
 
-fn checkRet(checker: *Checker, expr: Ast.Expr) !void {
-    const typ = try checker.checkExpr(expr);
-    checker.unify(expr.location(), checker.ret_typ, typ);
+fn checkRet(checker: *Checker, ret: Ast.Return) !void {
+    const typ = try checker.checkExpr(ret.expr);
+    checker.unify(ret.expr.location(), checker.ret_typ, typ);
 }
 
 fn deinit(checker: *Checker) void {

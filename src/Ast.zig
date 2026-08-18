@@ -62,7 +62,7 @@ pub const Fun = struct {
 
 pub const Statement = union(enum) {
     brek: Break,
-    ret: Expr,
+    ret: Return,
     expr: Expr,
     declare: Declare,
     assign: Assign,
@@ -70,6 +70,10 @@ pub const Statement = union(enum) {
     whi: While,
     ignore: Expr,
     mut_declare: Declare,
+};
+
+pub const Return = struct {
+    expr: Expr,
 };
 
 pub const Break = struct {
