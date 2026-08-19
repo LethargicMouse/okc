@@ -146,6 +146,7 @@ fn parseExtFunLoud(parser: *Parser) !Ast.ExtFun {
 
 fn parseHeaderLoud(parser: *Parser) !Ast.Header {
     try parser.expectLoud(.fun);
+    const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.parl);
     const params = try parser.parseSep(Ast.Param, parseParamLoud);
@@ -155,6 +156,7 @@ fn parseHeaderLoud(parser: *Parser) !Ast.Header {
         .name = name,
         .params = params,
         .ret_typ = ret_typ,
+        .location = location,
     };
 }
 
@@ -271,6 +273,7 @@ fn parseBlockLoud(parser: *Parser) Error![]const Ast.Statement {
 
 fn parseStatementLoud(parser: *Parser) !Ast.Statement {
     return parser.parseEither(Ast.Statement, .{
+        parseUnreachableStatement,
         parseBreakStatement,
         parseRetStatement,
         parseDeclareStatement,
@@ -287,13 +290,24 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
     };
 }
 
+fn parseUnreachableStatement(parser: *Parser) !Ast.Statement {
+    const location = parser.getLocation();
+    try parser.expect(.unre);
+    try parser.expectLoud(.semi);
+    return .{
+        .location = location,
+        .kind = .unre,
+    };
+}
+
 fn parseBreakStatement(parser: *Parser) !Ast.Statement {
     const location = parser.getLocation();
     try parser.expect(.brek);
     try parser.expectLoud(.semi);
-    return .{ .brek = .{
+    return .{
         .location = location,
-    } };
+        .kind = .brek,
+    };
 }
 
 fn parseAndAssignStatement(parser: *Parser) !Ast.Statement {
@@ -316,44 +330,55 @@ fn parseOpAssignStatement(
     binary.op = op;
     binary.right = expr;
     return .{
-        .assign = .{
-            .left = left,
-            .expr = .{
-                // never read
-                .location = location,
-                .kind = .{ .binary = binary },
+        .location = location,
+        .kind = .{
+            .assign = .{
+                .left = left,
+                .expr = .{
+                    // never read
+                    .location = location,
+                    .kind = .{ .binary = binary },
+                },
             },
-            .location = location,
         },
     };
 }
 
 fn parseIgnoreStatement(parser: *Parser) !Ast.Statement {
+    const location = parser.getLocation();
     try parser.expect(.wild);
     try parser.expectLoud(.equ);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
-    return .{ .ignore = .{
-        .expr = expr,
-    } };
+    return .{
+        .location = location,
+        .kind = .{ .ignore = .{
+            .expr = expr,
+        } },
+    };
 }
 
 fn parseWhileStatement(parser: *Parser) !Ast.Statement {
+    const location = parser.getLocation();
     try parser.expect(.whi);
     const branch = try parser.parseBranch();
-    return .{ .whi = .{ .branch = branch } };
+    return .{ .location = location, .kind = .{ .whi = .{ .branch = branch } } };
 }
 
 fn parseIfStatement(parser: *Parser) !Ast.Statement {
+    const location = parser.getLocation();
     try parser.expect(.iff);
     const branch = try parser.parseBranch();
     const else_ifs = try parser.parseMany(Ast.Branch, parseElseIf);
     const else_branch = try parser.parseMaybe([]const Ast.Statement, parseElseLoud) orelse &.{};
-    return .{ .iff = .{
-        .branch = branch,
-        .else_ifs = else_ifs,
-        .else_branch = else_branch,
-    } };
+    return .{
+        .location = location,
+        .kind = .{ .iff = .{
+            .branch = branch,
+            .else_ifs = else_ifs,
+            .else_branch = else_branch,
+        } },
+    };
 }
 
 fn parseElseIf(parser: *Parser) !Ast.Branch {
@@ -369,7 +394,7 @@ fn parseBranch(parser: *Parser) !Ast.Branch {
     const statements = try parser.parseBlockLoud();
     return .{
         .condition = condition,
-        .statements = statements,
+        .body = statements,
     };
 }
 
@@ -385,28 +410,37 @@ fn parseAssignStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.equ);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
-    return .{ .assign = .{
-        .left = left,
-        .expr = expr,
+    return .{
         .location = location,
-    } };
+        .kind = .{ .assign = .{
+            .left = left,
+            .expr = expr,
+        } },
+    };
 }
 
 fn parseDeclareStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.let);
+    const location = parser.getLocation();
     const declare = try parser.parseDeclareLoud();
-    return .{ .declare = declare };
+    return .{
+        .location = location,
+        .kind = .{ .declare = declare },
+    };
 }
 
 fn parseMutDeclareStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.let);
     try parser.expect(.mut);
+    const location = parser.getLocation();
     const declare = try parser.parseDeclareLoud();
-    return .{ .mut_declare = declare };
+    return .{
+        .location = location,
+        .kind = .{ .mut_declare = declare },
+    };
 }
 
 fn parseDeclareLoud(parser: *Parser) !Ast.Declare {
-    const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     const typ = try parser.parseMaybe(Ast.Typ, parseTypAnnotLoud);
     try parser.expectLoud(.equ);
@@ -416,7 +450,6 @@ fn parseDeclareLoud(parser: *Parser) !Ast.Declare {
         .name = name,
         .typ = typ,
         .expr = expr,
-        .location = location,
     };
 }
 
@@ -429,7 +462,10 @@ fn parseTypAnnotLoud(parser: *Parser) !Ast.Typ {
 fn parseExprStatement(parser: *Parser) !Ast.Statement {
     const expr = try parser.parseExpr();
     try parser.expectLoud(.semi);
-    return .{ .expr = expr };
+    return .{
+        .location = expr.location,
+        .kind = .{ .expr = expr },
+    };
 }
 
 fn parseCall(parser: *Parser) !Ast.Call {
@@ -444,12 +480,13 @@ fn parseCall(parser: *Parser) !Ast.Call {
 }
 
 fn parseRetStatement(parser: *Parser) !Ast.Statement {
+    const location = parser.getLocation();
     try parser.expect(.ret);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
-    return .{ .ret = .{
+    return .{ .location = location, .kind = .{ .ret = .{
         .expr = expr,
-    } };
+    } } };
 }
 
 fn parseExprLoud(parser: *Parser) !Ast.Expr {

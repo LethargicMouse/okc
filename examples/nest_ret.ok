@@ -1,0 +1,12 @@
+extern fn puts(s: &u8) void;
+
+fn main() i32 {
+  if (true) {
+    puts("does return".ptr);
+    return 0;
+  } or {
+    while (true) {
+      return 123;
+    }
+  }
+}

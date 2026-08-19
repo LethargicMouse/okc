@@ -5,6 +5,13 @@ const Location = @import("Location.zig");
 const Info = @import("Info.zig");
 const Typ = Info.Typ;
 
+// numbered to enable `<`
+const ControlFlow = enum(u2) {
+    cont = 0,
+    brek = 1,
+    ret = 2,
+};
+
 const Field = struct {
     typ: Typ,
 };
@@ -171,76 +178,122 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
             .mutable = false,
         });
     }
-    for (fun.body) |statement| {
-        try checker.checkStatement(statement);
+    const cf = try checker.checkBlock(fun.body);
+    if (cf != .ret and !fun.header.ret_typ.isVoid()) {
+        std.log.err(
+            \\in {f}
+            \\     function may not return
+            \\
+        , .{fun.header.location});
+        checker.errors_cnt += 1;
     }
 }
 
-fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!void {
-    switch (statement) {
-        .brek => |brek| try checker.checkBreak(brek),
-        .ret => |ret| try checker.checkRet(ret),
-        .expr => |expr| try checker.checkExprStatement(expr),
-        .declare => |declare| try checker.checkDeclare(declare, false),
-        .assign => |assign| try checker.checkAssign(assign),
-        .iff => |iff| try checker.checkIf(iff),
-        .whi => |whi| try checker.checkWhile(whi),
-        .ignore => |ignore| try checker.checkIgnore(ignore),
-        .mut_declare => |declare| try checker.checkDeclare(declare, true),
+fn checkBlock(checker: *Checker, block: []const Ast.Statement) !ControlFlow {
+    var res = ControlFlow.cont;
+    for (0..block.len) |i| {
+        const cf = try checker.checkStatement(block[i]);
+        if (cf != .cont) {
+            if (res == .cont) {
+                res = cf;
+            }
+            if (i + 1 != block.len) {
+                std.log.err(
+                    \\in {f}
+                    \\     statement is unreachable
+                    \\
+                , .{block[i + 1].location});
+                checker.errors_cnt += 1;
+            }
+        }
+    }
+    return res;
+}
+
+fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!ControlFlow {
+    switch (statement.kind) {
+        .unre => return .ret,
+        .brek => return checker.checkBreak(statement.location),
+        .ret => |ret| return checker.checkRet(ret),
+        .expr => |expr| return checker.checkExprStatement(expr),
+        .declare => |declare| {
+            return checker.checkDeclare(declare, statement.location, false);
+        },
+        .assign => |assign| return checker.checkAssign(assign),
+        .iff => |iff| return checker.checkIf(iff),
+        .whi => |whi| return checker.checkWhile(whi),
+        .ignore => |ignore| return checker.checkIgnore(ignore),
+        .mut_declare => |declare| {
+            return checker.checkDeclare(declare, statement.location, true);
+        },
     }
 }
 
-fn checkIgnore(checker: *Checker, ignore: Ast.Ignore) !void {
+fn checkIgnore(checker: *Checker, ignore: Ast.Ignore) !ControlFlow {
     _ = try checker.checkExpr(ignore.expr);
+    return .cont;
 }
 
-fn checkBreak(checker: *Checker, brek: Ast.Break) Error!void {
+fn checkBreak(checker: *Checker, location: Location) Error!ControlFlow {
     if (checker.loops_nested == 0) {
         std.log.err(
             \\in {f}
             \\     `break` outside of loop
             \\
-        , .{brek.location});
+        , .{location});
+        checker.errors_cnt += 1;
+        return .cont;
     }
+    return .brek;
 }
 
-fn checkExprStatement(checker: *Checker, expr: Ast.Expr) !void {
+fn checkExprStatement(checker: *Checker, expr: Ast.Expr) !ControlFlow {
     const typ = try checker.checkExpr(expr);
     checker.unify(expr.location, .{ .prime = .void }, typ);
+    return .cont;
 }
 
-fn checkWhile(checker: *Checker, whi: Ast.While) !void {
-    try checker.checkBranch(whi.branch, true);
+fn checkWhile(checker: *Checker, whi: Ast.While) !ControlFlow {
+    const cf = try checker.checkBranch(whi.branch, true);
+    switch (cf) {
+        .cont, .brek => return .cont,
+        .ret => return .ret,
+    }
 }
 
-fn checkIf(checker: *Checker, iff: Ast.If) !void {
-    try checker.checkBranch(iff.branch, false);
+fn checkIf(checker: *Checker, iff: Ast.If) !ControlFlow {
+    var res = try checker.checkBranch(iff.branch, false);
     for (iff.else_ifs) |branch| {
-        try checker.checkBranch(branch, false);
+        const cf = try checker.checkBranch(branch, false);
+        if (@intFromEnum(cf) < @intFromEnum(res)) {
+            res = cf;
+        }
     }
-    for (iff.else_branch) |statement| {
-        try checker.checkStatement(statement);
+    const cf = try checker.checkBlock(iff.else_branch);
+    if (@intFromEnum(cf) < @intFromEnum(res)) {
+        res = cf;
     }
+    return res;
 }
 
-fn checkBranch(checker: *Checker, branch: Ast.Branch, loop: bool) !void {
+fn checkBranch(checker: *Checker, branch: Ast.Branch, loop: bool) !ControlFlow {
     const typ = try checker.checkExpr(branch.condition);
     checker.unify(branch.condition.location, .{ .prime = .bool }, typ);
     if (loop) {
         checker.loops_nested += 1;
     }
-    for (branch.statements) |statement| {
-        try checker.checkStatement(statement);
-    }
+    const cf = try checker.checkBlock(branch.body);
     if (loop) {
         checker.loops_nested -= 1;
     }
+    return cf;
 }
 
-fn checkAssign(checker: *Checker, assign: Ast.Assign) !void {
+fn checkAssign(checker: *Checker, assign: Ast.Assign) !ControlFlow {
     const typ = try checker.checkExpr(assign.expr);
     const left_typ = try checker.checkExprMut(assign.left);
     checker.unify(assign.expr.location, left_typ, typ);
+    return .cont;
 }
 
 fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
@@ -325,7 +378,12 @@ fn canUnify(a: Typ, b: Typ, active: bool) bool {
     }
 }
 
-fn checkDeclare(checker: *Checker, declare: Ast.Declare, mutable: bool) !void {
+fn checkDeclare(
+    checker: *Checker,
+    declare: Ast.Declare,
+    location: Location,
+    mutable: bool,
+) !ControlFlow {
     const expr_typ = try checker.checkExpr(declare.expr);
     var typ = expr_typ;
     if (declare.typ) |typ_decl| {
@@ -336,9 +394,10 @@ fn checkDeclare(checker: *Checker, declare: Ast.Declare, mutable: bool) !void {
     }
     try checker.vars.put(declare.name, .{
         .typ = typ,
-        .location = declare.location,
+        .location = location,
         .mutable = mutable,
     });
+    return .cont;
 }
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
@@ -504,9 +563,10 @@ fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !Typ {
     return fun_typ.ret_typ;
 }
 
-fn checkRet(checker: *Checker, ret: Ast.Return) !void {
+fn checkRet(checker: *Checker, ret: Ast.Return) !ControlFlow {
     const typ = try checker.checkExpr(ret.expr);
     checker.unify(ret.expr.location, checker.ret_typ, typ);
+    return .ret;
 }
 
 fn deinit(checker: *Checker) void {

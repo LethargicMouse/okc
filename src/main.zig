@@ -160,3 +160,11 @@ test "struct.ok" {
 test "raw_term.ok" {
     try compile(std.testing.io, std.testing.allocator, "examples/raw_term.ok");
 }
+
+test "nest_ret.ok" {
+    try testFile("nest_ret", "does return\n");
+}
+
+test "unreachable.ok" {
+    try testFile("unreachable", "reachable\n");
+}

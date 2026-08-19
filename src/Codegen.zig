@@ -261,6 +261,8 @@ fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
     }
     if (ret_typ == .void) {
         try gen.print("\n  ret void", .{});
+    } else {
+        try gen.genUnreachable();
     }
     try gen.print("\n}}", .{});
 }
@@ -303,7 +305,8 @@ fn genPrime(prime: Ast.Prime) Typ {
 }
 
 fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
-    switch (statement) {
+    switch (statement.kind) {
+        .unre => try gen.genUnreachable(),
         .ret => |ret| try gen.genRet(ret),
         .expr => |expr| _ = try gen.genExpr(expr),
         .declare => |declare| try gen.genDeclare(declare),
@@ -314,6 +317,10 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
         .mut_declare => |declare| try gen.genDeclare(declare),
         .brek => try gen.genBreak(),
     }
+}
+
+fn genUnreachable(gen: *Codegen) !void {
+    try gen.print("\n  unreachable", .{});
 }
 
 fn genIgnore(gen: *Codegen, ignore: Ast.Ignore) !void {
@@ -377,7 +384,7 @@ fn genBranch(gen: *Codegen, branch: Ast.Branch, end_label: u32, loop: bool) !voi
         try gen.loop_ends.append(gen.gpa, else_label);
     }
     try gen.cond(condition.val, then_label, else_label);
-    for (branch.statements) |statement| {
+    for (branch.body) |statement| {
         try gen.genStatement(statement);
     }
     try gen.uncond(end_label, else_label);

@@ -10,6 +10,7 @@ pub const Header = struct {
     name: []const u8,
     params: []const Param,
     ret_typ: Typ,
+    location: Location,
 };
 
 pub const Param = struct {
@@ -34,6 +35,10 @@ pub const Typ = union(enum) {
             return .{ .prime = prime };
         }
         return .{ .name = name };
+    }
+
+    pub fn isVoid(typ: Typ) bool {
+        return typ == .prime and typ.prime == .void;
     }
 };
 
@@ -60,16 +65,20 @@ pub const Fun = struct {
     body: Block,
 };
 
-pub const Statement = union(enum) {
-    brek: Break,
-    ret: Return,
-    expr: Expr,
-    declare: Declare,
-    assign: Assign,
-    iff: If,
-    whi: While,
-    ignore: Ignore,
-    mut_declare: Declare,
+pub const Statement = struct {
+    location: Location,
+    kind: union(enum) {
+        ret: Return,
+        expr: Expr,
+        declare: Declare,
+        assign: Assign,
+        iff: If,
+        whi: While,
+        ignore: Ignore,
+        mut_declare: Declare,
+        brek,
+        unre,
+    },
 };
 
 pub const Ignore = struct {
@@ -78,10 +87,6 @@ pub const Ignore = struct {
 
 pub const Return = struct {
     expr: Expr,
-};
-
-pub const Break = struct {
-    location: Location,
 };
 
 pub const While = struct {
@@ -96,20 +101,18 @@ pub const If = struct {
 
 pub const Branch = struct {
     condition: Expr,
-    statements: []const Statement,
+    body: []const Statement,
 };
 
 pub const Assign = struct {
     left: Expr,
     expr: Expr,
-    location: Location,
 };
 
 pub const Declare = struct {
     name: []const u8,
     typ: ?Typ,
     expr: Expr,
-    location: Location,
 };
 
 pub const Call = struct {
