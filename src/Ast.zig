@@ -133,9 +133,14 @@ pub const Elem = struct {
     index: Expr,
 };
 
+pub const Deref = struct {
+    expr: Expr,
+};
+
 pub const Expr = struct {
     location: Location,
     kind: union(enum) {
+        deref: *const Deref,
         infer_struc: InferStruct,
         int: []const u8,
         str: usize,

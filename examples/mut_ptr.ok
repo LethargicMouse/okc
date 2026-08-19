@@ -1,11 +1,12 @@
 extern fn puts(s: &u8) void;
 
 fn main() i32 {
-  let s = "hello";
+  let mut s = "hello";
   modify(&s);
+  puts(s.ptr);
   return 0;
 }
 
 fn modify(s: &str) void {
-  s = "six seven";
+  *s = "six seven";
 }

@@ -344,6 +344,7 @@ fn checkAssign(checker: *Checker, assign: Ast.Assign) !ControlFlow {
 
 fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
     switch (expr.kind) {
+        .deref => |deref| return checker.checkDeref(deref.*, expr.location),
         .vari => |name| return checker.checkVar(expr.location, name, true),
         .field => |field| return checker.checkField(field.*, expr.location, true),
         .elem => |elem| return checker.checkElem(elem.*, expr.location, true),
@@ -366,6 +367,23 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
     }
 }
 
+fn checkDeref(checker: *Checker, deref: Ast.Deref, location: Location) !Typ {
+    const typ = try checker.checkExpr(deref.expr);
+    const norm = typ.normalise();
+    switch (norm) {
+        .ptr => |inner| return inner.*,
+        .err => return .err,
+        .prime, .name, .any, .int, .array => {
+            checker.fail(
+                \\in {f}
+                \\     cannot dereference type `{f}`
+            , .{ location, typ });
+            return .err;
+        },
+        .lazy => unreachable,
+    }
+}
+
 fn failNotMut(checker: *Checker, location: Location) void {
     checker.fail(
         \\in {f}
@@ -375,8 +393,8 @@ fn failNotMut(checker: *Checker, location: Location) void {
 
 fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location, mutable: bool) !Typ {
     const typ = try checker.checkExprWith(elem.expr, mutable);
-    const red = typ.normalise();
-    switch (red) {
+    const norm = typ.normalise();
+    switch (norm) {
         .array => |array| return array.typ,
         .err => return .err,
         .prime, .name, .ptr, .any, .int => {
@@ -458,6 +476,7 @@ fn checkDeclare(
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
     switch (expr.kind) {
+        .deref => |deref| return checker.checkDeref(deref.*, expr.location),
         .infer_struc => |struc| return checker.checkInferStruc(struc, expr.location),
         .int => |int| return checker.checkInt(expr.location, int),
         .str => return .{ .name = "str" },

@@ -702,6 +702,7 @@ fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
         parseParExpr,
         parsePtrExpr,
+        parseDerefExpr,
         parseNotbExpr,
         parseInferStructExpr,
         parseStructExpr,
@@ -718,6 +719,14 @@ fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
         }
         return err;
     };
+}
+
+fn parseDerefExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
+    try parser.expect(.star);
+    const deref = try parser.arena.allocator().create(Ast.Deref);
+    deref.expr = try parser.parseExprPostedLoud();
+    return .{ .location = location, .kind = .{ .deref = deref } };
 }
 
 fn parseInferStructExpr(parser: *Parser) !Ast.Expr {

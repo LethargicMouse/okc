@@ -454,6 +454,7 @@ fn genRet(gen: *Codegen, ret: Ast.Return) !void {
 
 fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
     switch (expr.kind) {
+        .deref => |deref| return gen.genDeref(deref.*),
         .infer_struc => |struc| return gen.genInferStruc(struc),
         .int => |int| return genInt(int),
         .str => |str| return gen.genStr(str),
@@ -471,6 +472,28 @@ fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
     }
 }
 
+fn genDerefRef(gen: *Codegen, deref: Ast.Deref) !Var {
+    const typ_val = try gen.genExpr(deref.expr);
+    const typ = typ_val.typ.ptr.*;
+    return .{
+        .inner_typ = typ,
+        .tmp = typ_val.val.tmp,
+    };
+}
+
+fn genDeref(gen: *Codegen, deref: Ast.Deref) !TypVal {
+    const ref = try gen.genDerefRef(deref);
+    return gen.loadTypVal(ref);
+}
+
+fn loadTypVal(gen: *Codegen, vari: Var) !TypVal {
+    const tmp = try gen.load(vari);
+    return .{
+        .typ = vari.inner_typ,
+        .val = .{ .tmp = tmp },
+    };
+}
+
 fn genNotb(gen: *Codegen, notb: Ast.Notb) !TypVal {
     const typ_val = try gen.genExpr(notb.expr);
     const tmp = gen.newTmp();
@@ -485,7 +508,10 @@ fn genPtr(gen: *Codegen, ptr: Ast.Ptr) !TypVal {
     const vari = try gen.genExprRef(ptr.expr);
     const typ = try gen.arena.allocator().create(Typ);
     typ.* = vari.inner_typ;
-    return .{ .typ = .{ .ptr = typ }, .val = .{ .tmp = vari.tmp } };
+    return .{
+        .typ = .{ .ptr = typ },
+        .val = .{ .tmp = vari.tmp },
+    };
 }
 
 fn genUndef(gen: *Codegen, undef: Ast.Undef) !TypVal {
@@ -527,11 +553,7 @@ fn genFieldRef(gen: *Codegen, field: Ast.Field) !Var {
 
 fn genField(gen: *Codegen, field: Ast.Field) !TypVal {
     const ref = try gen.genFieldRef(field);
-    const tmp = try gen.load(ref);
-    return .{
-        .typ = ref.inner_typ,
-        .val = .{ .tmp = tmp },
-    };
+    return gen.loadTypVal(ref);
 }
 
 fn genElemRef(gen: *Codegen, elem: Ast.Elem) !Var {
@@ -547,15 +569,12 @@ fn genElemRef(gen: *Codegen, elem: Ast.Elem) !Var {
 
 fn genElem(gen: *Codegen, elem: Ast.Elem) !TypVal {
     const ref = try gen.genElemRef(elem);
-    const tmp = try gen.load(ref);
-    return .{
-        .typ = ref.inner_typ.array.typ,
-        .val = .{ .tmp = tmp },
-    };
+    return gen.loadTypVal(ref);
 }
 
 fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Var {
     switch (expr.kind) {
+        .deref => |deref| return gen.genDerefRef(deref.*),
         .vari => |name| return gen.vars.get(name).?,
         .field => |field| return gen.genFieldRef(field.*),
         .elem => |elem| return gen.genElemRef(elem.*),
@@ -682,12 +701,8 @@ fn genBinOp(gen: *Codegen, bin_op: Ast.BinOp) !void {
 }
 
 fn genVar(gen: *Codegen, name: []const u8) !TypVal {
-    const vari = gen.vars.get(name).?;
-    const load_tmp = try gen.load(vari);
-    return .{
-        .typ = vari.inner_typ,
-        .val = .{ .tmp = load_tmp },
-    };
+    const ref = gen.vars.get(name).?;
+    return gen.loadTypVal(ref);
 }
 
 fn print(gen: *Codegen, comptime fmt: []const u8, args: anytype) !void {
