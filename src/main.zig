@@ -172,3 +172,7 @@ test "unreachable.ok" {
 test "infer_struct.ok" {
     try testFile("infer_struct", "6-7\n");
 }
+
+test "mut_ptr.ok" {
+    try testFile("mut_ptr", "six seven\n");
+}

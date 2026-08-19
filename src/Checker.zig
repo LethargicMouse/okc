@@ -358,16 +358,16 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
         .infer_struc,
         => {
             const typ = try checker.checkExpr(expr);
-            checker.failAssignConst(expr.location);
+            checker.failNotMut(expr.location);
             return typ;
         },
     }
 }
 
-fn failAssignConst(checker: *Checker, location: Location) void {
+fn failNotMut(checker: *Checker, location: Location) void {
     checker.fail(
         \\in {f}
-        \\     cannot assign to constant
+        \\     it is immutable
     , .{location});
 }
 
@@ -640,7 +640,7 @@ fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bo
         if (vari.mutable) {
             vari.mutated = true;
         } else {
-            checker.failAssignConst(location);
+            checker.failNotMut(location);
             std.log.info("add `mut` before name in {f}\n", .{vari.location});
         }
     }
