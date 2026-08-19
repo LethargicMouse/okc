@@ -255,15 +255,24 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!ControlFlow
         .assign => |assign| return checker.checkAssign(assign),
         .iff => |iff| return checker.checkIf(iff),
         .whi => |whi| return checker.checkWhile(whi),
-        .ignore => |ignore| return checker.checkIgnore(ignore),
+        .ignore => |ignore| return checker.checkIgnore(ignore, statement.location),
         .mut_declare => |declare| {
             return checker.checkDeclare(declare, statement.location, true);
         },
     }
 }
 
-fn checkIgnore(checker: *Checker, ignore: Ast.Ignore) !ControlFlow {
-    _ = try checker.checkExpr(ignore.expr);
+fn checkIgnore(checker: *Checker, ignore: Ast.Ignore, location: Location) !ControlFlow {
+    const typ = try checker.checkExpr(ignore.expr);
+    if (typ == .prime and typ.prime == .void) {
+        std.log.err(
+            \\in {f}
+            \\     redundant ignore
+            \\
+        , .{location});
+        checker.errors_cnt += 1;
+        std.log.info("remove `_ =` before expr\n", .{});
+    }
     return .cont;
 }
 
