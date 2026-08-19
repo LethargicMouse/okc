@@ -348,13 +348,17 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
         .infer_struc,
         => {
             const typ = try checker.checkExpr(expr);
-            checker.fail(
-                \\in {f}
-                \\     cannot assign to constant
-            , .{expr.location});
+            checker.failAssignConst(expr.location);
             return typ;
         },
     }
+}
+
+fn failAssignConst(checker: *Checker, location: Location) void {
+    checker.fail(
+        \\in {f}
+        \\     cannot assign to constant
+    , .{location});
 }
 
 fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location, mutable: bool) !Typ {
@@ -625,10 +629,7 @@ fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bo
         if (vari.mutable) {
             vari.mutated = true;
         } else {
-            checker.fail(
-                \\in {f}
-                \\     cannot assign to constant
-            , .{location});
+            checker.failAssignConst(location);
             std.log.info("add `mut` before name in {f}\n", .{vari.location});
         }
     }
