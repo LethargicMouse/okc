@@ -164,22 +164,8 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
     try checker.structs.put(struc.name, res);
 }
 
-const ast_u8_ptr = &Ast.Typ{ .prime = .u8 };
-
 fn regStrStruct(checker: *Checker) !void {
-    try checker.regStruct(.{
-        .name = "str",
-        .fields = &.{
-            .{
-                .name = "ptr",
-                .typ = .{ .ptr = ast_u8_ptr },
-            },
-            .{
-                .name = "len",
-                .typ = .{ .prime = .u64 },
-            },
-        },
-    });
+    try checker.regStruct(Ast.str_struct);
 }
 
 fn boxTyp(checker: *Checker, typ: Typ) !*Typ {

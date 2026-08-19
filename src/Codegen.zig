@@ -162,13 +162,7 @@ fn genStruct(gen: *Codegen, struc: Ast.Struct) !void {
 }
 
 fn genStrStruct(gen: *Codegen) !void {
-    try gen.print("\n%str = type {{ ptr, i64 }}", .{});
-    var struc = Struct{
-        .fields = std.StringHashMap(Field).init(gen.gpa),
-    };
-    try struc.fields.put("ptr", .{ .typ = .{ .ptr = &i8_typ }, .index = 0 });
-    try struc.fields.put("len", .{ .typ = .i64, .index = 1 });
-    try gen.structs.put("str", struc);
+    try gen.genStruct(Ast.str_struct);
 }
 
 fn registerHeader(gen: *Codegen, header: Ast.Header) !void {

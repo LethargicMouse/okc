@@ -232,3 +232,19 @@ pub fn deinit(ast: *Ast) void {
     ast.arena.deinit();
     ast.* = undefined;
 }
+
+pub const str_struct = Struct{
+    .name = "str",
+    .fields = &.{
+        .{
+            .name = "ptr",
+            .typ = .{ .ptr = u8_ptr },
+        },
+        .{
+            .name = "len",
+            .typ = .{ .prime = .u64 },
+        },
+    },
+};
+
+const u8_ptr = &Ast.Typ{ .prime = .u8 };
