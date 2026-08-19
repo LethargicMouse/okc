@@ -25,6 +25,7 @@ const Struct = struct {
 const Var = struct {
     typ: Typ,
     location: Location,
+    can_be_mutable: bool,
     mutable: bool,
     mutated: bool = false,
 };
@@ -193,6 +194,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
             .typ = try checker.checkTyp(param.typ),
             .location = param.location,
             .mutable = false,
+            .can_be_mutable = false,
         });
     }
     const cf = try checker.checkBlock(fun.body);
@@ -449,6 +451,7 @@ fn checkDeclare(
         .typ = typ,
         .location = location,
         .mutable = mutable,
+        .can_be_mutable = true,
     });
     return .cont;
 }
@@ -641,7 +644,9 @@ fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bo
             vari.mutated = true;
         } else {
             checker.failNotMut(location);
-            std.log.info("add `mut` before name in {f}\n", .{vari.location});
+            if (vari.can_be_mutable) {
+                std.log.info("add `mut` before name in {f}\n", .{vari.location});
+            }
         }
     }
     return vari.typ;
