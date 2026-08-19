@@ -164,14 +164,22 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
     try checker.structs.put(struc.name, res);
 }
 
+const ast_u8_ptr = &Ast.Typ{ .prime = .u8 };
+
 fn regStrStruct(checker: *Checker) !void {
-    var struc = Struct{
-        .fields = std.StringHashMap(Field).init(checker.structs.allocator),
-    };
-    const u8_ptr = try checker.boxTyp(.{ .prime = .u8 });
-    try struc.fields.put("ptr", .{ .typ = .{ .ptr = u8_ptr } });
-    try struc.fields.put("len", .{ .typ = .{ .prime = .u64 } });
-    try checker.structs.put("str", struc);
+    try checker.regStruct(.{
+        .name = "str",
+        .fields = &.{
+            .{
+                .name = "ptr",
+                .typ = .{ .ptr = ast_u8_ptr },
+            },
+            .{
+                .name = "len",
+                .typ = .{ .prime = .u64 },
+            },
+        },
+    });
 }
 
 fn boxTyp(checker: *Checker, typ: Typ) !*Typ {
