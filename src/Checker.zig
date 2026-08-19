@@ -83,20 +83,30 @@ pub fn run(checker: *Checker, ast: Ast) !Info {
 
 fn checkAst(checker: *Checker, ast: Ast) !void {
     try checker.regStrStruct();
-    for (ast.strucs) |struc| {
-        try checker.regStruct(struc);
+    for (ast.items) |item| {
+        try checker.regItem(item);
     }
-    for (ast.ext_funs) |ext_fun| {
-        try checker.regHeader(ext_fun.header);
-    }
-    for (ast.funs) |fun| {
-        try checker.regHeader(fun.header);
-    }
-    for (ast.funs) |fun| {
-        try checker.checkFun(fun);
+    for (ast.items) |item| {
+        try checker.checkItem(item);
     }
     checker.checkVars();
     checker.checkMain(ast.location);
+}
+
+fn regItem(checker: *Checker, item: Ast.Item) !void {
+    switch (item) {
+        .ext_fun => |ext_fun| try checker.regHeader(ext_fun.header),
+        .struc => |struc| try checker.regStruct(struc),
+        .fun => |fun| try checker.regHeader(fun.header),
+    }
+}
+
+fn checkItem(checker: *Checker, item: Ast.Item) !void {
+    switch (item) {
+        .ext_fun => {},
+        .struc => {},
+        .fun => |fun| try checker.checkFun(fun),
+    }
 }
 
 fn checkVars(checker: *Checker) void {

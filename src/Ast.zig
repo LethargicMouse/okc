@@ -220,12 +220,16 @@ pub const Info = struct {
     typ_ids: usize,
 };
 
+pub const Item = union(enum) {
+    ext_fun: ExtFun,
+    struc: Struct,
+    fun: Fun,
+};
+
 const Ast = @This();
 
 arena: std.heap.ArenaAllocator,
-ext_funs: []const ExtFun,
-funs: []const Fun,
-strucs: []const Struct,
+items: []const Item,
 strs: []const []const u8,
 location: Location,
 

@@ -117,31 +117,38 @@ pub fn run(gen: *Codegen, ast: Ast) !void {
 fn genAst(gen: *Codegen, ast: Ast) !void {
     try gen.print("target triple = \"x86_64-pc-linux-gnu\"", .{});
     try gen.genStrStruct();
-    for (ast.strucs) |struc| {
-        try gen.genStruct(struc);
-    }
     for (ast.strs, 0..) |str, i| {
         const len = try gen.genStrDecl(i, str);
         try gen.str_lens.append(gen.gpa, len);
     }
-    for (ast.ext_funs) |ext_fun| {
-        try gen.registerHeader(ext_fun.header);
+    for (ast.items) |item| {
+        try gen.regItem(item);
     }
-    for (ast.funs) |fun| {
-        try gen.registerHeader(fun.header);
-    }
-    for (ast.ext_funs) |ext_fun| {
-        try gen.genExtFun(ext_fun);
-    }
-    for (ast.funs) |fun| {
-        try gen.genFun(fun);
+    for (ast.items) |item| {
+        try gen.genItem(item);
     }
     try gen.print("\n", .{});
 }
 
+fn regItem(gen: *Codegen, item: Ast.Item) !void {
+    switch (item) {
+        .ext_fun => |ext_fun| try gen.regHeader(ext_fun.header),
+        .fun => |fun| try gen.regHeader(fun.header),
+        .struc => |struc| try gen.regAndGenStruct(struc),
+    }
+}
+
+fn genItem(gen: *Codegen, item: Ast.Item) !void {
+    switch (item) {
+        .ext_fun => |ext_fun| try gen.genExtFun(ext_fun),
+        .fun => |fun| try gen.genFun(fun),
+        .struc => {}, // already gen'd during reg phase
+    }
+}
+
 const i8_typ: Typ = .i8;
 
-fn genStruct(gen: *Codegen, struc: Ast.Struct) !void {
+fn regAndGenStruct(gen: *Codegen, struc: Ast.Struct) !void {
     var res = Struct{
         .fields = std.StringHashMap(Field).init(gen.gpa),
     };
@@ -162,10 +169,10 @@ fn genStruct(gen: *Codegen, struc: Ast.Struct) !void {
 }
 
 fn genStrStruct(gen: *Codegen) !void {
-    try gen.genStruct(Ast.str_struct);
+    try gen.regAndGenStruct(Ast.str_struct);
 }
 
-fn registerHeader(gen: *Codegen, header: Ast.Header) !void {
+fn regHeader(gen: *Codegen, header: Ast.Header) !void {
     const typ = try gen.genAstTyp(header.ret_typ);
     try gen.fun_ret_typs.put(header.name, typ);
 }

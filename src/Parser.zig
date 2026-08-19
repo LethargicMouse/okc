@@ -100,25 +100,47 @@ pub fn run(parser: *Parser) !struct { Ast, Ast.Info } {
 }
 
 fn parseAst(parser: *Parser) !Ast {
-    const ext_funs = try parser.parseMany(Ast.ExtFun, parseExtFunLoud);
-    const strucs = try parser.parseMany(Ast.Struct, parseStructLoud);
-    const funs = try parser.parseMany(Ast.Fun, parseFunLoud);
+    const items = try parser.parseMany(Ast.Item, parseItemLoud);
     const location = parser.getLocation();
     try parser.expectLoud(.eof);
     const strs = try parser.arena.allocator().alloc([]const u8, parser.strs.items.len);
     @memcpy(strs, parser.strs.items);
     return .{
         .arena = parser.arena,
-        .funs = funs,
-        .ext_funs = ext_funs,
-        .strucs = strucs,
+        .items = items,
         .strs = strs,
         .location = location,
     };
 }
 
-fn parseStructLoud(parser: *Parser) !Ast.Struct {
-    try parser.expectLoud(.struc);
+fn parseItemLoud(parser: *Parser) !Ast.Item {
+    return parser.parseEither(Ast.Item, &.{
+        parseFunItem,
+        parseStructItem,
+        parseExtFunItem,
+    }) catch |err| {
+        try parser.fail("<item>");
+        return err;
+    };
+}
+
+fn parseExtFunItem(parser: *Parser) !Ast.Item {
+    const ext_fun = try parser.parseExtFun();
+    return .{ .ext_fun = ext_fun };
+}
+
+fn parseFunItem(parser: *Parser) !Ast.Item {
+    const fun = try parser.parseFun();
+    return .{ .fun = fun };
+}
+
+fn parseStructItem(parser: *Parser) !Ast.Item {
+    const struc = try parser.parseStruct();
+    return .{ .struc = struc };
+}
+
+fn parseStruct(parser: *Parser) !Ast.Struct {
+    try parser.expect(.struc);
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.curl);
     const fields = try parser.parseSep(Ast.FieldDecl, parseFieldDeclLoud);
@@ -137,8 +159,8 @@ fn parseFieldDeclLoud(parser: *Parser) !Ast.FieldDecl {
     };
 }
 
-fn parseExtFunLoud(parser: *Parser) !Ast.ExtFun {
-    try parser.expectLoud(.ext);
+fn parseExtFun(parser: *Parser) !Ast.ExtFun {
+    try parser.expect(.ext);
     const header = try parser.parseHeaderLoud();
     try parser.expectLoud(.semi);
     return .{
@@ -147,7 +169,15 @@ fn parseExtFunLoud(parser: *Parser) !Ast.ExtFun {
 }
 
 fn parseHeaderLoud(parser: *Parser) !Ast.Header {
-    try parser.expectLoud(.fun);
+    const header = try parser.parseMaybe(Ast.Header, parseHeader);
+    return header orelse {
+        try parser.fail("`fn`");
+        return error.ParseFailed;
+    };
+}
+
+fn parseHeader(parser: *Parser) !Ast.Header {
+    try parser.expect(.fun);
     const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.parl);
@@ -257,8 +287,8 @@ fn parseMaybe(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) !?typ {
     return res;
 }
 
-fn parseFunLoud(parser: *Parser) !Ast.Fun {
-    const header = try parser.parseHeaderLoud();
+fn parseFun(parser: *Parser) !Ast.Fun {
+    const header = try parser.parseHeader();
     const block = try parser.parseBlockLoud();
     return .{
         .header = header,
@@ -492,8 +522,8 @@ fn parseRetStatement(parser: *Parser) !Ast.Statement {
 }
 
 fn parseExprLoud(parser: *Parser) !Ast.Expr {
-    const mexpr = try parser.parseMaybe(Ast.Expr, parseExpr);
-    return mexpr orelse {
+    const expr = try parser.parseMaybe(Ast.Expr, parseExpr);
+    return expr orelse {
         try parser.fail("<expr>");
         return error.ParseFailed;
     };

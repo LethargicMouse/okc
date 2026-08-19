@@ -1,8 +1,3 @@
-extern fn tcgetattr(fd: i32, termios: &termios) void;
-extern fn tcsetattr(fd: i32, action: i32, termios: &termios) void;
-extern fn read(fd: i32, ptr: &u8, len: u64) void;
-extern fn write(fd: i32, ptr: &u8, len: u64) void;
-
 struct termios {
   iflag: u32,
   oflag: u32,
@@ -13,6 +8,11 @@ struct termios {
   ispeed: u32,
   ospeed: u32,
 }
+
+extern fn tcgetattr(fd: i32, termios: &termios) void;
+extern fn tcsetattr(fd: i32, action: i32, termios: &termios) void;
+extern fn read(fd: i32, ptr: &u8, len: u64) void;
+extern fn write(fd: i32, ptr: &u8, len: u64) void;
 
 fn main() i32 {
   let mut termios = undefined;
