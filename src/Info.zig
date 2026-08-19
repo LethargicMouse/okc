@@ -28,10 +28,14 @@ pub const Typ = union(enum) {
                 "[{s}]{f}",
                 .{ array.len, array.typ },
             ),
-            .lazy => |inner| try writer.print("@lazy<{f}>", .{inner}),
+            .lazy => |inner| if (show_lazy) {
+                try writer.print("@lazy<{f}>", .{inner});
+            } else {
+                try writer.print("{f}", .{inner});
+            },
             .int => try writer.writeAll("<int>"),
             .err => try writer.writeAll("<err>"),
-            .any => try writer.writeAll("<any>"),
+            .any => try writer.writeAll("_"),
         }
     }
 
@@ -52,6 +56,8 @@ pub const Typ = union(enum) {
         return res;
     }
 };
+
+const show_lazy = false;
 
 const Info = @This();
 

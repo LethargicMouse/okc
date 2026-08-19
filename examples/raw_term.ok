@@ -9,7 +9,7 @@ struct termios {
   ospeed: u32,
 }
 
-extern fn tcgetattr(fd: i32, termios: &termios) void;
+extern fn tcgetattr(fd: i32, termios: &mut termios) void;
 extern fn tcsetattr(fd: i32, action: i32, termios: &termios) void;
 extern fn read(fd: i32, ptr: &mut u8, len: u64) void;
 extern fn write(fd: i32, ptr: &u8, len: u64) void;
@@ -17,7 +17,7 @@ extern fn write(fd: i32, ptr: &u8, len: u64) void;
 fn main() i32 {
   let mut termios = undefined;
   let stdin = 0;
-  tcgetattr(stdin, &termios);
+  tcgetattr(stdin, &mut termios);
   let termios_before = termios;
   let echo = 8;
   let icanon = 2;
@@ -38,6 +38,7 @@ fn main() i32 {
       break;
     }
   }
+  tcsetattr(stdin, flush, &termios_before);
 
   return 0;
 }

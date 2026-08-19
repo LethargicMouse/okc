@@ -28,6 +28,7 @@ const Var = struct {
     can_be_mutable: bool,
     mutable: bool,
     mutated: bool = false,
+    used: bool = false,
 };
 
 const FunTyp = struct {
@@ -113,7 +114,12 @@ fn checkItem(checker: *Checker, item: Ast.Item) !void {
 fn checkVars(checker: *Checker) void {
     var iter = checker.vars.valueIterator();
     while (iter.next()) |vari| {
-        if (vari.mutable and !vari.mutated) {
+        if (!vari.used) {
+            checker.fail(
+                \\in {f}
+                \\     variable is never used
+            , .{vari.location});
+        } else if (vari.mutable and !vari.mutated) {
             checker.fail(
                 \\in {f}
                 \\     variable is never mutated
@@ -406,6 +412,8 @@ fn failNotMut(checker: *Checker, location: Location) void {
 
 fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location, mutable: bool) !Typ {
     const typ = try checker.checkExprWith(elem.expr, mutable);
+    const index = try checker.checkExpr(elem.index);
+    checker.unify(elem.index.location, .int, index);
     const norm = typ.normalise();
     switch (norm) {
         .array => |array| return array.typ,
@@ -610,10 +618,10 @@ fn checkExprWith(checker: *Checker, expr: Ast.Expr, mutable: bool) !Typ {
 
 fn checkField(checker: *Checker, field: Ast.Field, location: Location, mutable: bool) !Typ {
     const expr_typ = try checker.checkExprWith(field.expr, mutable);
-    if (expr_typ == .err) {
+    const norm = expr_typ.normalise();
+    if (norm == .err) {
         return .err;
     }
-    const norm = expr_typ.normalise();
     const name = if (norm == .name) norm.name else {
         checker.failNotStruct(field.expr.location, expr_typ);
         return .err;
@@ -642,6 +650,14 @@ fn failNoField(
 }
 
 fn failNotStruct(checker: *Checker, location: Location, typ: Typ) void {
+    if (typ == .lazy and typ.lazy.* == .any) {
+        checker.fail(
+            \\in {f}
+            \\     type should be known here
+        , .{location});
+        typ.lazy.* = .err;
+        return;
+    }
     checker.fail(
         \\in {f}
         \\     type `{f}` is not a struct
@@ -675,6 +691,7 @@ fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bo
         , .{ location, name });
         return .err;
     };
+    vari.used = true;
     if (mutable) {
         if (vari.mutable) {
             vari.mutated = true;
