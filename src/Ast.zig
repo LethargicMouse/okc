@@ -136,6 +136,7 @@ pub const Elem = struct {
 pub const Expr = struct {
     location: Location,
     kind: union(enum) {
+        infer_struc: InferStruct,
         int: []const u8,
         str: usize,
         vari: []const u8,
@@ -157,9 +158,15 @@ pub const StructExpr = struct {
     fields: []const NewField,
 };
 
+pub const InferStruct = struct {
+    fields: []const NewField,
+    typ_id: usize,
+};
+
 pub const NewField = struct {
     name: []const u8,
     expr: Expr,
+    location: Location,
 };
 
 pub const Undef = struct {

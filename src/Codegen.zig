@@ -453,6 +453,7 @@ fn genRet(gen: *Codegen, ret: Ast.Return) !void {
 
 fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
     switch (expr.kind) {
+        .infer_struc => |struc| return gen.genInferStruc(struc),
         .int => |int| return genInt(int),
         .str => |str| return gen.genStr(str),
         .vari => |name| return gen.genVar(name),
@@ -557,7 +558,18 @@ fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Var {
         .vari => |name| return gen.vars.get(name).?,
         .field => |field| return gen.genFieldRef(field.*),
         .elem => |elem| return gen.genElemRef(elem.*),
-        .call, .binary, .struc, .ptr, .notb, .int, .str, .char, .undef, .bool => {
+        .call,
+        .binary,
+        .struc,
+        .ptr,
+        .notb,
+        .int,
+        .str,
+        .char,
+        .undef,
+        .bool,
+        .infer_struc,
+        => {
             const typ_val = try gen.genExpr(expr);
             const vari = try gen.toStack(typ_val);
             return vari;
@@ -607,6 +619,14 @@ fn genStr(gen: *Codegen, str: usize) !TypVal {
         .typ = .{ .name = "str" },
         .val = .{ .tmp = tmp },
     };
+}
+
+fn genInferStruc(gen: *Codegen, struc: Ast.InferStruct) !TypVal {
+    const name = gen.info.typs[struc.typ_id].name;
+    return gen.genStructExpr(.{
+        .fields = struc.fields,
+        .name = name,
+    });
 }
 
 fn genStructExpr(gen: *Codegen, struc: Ast.StructExpr) !TypVal {

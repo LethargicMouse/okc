@@ -168,3 +168,7 @@ test "nest_ret.ok" {
 test "unreachable.ok" {
     try testFile("unreachable", "reachable\n");
 }
+
+test "infer_struct.ok" {
+    try testFile("infer_struct", "6-7\n");
+}

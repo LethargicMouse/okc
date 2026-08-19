@@ -54,11 +54,11 @@ pub const Typ = union(enum) {
 const Info = @This();
 
 arena: std.heap.ArenaAllocator,
-typs: []*Typ,
+typs: []*const Typ,
 
 pub fn init(gpa: std.mem.Allocator, ast_info: Ast.Info) !Info {
     var arena = std.heap.ArenaAllocator.init(gpa);
-    const typs = try arena.allocator().alloc(*Typ, ast_info.typ_ids);
+    const typs = try arena.allocator().alloc(*const Typ, ast_info.typ_ids);
     return .{
         .arena = arena,
         .typs = typs,

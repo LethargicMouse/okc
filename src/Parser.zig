@@ -671,6 +671,7 @@ fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
         parseParExpr,
         parsePtrExpr,
         parseNotbExpr,
+        parseInferStructExpr,
         parseStructExpr,
         parseCallExpr,
         parseIntExpr,
@@ -684,6 +685,20 @@ fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
             try parser.fail("<expr>");
         }
         return err;
+    };
+}
+
+fn parseInferStructExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
+    try parser.expect(.dot);
+    const fields = try parser.parseStructExprBody();
+    const typ_id = parser.newTypId();
+    return .{
+        .location = location,
+        .kind = .{ .infer_struc = .{
+            .fields = fields,
+            .typ_id = typ_id,
+        } },
     };
 }
 
@@ -719,9 +734,7 @@ fn parsePtrExpr(parser: *Parser) !Ast.Expr {
 fn parseStructExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     const name = try parser.parseName();
-    try parser.expect(.curl);
-    const fields = try parser.parseSep(Ast.NewField, parseNewFieldLoud);
-    try parser.expect(.curr);
+    const fields = try parser.parseStructExprBody();
     return .{
         .location = location,
         .kind = .{ .struc = .{
@@ -731,13 +744,22 @@ fn parseStructExpr(parser: *Parser) !Ast.Expr {
     };
 }
 
+fn parseStructExprBody(parser: *Parser) ![]const Ast.NewField {
+    try parser.expect(.curl);
+    const fields = try parser.parseSep(Ast.NewField, parseNewFieldLoud);
+    try parser.expect(.curr);
+    return fields;
+}
+
 fn parseNewFieldLoud(parser: *Parser) !Ast.NewField {
+    const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.colon);
     const expr = try parser.parseExprLoud();
     return .{
         .name = name,
         .expr = expr,
+        .location = location,
     };
 }
 

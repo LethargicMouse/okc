@@ -32,12 +32,21 @@ const FunTyp = struct {
     ret_typ: Typ,
 };
 
+const LazyStruct = struct {
+    typ: *const Typ,
+    fields: []const Ast.NewField,
+    typs: []const Typ,
+    location: Location,
+};
+
 const Checker = @This();
 
+gpa: std.mem.Allocator,
+arena: std.heap.ArenaAllocator,
 structs: std.StringHashMap(Struct),
 vars: std.StringHashMap(Var),
 fun_typs: std.StringHashMap(FunTyp),
-arena: std.heap.ArenaAllocator,
+lazy_strucs: std.ArrayList(LazyStruct) = .empty,
 info: Info,
 ret_typ: Typ = undefined,
 errors_cnt: u16 = 0,
@@ -50,6 +59,7 @@ pub fn init(gpa: std.mem.Allocator, ast_info: Ast.Info) !Checker {
     const arena = std.heap.ArenaAllocator.init(gpa);
     const info = try Info.init(gpa, ast_info);
     return .{
+        .gpa = gpa,
         .structs = structs,
         .vars = vars,
         .fun_typs = fun_typs,
@@ -64,6 +74,7 @@ pub fn run(checker: *Checker, ast: Ast) !Info {
     if (checker.errors_cnt == 0) {
         return checker.info;
     }
+    checker.info.deinit();
     std.log.err("check failed with {} errors", .{checker.errors_cnt});
     return error.Handled;
 }
@@ -187,6 +198,34 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
         , .{fun.header.location});
         checker.errors_cnt += 1;
     }
+    for (checker.lazy_strucs.items) |lazy_struc| {
+        const name = switch (lazy_struc.typ.*) {
+            .name => |name| name,
+            .any => {
+                std.log.err(
+                    \\in {f}
+                    \\     cannot infer type
+                , .{lazy_struc.location});
+                checker.errors_cnt += 1;
+                continue;
+            },
+            else => {
+                std.log.err(
+                    \\in {f}
+                    \\     wrong type:
+                    \\         expected  {f}
+                    \\            found  <struct>
+                , .{ lazy_struc.location, lazy_struc.typ });
+                checker.errors_cnt += 1;
+                continue;
+            },
+        };
+        checker.checkStrucNow(lazy_struc.location, .{
+            .name = name,
+            .fields = lazy_struc.fields,
+        }, lazy_struc.typs);
+    }
+    checker.lazy_strucs.clearRetainingCapacity();
 }
 
 fn checkBlock(checker: *Checker, block: []const Ast.Statement) !ControlFlow {
@@ -301,7 +340,18 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
         .vari => |name| return checker.checkVar(expr.location, name, true),
         .field => |field| return checker.checkField(field.*, expr.location, true),
         .elem => |elem| return checker.checkElem(elem.*, expr.location, true),
-        .int, .str, .char, .undef, .bool, .call, .binary, .struc, .ptr, .notb => {
+        .int,
+        .str,
+        .char,
+        .undef,
+        .bool,
+        .call,
+        .binary,
+        .struc,
+        .ptr,
+        .notb,
+        .infer_struc,
+        => {
             const typ = try checker.checkExpr(expr);
             std.log.err(
                 \\in {f}
@@ -402,6 +452,7 @@ fn checkDeclare(
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
     switch (expr.kind) {
+        .infer_struc => |struc| return checker.checkInferStruc(struc, expr.location),
         .int => |int| return checker.checkInt(expr.location, int),
         .str => return .{ .name = "str" },
         .vari => |name| return checker.checkVar(expr.location, name, false),
@@ -411,7 +462,7 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
         .call => |call| return checker.checkCall(call, expr.location),
         .binary => |binary| return checker.checkBinary(binary.*),
         .field => |field| return checker.checkField(field.*, expr.location, false),
-        .struc => |struc| return checker.checkStruc(struc),
+        .struc => |struc| return checker.checkStruc(struc, expr.location),
         .ptr => |ptr| return checker.checkPtr(ptr.*),
         .notb => |notb| return checker.checkNotb(notb.*),
         .elem => |elem| return checker.checkElem(elem.*, expr.location, false),
@@ -429,11 +480,67 @@ fn checkPtr(checker: *Checker, ptr: Ast.Ptr) !Typ {
     return .{ .ptr = typ };
 }
 
-fn checkStruc(checker: *Checker, struc: Ast.StructExpr) !Typ {
-    for (struc.fields) |field| {
-        _ = try checker.checkExpr(field.expr);
+fn checkInferStruc(checker: *Checker, struc: Ast.InferStruct, location: Location) !Typ {
+    const typs = try checker.arena.allocator().alloc(Typ, struc.fields.len);
+    for (struc.fields, typs) |field, *typ| {
+        typ.* = try checker.checkExpr(field.expr);
     }
+    const lazy = try checker.arena.allocator().create(Typ);
+    lazy.* = .any;
+    checker.info.typs[struc.typ_id] = lazy;
+    try checker.lazy_strucs.append(checker.gpa, .{
+        .typ = lazy,
+        .fields = struc.fields,
+        .typs = typs,
+        .location = location,
+    });
+    return .{ .lazy = lazy };
+}
+
+fn checkStruc(checker: *Checker, struc: Ast.StructExpr, location: Location) !Typ {
+    const typs = try checker.arena.allocator().alloc(Typ, struc.fields.len);
+    for (struc.fields, typs) |field, *typ| {
+        typ.* = try checker.checkExpr(field.expr);
+    }
+    checker.checkStrucNow(location, struc, typs);
     return .{ .name = struc.name };
+}
+
+fn checkStrucNow(
+    checker: *Checker,
+    location: Location,
+    struc: Ast.StructExpr,
+    typs: []const Typ,
+) void {
+    const decl = checker.structs.get(struc.name) orelse {
+        checker.failNotStruct(location, .{ .name = struc.name });
+        return;
+    };
+    for (struc.fields, typs) |field, typ| {
+        const f_decl = decl.fields.get(field.name) orelse {
+            checker.failNoField(field.location, field.name, struc.name);
+            continue;
+        };
+        checker.unify(field.expr.location, f_decl.typ, typ);
+    }
+    var iter = decl.fields.keyIterator();
+    while (iter.next()) |field_decl| {
+        var unused = true;
+        for (struc.fields) |field| {
+            if (std.mem.eql(u8, field_decl.*, field.name)) {
+                unused = false;
+                break;
+            }
+        }
+        if (unused) {
+            std.log.err(
+                \\in {f}
+                \\     field `{s}` is not initialized
+                \\
+            , .{ location, field_decl.* });
+            checker.errors_cnt += 1;
+        }
+    }
 }
 
 fn checkUndef(checker: *Checker, undef: Ast.Undef) !Typ {
@@ -469,28 +576,38 @@ fn checkField(checker: *Checker, field: Ast.Field, location: Location, mutable: 
     }
     const norm = expr_typ.normalise();
     const name = if (norm == .name) norm.name else {
-        checker.failNoFields(field.expr.location, expr_typ);
+        checker.failNotStruct(field.expr.location, expr_typ);
         return .err;
     };
     const struc = checker.structs.get(name) orelse {
-        checker.failNoFields(field.expr.location, expr_typ);
+        checker.failNotStruct(field.expr.location, expr_typ);
         return .err;
     };
     const fiel = struc.fields.get(field.name) orelse {
-        std.log.err(
-            \\in {f}
-            \\     no field `{s}` in struct `{s}`
-            \\
-        , .{ location, field.name, name });
+        checker.failNoField(location, field.name, name);
         return .err;
     };
     return fiel.typ;
 }
 
-fn failNoFields(checker: *Checker, location: Location, typ: Typ) void {
+fn failNoField(
+    checker: *Checker,
+    location: Location,
+    field: []const u8,
+    struc: []const u8,
+) void {
     std.log.err(
         \\in {f}
-        \\     type `{f}` does not have fields
+        \\     no field `{s}` in struct `{s}`
+        \\
+    , .{ location, field, struc });
+    checker.errors_cnt += 1;
+}
+
+fn failNotStruct(checker: *Checker, location: Location, typ: Typ) void {
+    std.log.err(
+        \\in {f}
+        \\     type `{f}` is not a struct
         \\
     , .{ location, typ });
     checker.errors_cnt += 1;
@@ -578,6 +695,7 @@ fn deinit(checker: *Checker) void {
     checker.vars.deinit();
     checker.fun_typs.deinit();
     checker.arena.deinit();
+    checker.lazy_strucs.deinit(checker.gpa);
     checker.* = undefined;
 }
 
