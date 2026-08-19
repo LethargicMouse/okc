@@ -277,6 +277,11 @@ fn genParam(gen: *Codegen, param: Ast.Param) !TypVal {
 
 fn genAstTyp(gen: *Codegen, typ: Ast.Typ) !Typ {
     switch (typ) {
+        .mut_ptr => |inner| {
+            const typ_ptr = try gen.arena.allocator().create(Typ);
+            typ_ptr.* = try gen.genAstTyp(inner.*);
+            return .{ .ptr = typ_ptr };
+        },
         .name => |name| return .{ .name = name },
         .prime => |prime| return genPrime(prime),
         .ptr => |ptr_typ| {
@@ -524,6 +529,11 @@ fn genTyp(gen: *Codegen, typ: Info.Typ) !Typ {
         .name => |name| return .{ .name = name },
         .prime => |prime| return genPrime(prime),
         .ptr => |ptr_typ| {
+            const typ_ptr = try gen.arena.allocator().create(Typ);
+            typ_ptr.* = try gen.genTyp(ptr_typ.*);
+            return .{ .ptr = typ_ptr };
+        },
+        .mut_ptr => |ptr_typ| {
             const typ_ptr = try gen.arena.allocator().create(Typ);
             typ_ptr.* = try gen.genTyp(ptr_typ.*);
             return .{ .ptr = typ_ptr };

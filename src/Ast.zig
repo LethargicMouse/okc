@@ -28,6 +28,7 @@ pub const Typ = union(enum) {
     prime: Prime,
     name: []const u8,
     ptr: *const Typ,
+    mut_ptr: *const Typ,
     array: *const Array,
 
     pub fn fromName(name: []const u8) Typ {
@@ -122,6 +123,7 @@ pub const Call = struct {
 
 pub const Ptr = struct {
     expr: Expr,
+    mutable: bool,
 };
 
 pub const Notb = struct {

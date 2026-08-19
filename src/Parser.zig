@@ -224,6 +224,7 @@ fn parseParamLoud(parser: *Parser) !Ast.Param {
 fn parseTypLoud(parser: *Parser) Error!Ast.Typ {
     return parser.parseEither(Ast.Typ, .{
         parseVerbalTyp,
+        parseMutPtrTyp,
         parsePtrTyp,
         parseArrayTyp,
     }) catch |err| {
@@ -250,6 +251,14 @@ fn parseEither(parser: *Parser, typ: type, comptime parses: anytype) !typ {
         }
     }
     return error.ParseFailed;
+}
+
+fn parseMutPtrTyp(parser: *Parser) !Ast.Typ {
+    try parser.expect(.amp);
+    try parser.expect(.mut);
+    const typ = try parser.arena.allocator().create(Ast.Typ);
+    typ.* = try parser.parseTypLoud();
+    return .{ .mut_ptr = typ };
 }
 
 fn parsePtrTyp(parser: *Parser) !Ast.Typ {
@@ -701,6 +710,7 @@ fn getLocation(parser: Parser) Location {
 fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
         parseParExpr,
+        parseMutPtrExpr,
         parsePtrExpr,
         parseDerefExpr,
         parseNotbExpr,
@@ -726,7 +736,10 @@ fn parseDerefExpr(parser: *Parser) !Ast.Expr {
     try parser.expect(.star);
     const deref = try parser.arena.allocator().create(Ast.Deref);
     deref.expr = try parser.parseExprPostedLoud();
-    return .{ .location = location, .kind = .{ .deref = deref } };
+    return .{
+        .location = location.combine(deref.expr.location),
+        .kind = .{ .deref = deref },
+    };
 }
 
 fn parseInferStructExpr(parser: *Parser) !Ast.Expr {
@@ -744,9 +757,12 @@ fn parseInferStructExpr(parser: *Parser) !Ast.Expr {
 }
 
 fn parseParExpr(parser: *Parser) !Ast.Expr {
+    const start = parser.getLocation();
     try parser.expect(.parl);
-    const expr = try parser.parseExprLoud();
+    var expr = try parser.parseExprLoud();
     try parser.expectLoud(.parr);
+    const end = parser.getLocation();
+    expr.location = start.combine(end);
     return expr;
 }
 
@@ -756,9 +772,19 @@ fn parseNotbExpr(parser: *Parser) !Ast.Expr {
     const notb = try parser.arena.allocator().create(Ast.Notb);
     notb.expr = try parser.parseExprPostedLoud();
     return .{
-        .location = location,
+        .location = location.combine(notb.expr.location),
         .kind = .{ .notb = notb },
     };
+}
+
+fn parseMutPtrExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
+    try parser.expect(.amp);
+    try parser.expect(.mut);
+    const ptr = try parser.arena.allocator().create(Ast.Ptr);
+    ptr.expr = try parser.parseExprPostedLoud();
+    ptr.mutable = true;
+    return .{ .location = location.combine(ptr.expr.location), .kind = .{ .ptr = ptr } };
 }
 
 fn parsePtrExpr(parser: *Parser) !Ast.Expr {
@@ -766,8 +792,9 @@ fn parsePtrExpr(parser: *Parser) !Ast.Expr {
     try parser.expect(.amp);
     const ptr = try parser.arena.allocator().create(Ast.Ptr);
     ptr.expr = try parser.parseExprPostedLoud();
+    ptr.mutable = false;
     return .{
-        .location = location,
+        .location = location.combine(ptr.expr.location),
         .kind = .{ .ptr = ptr },
     };
 }

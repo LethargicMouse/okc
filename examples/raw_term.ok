@@ -11,7 +11,7 @@ struct termios {
 
 extern fn tcgetattr(fd: i32, termios: &termios) void;
 extern fn tcsetattr(fd: i32, action: i32, termios: &termios) void;
-extern fn read(fd: i32, ptr: &u8, len: u64) void;
+extern fn read(fd: i32, ptr: &mut u8, len: u64) void;
 extern fn write(fd: i32, ptr: &u8, len: u64) void;
 
 fn main() i32 {
@@ -33,7 +33,7 @@ fn main() i32 {
   put_str("\x1b[2J    six seven");
   while (true) {
     let mut input: u8 = 0;
-    read(stdin, &input, 1);
+    read(stdin, &mut input, 1);
     if (input == 'q') {
       break;
     }

@@ -11,6 +11,7 @@ pub const Typ = union(enum) {
     prime: Ast.Prime,
     name: []const u8,
     ptr: *const Typ,
+    mut_ptr: *const Typ,
     array: *const Array,
     lazy: *Typ,
     int,
@@ -22,6 +23,7 @@ pub const Typ = union(enum) {
             .prime => |prime| try writer.writeAll(@tagName(prime)),
             .name => |name| try writer.writeAll(name),
             .ptr => |inner| try writer.print("&{f}", .{inner}),
+            .mut_ptr => |inner| try writer.print("&mut {f}", .{inner}),
             .array => |array| try writer.print(
                 "[{s}]{f}",
                 .{ array.len, array.typ },

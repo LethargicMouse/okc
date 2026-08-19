@@ -147,6 +147,11 @@ fn regHeader(checker: *Checker, header: Ast.Header) !void {
 
 fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
     switch (typ) {
+        .mut_ptr => |inner| {
+            const inner_typ = try checker.checkTyp(inner.*);
+            const ptr = try checker.boxTyp(inner_typ);
+            return .{ .mut_ptr = ptr };
+        },
         .prime => |prime| return .{ .prime = prime },
         .name => |name| return .{ .name = name },
         .ptr => |inner| {
@@ -344,7 +349,7 @@ fn checkAssign(checker: *Checker, assign: Ast.Assign) !ControlFlow {
 
 fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
     switch (expr.kind) {
-        .deref => |deref| return checker.checkDeref(deref.*, expr.location),
+        .deref => |deref| return checker.checkDeref(deref.*, expr.location, true),
         .vari => |name| return checker.checkVar(expr.location, name, true),
         .field => |field| return checker.checkField(field.*, expr.location, true),
         .elem => |elem| return checker.checkElem(elem.*, expr.location, true),
@@ -367,11 +372,19 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
     }
 }
 
-fn checkDeref(checker: *Checker, deref: Ast.Deref, location: Location) !Typ {
+fn checkDeref(checker: *Checker, deref: Ast.Deref, location: Location, mutable: bool) !Typ {
     const typ = try checker.checkExpr(deref.expr);
     const norm = typ.normalise();
     switch (norm) {
-        .ptr => |inner| return inner.*,
+        .ptr => |inner| {
+            if (mutable) {
+                checker.failNotMut(location);
+            }
+            return inner.*;
+        },
+        .mut_ptr => |inner| {
+            return inner.*;
+        },
         .err => return .err,
         .prime, .name, .any, .int, .array => {
             checker.fail(
@@ -397,7 +410,7 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location, mutable: boo
     switch (norm) {
         .array => |array| return array.typ,
         .err => return .err,
-        .prime, .name, .ptr, .any, .int => {
+        .prime, .name, .ptr, .any, .int, .mut_ptr => {
             checker.fail(
                 \\in {f}
                 \\     type `{f}` does not support indexing
@@ -447,6 +460,7 @@ fn canUnify(a: Typ, b: Typ, active: bool) bool {
         .prime => |aprime| return aprime == b.prime,
         .name => |aname| return std.mem.eql(u8, aname, b.name),
         .ptr => |atyp| return canUnify(atyp.*, b.ptr.*, active),
+        .mut_ptr => |atyp| return canUnify(atyp.*, b.mut_ptr.*, active),
         else => unreachable,
     }
 }
@@ -476,7 +490,7 @@ fn checkDeclare(
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
     switch (expr.kind) {
-        .deref => |deref| return checker.checkDeref(deref.*, expr.location),
+        .deref => |deref| return checker.checkDeref(deref.*, expr.location, false),
         .infer_struc => |struc| return checker.checkInferStruc(struc, expr.location),
         .int => |int| return checker.checkInt(expr.location, int),
         .str => return .{ .name = "str" },
@@ -502,7 +516,10 @@ fn checkNotb(checker: *Checker, notb: Ast.Notb) !Typ {
 
 fn checkPtr(checker: *Checker, ptr: Ast.Ptr) !Typ {
     const typ = try checker.arena.allocator().create(Typ);
-    typ.* = try checker.checkExprMut(ptr.expr);
+    typ.* = try checker.checkExprWith(ptr.expr, ptr.mutable);
+    if (ptr.mutable) {
+        return .{ .mut_ptr = typ };
+    }
     return .{ .ptr = typ };
 }
 
