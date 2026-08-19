@@ -464,6 +464,7 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
 
 fn checkNotb(checker: *Checker, notb: Ast.Notb) !Typ {
     const typ = try checker.checkExpr(notb.expr);
+    checker.unify(notb.expr.location, .int, typ);
     return typ;
 }
 
