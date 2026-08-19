@@ -1,5 +1,3 @@
-extern fn puts(s: &u8) void;
-
 fn main() i32 {
   _ = calc();
   return 0;

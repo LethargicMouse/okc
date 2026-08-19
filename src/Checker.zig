@@ -31,9 +31,11 @@ const Var = struct {
     used: bool = false,
 };
 
-const FunTyp = struct {
+const Header = struct {
     params: []const Typ,
     ret_typ: Typ,
+    location: Location,
+    used: bool = false,
 };
 
 const LazyStruct = struct {
@@ -49,7 +51,7 @@ gpa: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
 structs: std.StringHashMap(Struct),
 vars: std.StringHashMap(Var),
-fun_typs: std.StringHashMap(FunTyp),
+headers: std.StringHashMap(Header),
 lazy_strucs: std.ArrayList(LazyStruct) = .empty,
 info: Info,
 ret_typ: Typ = undefined,
@@ -59,14 +61,14 @@ loops_nested: u16 = 0,
 pub fn init(gpa: std.mem.Allocator, ast_info: Ast.Info) !Checker {
     const structs = std.StringHashMap(Struct).init(gpa);
     const vars = std.StringHashMap(Var).init(gpa);
-    const fun_typs = std.StringHashMap(FunTyp).init(gpa);
+    const fun_typs = std.StringHashMap(Header).init(gpa);
     const arena = std.heap.ArenaAllocator.init(gpa);
     const info = try Info.init(gpa, ast_info);
     return .{
         .gpa = gpa,
         .structs = structs,
         .vars = vars,
-        .fun_typs = fun_typs,
+        .headers = fun_typs,
         .arena = arena,
         .info = info,
     };
@@ -93,6 +95,16 @@ fn checkAst(checker: *Checker, ast: Ast) !void {
     }
     checker.checkVars();
     checker.checkMain(ast.location);
+    checker.checkHeaders();
+}
+
+fn checkHeaders(checker: *Checker) void {
+    var iter = checker.headers.valueIterator();
+    while (iter.next()) |header| {
+        if (!header.used) {
+            checker.failUnused(header.location);
+        }
+    }
 }
 
 fn regItem(checker: *Checker, item: Ast.Item) !void {
@@ -115,10 +127,7 @@ fn checkVars(checker: *Checker) void {
     var iter = checker.vars.valueIterator();
     while (iter.next()) |vari| {
         if (!vari.used) {
-            checker.fail(
-                \\in {f}
-                \\     variable is never used
-            , .{vari.location});
+            checker.failUnused(vari.location);
         } else if (vari.mutable and !vari.mutated) {
             checker.fail(
                 \\in {f}
@@ -129,14 +138,22 @@ fn checkVars(checker: *Checker) void {
     }
 }
 
+fn failUnused(checker: *Checker, location: Location) void {
+    checker.fail(
+        \\in {f}
+        \\     item is never used
+    , .{location});
+}
+
 fn checkMain(checker: *Checker, location: Location) void {
-    _ = checker.fun_typs.get("main") orelse {
+    const header = checker.headers.getPtr("main") orelse {
         checker.fail(
             \\in {f}
             \\     `main` function not found
         , .{location});
         return;
     };
+    header.used = true;
 }
 
 fn regHeader(checker: *Checker, header: Ast.Header) !void {
@@ -145,9 +162,10 @@ fn regHeader(checker: *Checker, header: Ast.Header) !void {
         params[i] = try checker.checkTyp(param.typ);
     }
     const ret_typ = try checker.checkTyp(header.ret_typ);
-    try checker.fun_typs.put(header.name, .{
+    try checker.headers.put(header.name, .{
         .params = params,
         .ret_typ = ret_typ,
+        .location = header.location,
     });
 }
 
@@ -199,7 +217,7 @@ fn boxTyp(checker: *Checker, typ: Typ) !*Typ {
 }
 
 fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
-    checker.ret_typ = checker.fun_typs.get(fun.header.name).?.ret_typ;
+    checker.ret_typ = checker.headers.get(fun.header.name).?.ret_typ;
     for (fun.header.params) |param| {
         try checker.vars.put(param.name, .{
             .typ = try checker.checkTyp(param.typ),
@@ -706,7 +724,7 @@ fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bo
 }
 
 fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !Typ {
-    const fun_typ = checker.fun_typs.get(call.name) orelse {
+    const header = checker.headers.getPtr(call.name) orelse {
         checker.fail(
             \\in {f}
             \\     item `{s}` is not declared
@@ -716,11 +734,12 @@ fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !Typ {
         }
         return .err;
     };
-    for (call.args, fun_typ.params) |arg, param| {
+    header.used = true;
+    for (call.args, header.params) |arg, param| {
         const typ = try checker.checkExpr(arg);
         checker.unify(arg.location, param, typ);
     }
-    return fun_typ.ret_typ;
+    return header.ret_typ;
 }
 
 fn checkRet(checker: *Checker, ret: Ast.Return) !ControlFlow {
@@ -736,7 +755,7 @@ fn deinit(checker: *Checker) void {
     }
     checker.structs.deinit();
     checker.vars.deinit();
-    checker.fun_typs.deinit();
+    checker.headers.deinit();
     checker.arena.deinit();
     checker.lazy_strucs.deinit(checker.gpa);
     checker.* = undefined;
