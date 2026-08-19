@@ -5,6 +5,8 @@ const Location = @import("Location.zig");
 const Info = @import("Info.zig");
 const Typ = Info.Typ;
 
+const Error = error{OutOfMemory};
+
 // numbered to enable `<`
 const ControlFlow = enum(u2) {
     cont = 0,
@@ -94,28 +96,28 @@ fn checkAst(checker: *Checker, ast: Ast) !void {
         try checker.checkFun(fun);
     }
     checker.checkVars();
-    checker.checkMain();
+    checker.checkMain(ast.location);
 }
 
 fn checkVars(checker: *Checker) void {
     var iter = checker.vars.valueIterator();
     while (iter.next()) |vari| {
         if (vari.mutable and !vari.mutated) {
-            std.log.err(
+            checker.fail(
                 \\in {f}
                 \\     variable is never mutated
-                \\
             , .{vari.location});
             std.log.info("remove `mut` before name\n", .{});
-            checker.errors_cnt += 1;
         }
     }
 }
 
-fn checkMain(checker: *Checker) void {
+fn checkMain(checker: *Checker, location: Location) void {
     _ = checker.fun_typs.get("main") orelse {
-        std.log.err("`main` function not found\n", .{});
-        checker.errors_cnt += 1;
+        checker.fail(
+            \\in {f}
+            \\     `main` function not found
+        , .{location});
         return;
     };
 }
@@ -185,32 +187,28 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
     }
     const cf = try checker.checkBlock(fun.body);
     if (cf != .ret and !fun.header.ret_typ.isVoid()) {
-        std.log.err(
+        checker.fail(
             \\in {f}
             \\     function may not return
-            \\
         , .{fun.header.location});
-        checker.errors_cnt += 1;
     }
     for (checker.lazy_strucs.items) |lazy_struc| {
         const name = switch (lazy_struc.typ.*) {
             .name => |name| name,
             .any => {
-                std.log.err(
+                checker.fail(
                     \\in {f}
                     \\     cannot infer type
                 , .{lazy_struc.location});
-                checker.errors_cnt += 1;
                 continue;
             },
             else => {
-                std.log.err(
+                checker.fail(
                     \\in {f}
                     \\     wrong type:
                     \\         expected  {f}
                     \\            found  <struct>
                 , .{ lazy_struc.location, lazy_struc.typ });
-                checker.errors_cnt += 1;
                 continue;
             },
         };
@@ -231,12 +229,10 @@ fn checkBlock(checker: *Checker, block: []const Ast.Statement) !ControlFlow {
                 res = cf;
             }
             if (i + 1 != block.len) {
-                std.log.err(
+                checker.fail(
                     \\in {f}
                     \\     statement is unreachable
-                    \\
                 , .{block[i + 1].location});
-                checker.errors_cnt += 1;
             }
         }
     }
@@ -265,12 +261,10 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!ControlFlow
 fn checkIgnore(checker: *Checker, ignore: Ast.Ignore, location: Location) !ControlFlow {
     const typ = try checker.checkExpr(ignore.expr);
     if (typ == .prime and typ.prime == .void) {
-        std.log.err(
+        checker.fail(
             \\in {f}
             \\     redundant ignore
-            \\
         , .{location});
-        checker.errors_cnt += 1;
         std.log.info("remove `_ =` before expr\n", .{});
     }
     return .cont;
@@ -278,12 +272,10 @@ fn checkIgnore(checker: *Checker, ignore: Ast.Ignore, location: Location) !Contr
 
 fn checkBreak(checker: *Checker, location: Location) Error!ControlFlow {
     if (checker.loops_nested == 0) {
-        std.log.err(
+        checker.fail(
             \\in {f}
             \\     `break` outside of loop
-            \\
         , .{location});
-        checker.errors_cnt += 1;
         return .cont;
     }
     return .brek;
@@ -356,12 +348,10 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
         .infer_struc,
         => {
             const typ = try checker.checkExpr(expr);
-            std.log.err(
+            checker.fail(
                 \\in {f}
                 \\     cannot assign to constant
-                \\
             , .{expr.location});
-            checker.errors_cnt += 1;
             return typ;
         },
     }
@@ -374,12 +364,10 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location, mutable: boo
         .array => |array| return array.typ,
         .err => return .err,
         .prime, .name, .ptr, .any, .int => {
-            std.log.err(
+            checker.fail(
                 \\in {f}
                 \\     type `{f}` does not support indexing
-                \\
             , .{ location, typ });
-            checker.errors_cnt += 1;
             return .err;
         },
         .lazy => unreachable,
@@ -390,17 +378,15 @@ fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) void {
     if (canUnify(a, b, true)) {
         return;
     }
-    std.log.err(
+    checker.fail(
         \\in {f}
         \\     wrong type:
         \\         expected  {f}
         \\            found  {f}
-        \\
     , .{ location, a, b });
     if (a == .ptr and a.ptr.* == .prime and a.ptr.*.prime == .u8 and b == .name and std.mem.eql(u8, b.name, "str")) {
         std.log.info("append `.ptr` to get C-style string\n", .{});
     }
-    checker.errors_cnt += 1;
 }
 
 fn canUnify(a: Typ, b: Typ, active: bool) bool {
@@ -536,12 +522,10 @@ fn checkStrucNow(
             }
         }
         if (unused) {
-            std.log.err(
+            checker.fail(
                 \\in {f}
                 \\     field `{s}` is not initialized
-                \\
             , .{ location, field_decl.* });
-            checker.errors_cnt += 1;
         }
     }
 }
@@ -555,12 +539,10 @@ fn checkUndef(checker: *Checker, undef: Ast.Undef) !Typ {
 
 fn checkInt(checker: *Checker, location: Location, int: []const u8) Typ {
     _ = std.fmt.parseInt(u64, int, 10) catch {
-        std.log.err(
+        checker.fail(
             \\in {f}
             \\     integer is too large
-            \\
         , .{location});
-        checker.errors_cnt += 1;
     };
     return .int;
 }
@@ -599,35 +581,29 @@ fn failNoField(
     field: []const u8,
     struc: []const u8,
 ) void {
-    std.log.err(
+    checker.fail(
         \\in {f}
         \\     no field `{s}` in struct `{s}`
-        \\
     , .{ location, field, struc });
-    checker.errors_cnt += 1;
 }
 
 fn failNotStruct(checker: *Checker, location: Location, typ: Typ) void {
-    std.log.err(
+    checker.fail(
         \\in {f}
         \\     type `{f}` is not a struct
-        \\
     , .{ location, typ });
-    checker.errors_cnt += 1;
 }
 
 fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {
     var left = try checker.checkExpr(binary.left);
     if (!left.isNumber()) {
-        std.log.err(
+        checker.fail(
             \\in {f}
             \\     wrong type:
             \\         expected  <number>
             \\            found  {f}
-            \\
         , .{ binary.left.location, left });
         left = .err;
-        checker.errors_cnt += 1;
     }
     const right = try checker.checkExpr(binary.right);
     checker.unify(binary.right.location, left, right);
@@ -639,24 +615,20 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {
 
 fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bool) Typ {
     const vari = checker.vars.getPtr(name) orelse {
-        std.log.err(
+        checker.fail(
             \\in {f}
             \\     item `{s}` is not declared
-            \\
         , .{ location, name });
-        checker.errors_cnt += 1;
         return .err;
     };
     if (mutable) {
         if (vari.mutable) {
             vari.mutated = true;
         } else {
-            std.log.err(
+            checker.fail(
                 \\in {f}
                 \\     cannot assign to constant
-                \\
             , .{location});
-            checker.errors_cnt += 1;
             std.log.info("add `mut` before name in {f}\n", .{vari.location});
         }
     }
@@ -665,12 +637,10 @@ fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bo
 
 fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !Typ {
     const fun_typ = checker.fun_typs.get(call.name) orelse {
-        std.log.err(
+        checker.fail(
             \\in {f}
             \\     item `{s}` is not declared
-            \\
         , .{ location, call.name });
-        checker.errors_cnt += 1;
         for (call.args) |arg| {
             _ = try checker.checkExpr(arg);
         }
@@ -702,4 +672,7 @@ fn deinit(checker: *Checker) void {
     checker.* = undefined;
 }
 
-const Error = error{OutOfMemory};
+fn fail(checker: *Checker, comptime msg: []const u8, args: anytype) void {
+    std.log.err(msg ++ "\n", args);
+    checker.errors_cnt += 1;
+}

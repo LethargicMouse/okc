@@ -222,11 +222,12 @@ pub const Info = struct {
 
 const Ast = @This();
 
+arena: std.heap.ArenaAllocator,
 ext_funs: []const ExtFun,
 funs: []const Fun,
 strucs: []const Struct,
 strs: []const []const u8,
-arena: std.heap.ArenaAllocator,
+location: Location,
 
 pub fn deinit(ast: *Ast) void {
     ast.arena.deinit();

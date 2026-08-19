@@ -103,15 +103,17 @@ fn parseAst(parser: *Parser) !Ast {
     const ext_funs = try parser.parseMany(Ast.ExtFun, parseExtFunLoud);
     const strucs = try parser.parseMany(Ast.Struct, parseStructLoud);
     const funs = try parser.parseMany(Ast.Fun, parseFunLoud);
+    const location = parser.getLocation();
     try parser.expectLoud(.eof);
     const strs = try parser.arena.allocator().alloc([]const u8, parser.strs.items.len);
     @memcpy(strs, parser.strs.items);
     return .{
+        .arena = parser.arena,
         .funs = funs,
         .ext_funs = ext_funs,
         .strucs = strucs,
         .strs = strs,
-        .arena = parser.arena,
+        .location = location,
     };
 }
 
