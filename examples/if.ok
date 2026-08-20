@@ -4,7 +4,7 @@ fn main() i32 {
   let sixseven = 67;
   if (sixseven == 67) {
     puts("SIXSEVEEEN!".ptr);
-  } or {
+  } else {
     puts("no sixseven(".ptr);
   }
   return 0;

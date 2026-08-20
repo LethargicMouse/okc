@@ -4,7 +4,7 @@ fn main() i32 {
   if (true) {
     puts("does return".ptr);
     return 0;
-  } or {
+  } else {
     while (true) {
       return 123;
     }

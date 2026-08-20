@@ -423,7 +423,8 @@ fn parseIfStatement(parser: *Parser) !Ast.Statement {
 }
 
 fn parseElseIf(parser: *Parser) !Ast.Branch {
-    try parser.expect(.orr);
+    try parser.expect(.els);
+    try parser.expect(.iff);
     const branch = try parser.parseBranch();
     return branch;
 }
@@ -440,7 +441,7 @@ fn parseBranch(parser: *Parser) !Ast.Branch {
 }
 
 fn parseElseLoud(parser: *Parser) ![]const Ast.Statement {
-    try parser.expectLoud(.orr);
+    try parser.expectLoud(.els);
     const statements = try parser.parseBlockLoud();
     return statements;
 }

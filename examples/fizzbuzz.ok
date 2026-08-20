@@ -7,11 +7,11 @@ fn main() i32 {
     i = i + 1;
     if (i % 15 == 0) {
       puts("fizzbuzz".ptr);
-    } or (i % 5 == 0) {
+    } else if (i % 5 == 0) {
       puts("buzz".ptr);
-    } or (i % 3 == 0) {
+    } else if (i % 3 == 0) {
       puts("fizz".ptr);
-    } or {
+    } else {
       printf("%d\n".ptr, i);
     }
   }
