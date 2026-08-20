@@ -1,0 +1,13 @@
+// start of file
+
+/// import of libc `puts`
+extern fn puts(s: &u8) void;  // actually returns `i32` but we ignore it
+  // end of externs
+      /// main function
+fn main() i32 { // main body starts // // / / ///
+// dunno what to write here
+  puts("comments".ptr); // above puts
+      /// after `puts`
+  return 0; // returning.....
+} ////// end of main
+// end of file

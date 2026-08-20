@@ -121,7 +121,7 @@ pub fn lex(lexer: *Lexer, gpa: std.mem.Allocator) ![]const Token {
 fn populate(lexer: *Lexer, gpa: std.mem.Allocator, res: *std.ArrayList(Token)) !void {
     while (true) {
         const before_skip = lexer.cursor;
-        lexer.skipSpaces();
+        lexer.skip();
         if (lexer.cursor == lexer.source.code.len) {
             // so that eof is right after last lexeme
             lexer.cursor = before_skip;
@@ -137,9 +137,33 @@ fn populate(lexer: *Lexer, gpa: std.mem.Allocator, res: *std.ArrayList(Token)) !
     }
 }
 
-fn skipSpaces(lexer: *Lexer) void {
+fn skip(lexer: *Lexer) void {
+    var dirty = true;
+    while (dirty) {
+        dirty = false;
+        lexer.skipSpaces(&dirty);
+        lexer.skipComment(&dirty);
+    }
+}
+
+fn skipSpaces(lexer: *Lexer, dirty: *bool) void {
     const spaces = lexer.takeWhile(std.ascii.isWhitespace);
-    lexer.cursor += spaces.len;
+    if (spaces.len > 0) {
+        dirty.* = true;
+        lexer.cursor += spaces.len;
+    }
+}
+
+fn skipComment(lexer: *Lexer, dirty: *bool) void {
+    if (std.mem.startsWith(u8, lexer.getRest(), "//")) {
+        dirty.* = true;
+        while (lexer.cursor < lexer.source.code.len and lexer.source.code[lexer.cursor] != '\n') {
+            lexer.cursor += 1;
+        }
+        if (lexer.cursor != lexer.source.code.len) {
+            lexer.cursor += 1;
+        }
+    }
 }
 
 fn lexNext(lexer: *Lexer) ?Token {

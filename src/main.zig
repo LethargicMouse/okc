@@ -176,3 +176,7 @@ test "infer_struct.ok" {
 test "mut_ptr.ok" {
     try testFile("mut_ptr", "six seven\n");
 }
+
+test "comment.ok" {
+    try testFile("comment", "comments\n");
+}
