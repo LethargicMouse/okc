@@ -5,6 +5,17 @@ const Lexer = @import("Lexer.zig");
 const Lexeme = Lexer.Lexeme;
 const Location = @import("Location.zig");
 
+const ExprStatementPostfix = union(enum) {
+    assign: Ast.Expr,
+    op_assign: OpAssignPostfix,
+    none,
+};
+
+const OpAssignPostfix = struct {
+    bin_op: Ast.BinOp,
+    expr: Ast.Expr,
+};
+
 const BinPostfix = struct {
     bin_op: Ast.BinOp,
     expr: Ast.Expr,
@@ -321,8 +332,6 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
         parseMutDeclareStatement,
         parseIfStatement,
         parseWhileStatement,
-        parseAssignStatement,
-        parseAndAssignStatement,
         parseIgnoreStatement,
         parseExprStatement,
     }) catch |err| {
@@ -351,38 +360,22 @@ fn parseBreakStatement(parser: *Parser) !Ast.Statement {
     };
 }
 
-fn parseAndAssignStatement(parser: *Parser) !Ast.Statement {
-    return parser.parseOpAssignStatement(.amp, .andb);
-}
-
-fn parseOpAssignStatement(
+fn parseOpAssignStatementPostfix(
     parser: *Parser,
-    lexeme: Lexeme,
-    op: Ast.BinOp,
-) !Ast.Statement {
-    const location = parser.getLocation();
-    const left = try parser.parseExpr();
-    try parser.expect(lexeme);
+) !ExprStatementPostfix {
+    const bin_op = try parser.parseOpAssignBinOp();
     try parser.expect(.equ);
     const expr = try parser.parseExprLoud();
-    try parser.expectLoud(.semi);
-    const binary = try parser.arena.allocator().create(Ast.Binary);
-    binary.left = left;
-    binary.op = op;
-    binary.right = expr;
-    return .{
-        .location = location,
-        .kind = .{
-            .assign = .{
-                .left = left,
-                .expr = .{
-                    // never read
-                    .location = location,
-                    .kind = .{ .binary = binary },
-                },
-            },
-        },
-    };
+    return .{ .op_assign = .{
+        .bin_op = bin_op,
+        .expr = expr,
+    } };
+}
+
+fn parseOpAssignBinOp(parser: *Parser) !Ast.BinOp {
+    return parser.parseEither(Ast.BinOp, &.{
+        parseBitAnd,
+    });
 }
 
 fn parseIgnoreStatement(parser: *Parser) !Ast.Statement {
@@ -446,19 +439,10 @@ fn parseElseLoud(parser: *Parser) ![]const Ast.Statement {
     return statements;
 }
 
-fn parseAssignStatement(parser: *Parser) !Ast.Statement {
-    const location = parser.getLocation();
-    const left = try parser.parseExpr();
+fn parseAssignStatementPostfix(parser: *Parser) !ExprStatementPostfix {
     try parser.expect(.equ);
     const expr = try parser.parseExprLoud();
-    try parser.expectLoud(.semi);
-    return .{
-        .location = location,
-        .kind = .{ .assign = .{
-            .left = left,
-            .expr = expr,
-        } },
-    };
+    return .{ .assign = expr };
 }
 
 fn parseDeclareStatement(parser: *Parser) !Ast.Statement {
@@ -503,11 +487,44 @@ fn parseTypAnnotLoud(parser: *Parser) !Ast.Typ {
 
 fn parseExprStatement(parser: *Parser) !Ast.Statement {
     const expr = try parser.parseExpr();
+    const postfix = try parser.parseExprStatementPostfix();
     try parser.expectLoud(.semi);
-    return .{
-        .location = expr.location,
-        .kind = .{ .expr = expr },
-    };
+    switch (postfix) {
+        .none => return .{ .location = expr.location, .kind = .{ .expr = expr } },
+        .assign => |right| {
+            return .{
+                .location = expr.location.combine(right.location),
+                .kind = .{ .assign = .{
+                    .left = expr,
+                    .expr = right,
+                } },
+            };
+        },
+        .op_assign => |op_assign| {
+            const binary = try parser.arena.allocator().create(Ast.Binary);
+            binary.left = expr;
+            binary.op = op_assign.bin_op;
+            binary.right = op_assign.expr;
+            const location = expr.location.combine(op_assign.expr.location);
+            return .{
+                .location = location,
+                .kind = .{ .assign = .{
+                    .left = expr,
+                    .expr = .{
+                        .location = location,
+                        .kind = .{ .binary = binary },
+                    },
+                } },
+            };
+        },
+    }
+}
+
+fn parseExprStatementPostfix(parser: *Parser) !ExprStatementPostfix {
+    return parser.parseEither(ExprStatementPostfix, &.{
+        parseAssignStatementPostfix,
+        parseOpAssignStatementPostfix,
+    }) catch .none;
 }
 
 fn parseCall(parser: *Parser) !Ast.Call {

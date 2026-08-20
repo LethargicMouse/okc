@@ -67,8 +67,7 @@ pub const Fun = struct {
 };
 
 pub const Statement = struct {
-    location: Location,
-    kind: union(enum) {
+    pub const Kind = union(enum) {
         ret: Return,
         expr: Expr,
         declare: Declare,
@@ -79,7 +78,9 @@ pub const Statement = struct {
         mut_declare: Declare,
         brek,
         unre,
-    },
+    };
+    location: Location,
+    kind: Kind,
 };
 
 pub const Ignore = struct {
@@ -138,8 +139,7 @@ pub const Unary = struct {
 };
 
 pub const Expr = struct {
-    location: Location,
-    kind: union(enum) {
+    pub const Kind = union(enum) {
         unary: *const Unary,
         infer_struc: InferStruct,
         int: []const u8,
@@ -153,7 +153,9 @@ pub const Expr = struct {
         field: *const Field,
         struc: StructExpr,
         elem: *const Elem,
-    },
+    };
+    location: Location,
+    kind: Kind,
 };
 
 pub const StructExpr = struct {
