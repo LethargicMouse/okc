@@ -180,3 +180,7 @@ test "mut_ptr.ok" {
 test "comment.ok" {
     try testFile("comment", "comments\n");
 }
+
+test "ret_void.ok" {
+    try testFile("ret_void", "hello");
+}

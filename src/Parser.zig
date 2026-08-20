@@ -541,11 +541,14 @@ fn parseCall(parser: *Parser) !Ast.Call {
 fn parseRetStatement(parser: *Parser) !Ast.Statement {
     const location = parser.getLocation();
     try parser.expect(.ret);
-    const expr = try parser.parseExprLoud();
+    const expr = try parser.parseMaybe(Ast.Expr, parseExprLoud);
     try parser.expectLoud(.semi);
-    return .{ .location = location, .kind = .{ .ret = .{
-        .expr = expr,
-    } } };
+    return .{
+        .location = location,
+        .kind = .{ .ret = .{
+            .expr = expr,
+        } },
+    };
 }
 
 fn parseExprLoud(parser: *Parser) !Ast.Expr {

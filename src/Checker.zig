@@ -284,7 +284,7 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!ControlFlow
     switch (statement.kind) {
         .unre => return .ret,
         .brek => return checker.checkBreak(statement.location),
-        .ret => |ret| return checker.checkRet(ret),
+        .ret => |ret| return checker.checkRet(ret, statement.location),
         .expr => |expr| return checker.checkExprStatement(expr),
         .declare => |declare| {
             return checker.checkDeclare(declare, statement.location, false);
@@ -758,9 +758,16 @@ fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !Typ {
     return header.ret_typ;
 }
 
-fn checkRet(checker: *Checker, ret: Ast.Return) !ControlFlow {
-    const typ = try checker.checkExpr(ret.expr);
-    checker.unify(ret.expr.location, checker.ret_typ, typ);
+fn checkRet(checker: *Checker, ret: Ast.Return, location: Location) !ControlFlow {
+    if (ret.expr) |expr| {
+        const typ = try checker.checkExpr(expr);
+        checker.unify(expr.location, checker.ret_typ, typ);
+    } else if (checker.ret_typ != .prime or checker.ret_typ.prime != .void) {
+        checker.fail(
+            \\in {f}
+            \\     should return a value
+        , .{location});
+    }
     return .ret;
 }
 

@@ -261,7 +261,7 @@ fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
         try gen.genStatement(statement);
     }
     if (ret_typ == .void) {
-        try gen.print("\n  ret void", .{});
+        try gen.genRet(.{ .expr = null });
     } else {
         try gen.genUnreachable();
     }
@@ -453,8 +453,12 @@ fn newTmp(gen: *Codegen) u32 {
 }
 
 fn genRet(gen: *Codegen, ret: Ast.Return) !void {
-    const val = try gen.genExpr(ret.expr);
-    try gen.print("\n  ret {f}", .{val});
+    if (ret.expr) |expr| {
+        const val = try gen.genExpr(expr);
+        try gen.print("\n  ret {f}", .{val});
+    } else {
+        try gen.print("\n  ret void", .{});
+    }
 }
 
 fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {

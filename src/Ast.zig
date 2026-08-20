@@ -88,7 +88,7 @@ pub const Ignore = struct {
 };
 
 pub const Return = struct {
-    expr: Expr,
+    expr: ?Expr,
 };
 
 pub const While = struct {
