@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Ast = @import("Ast.zig");
 const Info = @import("Info.zig");
+const Typs = @import("Typs.zig");
 
 const Unescaped = struct { len: usize, repr: []const u8 };
 
@@ -531,11 +532,11 @@ fn genPtr(gen: *Codegen, expr: Ast.Expr) !TypVal {
 }
 
 fn genUndef(gen: *Codegen, undef: Ast.Undef) !TypVal {
-    const typ = try gen.genTyp(gen.info.typs[undef.typ_id].*);
+    const typ = try gen.genTyp(gen.info.lazy_typs[undef.typ_id].*);
     return .{ .typ = typ, .val = .undef };
 }
 
-fn genTyp(gen: *Codegen, typ: Info.Typ) !Typ {
+fn genTyp(gen: *Codegen, typ: Typs.Typ) !Typ {
     switch (typ) {
         .name => |name| return .{ .name = name },
         .prime => |prime| return genPrime(prime),
@@ -672,7 +673,7 @@ fn genStr(gen: *Codegen, str: usize) !TypVal {
 }
 
 fn genInferStruc(gen: *Codegen, struc: Ast.InferStruct) !TypVal {
-    const name = gen.info.typs[struc.typ_id].name;
+    const name = gen.info.lazy_typs[struc.typ_id].name;
     return gen.genStructExpr(.{
         .fields = struc.fields,
         .name = name,
