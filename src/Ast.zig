@@ -121,28 +121,26 @@ pub const Call = struct {
     args: []const Expr,
 };
 
-pub const Ptr = struct {
-    expr: Expr,
-    mutable: bool,
-};
-
-pub const Notb = struct {
-    expr: Expr,
-};
-
 pub const Elem = struct {
     expr: Expr,
     index: Expr,
 };
 
-pub const Deref = struct {
+pub const Unary = struct {
+    pub const Kind = enum {
+        mut_ptr,
+        ptr,
+        deref,
+        notb,
+    };
+    kind: Kind,
     expr: Expr,
 };
 
 pub const Expr = struct {
     location: Location,
     kind: union(enum) {
-        deref: *const Deref,
+        unary: *const Unary,
         infer_struc: InferStruct,
         int: []const u8,
         str: usize,
@@ -154,8 +152,6 @@ pub const Expr = struct {
         binary: *const Binary,
         field: *const Field,
         struc: StructExpr,
-        ptr: *const Ptr,
-        notb: *const Notb,
         elem: *const Elem,
     },
 };

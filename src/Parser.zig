@@ -710,10 +710,7 @@ fn getLocation(parser: Parser) Location {
 fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
         parseParExpr,
-        parseMutPtrExpr,
-        parsePtrExpr,
-        parseDerefExpr,
-        parseNotbExpr,
+        parseUnaryExpr,
         parseInferStructExpr,
         parseStructExpr,
         parseCallExpr,
@@ -731,15 +728,49 @@ fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
     };
 }
 
-fn parseDerefExpr(parser: *Parser) !Ast.Expr {
+fn parseUnaryExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
-    try parser.expect(.star);
-    const deref = try parser.arena.allocator().create(Ast.Deref);
-    deref.expr = try parser.parseExprPostedLoud();
-    return .{
-        .location = location.combine(deref.expr.location),
-        .kind = .{ .deref = deref },
+    const kind = try parser.parseUnaryOp();
+    const expr = try parser.parseExprPostedLoud();
+    const unary = try parser.arena.allocator().create(Ast.Unary);
+    unary.* = .{
+        .kind = kind,
+        .expr = expr,
     };
+    return .{
+        .location = location.combine(expr.location),
+        .kind = .{ .unary = unary },
+    };
+}
+
+fn parseUnaryOp(parser: *Parser) !Ast.Unary.Kind {
+    return parser.parseEither(Ast.Unary.Kind, &.{
+        parseMutPtr,
+        parsePtr,
+        parseNotB,
+        parseDeref,
+    });
+}
+
+fn parseMutPtr(parser: *Parser) !Ast.Unary.Kind {
+    try parser.expect(.amp);
+    try parser.expect(.mut);
+    return .mut_ptr;
+}
+
+fn parseDeref(parser: *Parser) !Ast.Unary.Kind {
+    try parser.expect(.star);
+    return .deref;
+}
+
+fn parsePtr(parser: *Parser) !Ast.Unary.Kind {
+    try parser.expect(.amp);
+    return .ptr;
+}
+
+fn parseNotB(parser: *Parser) !Ast.Unary.Kind {
+    try parser.expect(.tild);
+    return .notb;
 }
 
 fn parseInferStructExpr(parser: *Parser) !Ast.Expr {
@@ -764,39 +795,6 @@ fn parseParExpr(parser: *Parser) !Ast.Expr {
     const end = parser.getLocation();
     expr.location = start.combine(end);
     return expr;
-}
-
-fn parseNotbExpr(parser: *Parser) !Ast.Expr {
-    const location = parser.getLocation();
-    try parser.expect(.tild);
-    const notb = try parser.arena.allocator().create(Ast.Notb);
-    notb.expr = try parser.parseExprPostedLoud();
-    return .{
-        .location = location.combine(notb.expr.location),
-        .kind = .{ .notb = notb },
-    };
-}
-
-fn parseMutPtrExpr(parser: *Parser) !Ast.Expr {
-    const location = parser.getLocation();
-    try parser.expect(.amp);
-    try parser.expect(.mut);
-    const ptr = try parser.arena.allocator().create(Ast.Ptr);
-    ptr.expr = try parser.parseExprPostedLoud();
-    ptr.mutable = true;
-    return .{ .location = location.combine(ptr.expr.location), .kind = .{ .ptr = ptr } };
-}
-
-fn parsePtrExpr(parser: *Parser) !Ast.Expr {
-    const location = parser.getLocation();
-    try parser.expect(.amp);
-    const ptr = try parser.arena.allocator().create(Ast.Ptr);
-    ptr.expr = try parser.parseExprPostedLoud();
-    ptr.mutable = false;
-    return .{
-        .location = location.combine(ptr.expr.location),
-        .kind = .{ .ptr = ptr },
-    };
 }
 
 fn parseStructExpr(parser: *Parser) !Ast.Expr {

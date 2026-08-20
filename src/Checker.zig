@@ -373,7 +373,7 @@ fn checkAssign(checker: *Checker, assign: Ast.Assign) !ControlFlow {
 
 fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
     switch (expr.kind) {
-        .deref => |deref| return checker.checkDeref(deref.*, expr.location, true),
+        .unary => |unary| return checker.checkUnaryMut(unary.*, expr.location),
         .vari => |name| return checker.checkVar(expr.location, name, true),
         .field => |field| return checker.checkField(field.*, expr.location, true),
         .elem => |elem| return checker.checkElem(elem.*, expr.location, true),
@@ -385,8 +385,6 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
         .call,
         .binary,
         .struc,
-        .ptr,
-        .notb,
         .infer_struc,
         => {
             const typ = try checker.checkExpr(expr);
@@ -396,8 +394,28 @@ fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
     }
 }
 
-fn checkDeref(checker: *Checker, deref: Ast.Deref, location: Location, mutable: bool) !Typ {
-    const typ = try checker.checkExpr(deref.expr);
+fn checkUnaryMut(checker: *Checker, unary: Ast.Unary, location: Location) !Typ {
+    switch (unary.kind) {
+        .deref => return checker.checkDeref(unary.expr, location, true),
+        .notb, .ptr, .mut_ptr => {
+            const typ = try checker.checkUnary(unary, location);
+            checker.failNotMut(location);
+            return typ;
+        },
+    }
+}
+
+fn checkUnary(checker: *Checker, unary: Ast.Unary, location: Location) !Typ {
+    switch (unary.kind) {
+        .deref => return checker.checkDeref(unary.expr, location, false),
+        .notb => return checker.checkNotb(unary.expr),
+        .ptr => return checker.checkPtr(unary.expr, false),
+        .mut_ptr => return checker.checkPtr(unary.expr, true),
+    }
+}
+
+fn checkDeref(checker: *Checker, expr: Ast.Expr, location: Location, mutable: bool) !Typ {
+    const typ = try checker.checkExpr(expr);
     const norm = typ.normalise();
     switch (norm) {
         .ptr => |inner| {
@@ -516,7 +534,7 @@ fn checkDeclare(
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
     switch (expr.kind) {
-        .deref => |deref| return checker.checkDeref(deref.*, expr.location, false),
+        .unary => |unary| return checker.checkUnary(unary.*, expr.location),
         .infer_struc => |struc| return checker.checkInferStruc(struc, expr.location),
         .int => |int| return checker.checkInt(expr.location, int),
         .str => return .{ .name = "str" },
@@ -528,22 +546,20 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
         .binary => |binary| return checker.checkBinary(binary.*),
         .field => |field| return checker.checkField(field.*, expr.location, false),
         .struc => |struc| return checker.checkStruc(struc, expr.location),
-        .ptr => |ptr| return checker.checkPtr(ptr.*),
-        .notb => |notb| return checker.checkNotb(notb.*),
         .elem => |elem| return checker.checkElem(elem.*, expr.location, false),
     }
 }
 
-fn checkNotb(checker: *Checker, notb: Ast.Notb) !Typ {
-    const typ = try checker.checkExpr(notb.expr);
-    checker.unify(notb.expr.location, .int, typ);
+fn checkNotb(checker: *Checker, expr: Ast.Expr) !Typ {
+    const typ = try checker.checkExpr(expr);
+    checker.unify(expr.location, .int, typ);
     return typ;
 }
 
-fn checkPtr(checker: *Checker, ptr: Ast.Ptr) !Typ {
+fn checkPtr(checker: *Checker, expr: Ast.Expr, mutable: bool) !Typ {
     const typ = try checker.arena.allocator().create(Typ);
-    typ.* = try checker.checkExprWith(ptr.expr, ptr.mutable);
-    if (ptr.mutable) {
+    typ.* = try checker.checkExprWith(expr, mutable);
+    if (mutable) {
         return .{ .mut_ptr = typ };
     }
     return .{ .ptr = typ };
