@@ -43,9 +43,12 @@ pub const Typ = union(enum) {
                 hasher.update(array.len);
                 array.typ.hashIn(hasher);
             },
+            // lazy type is determined by its pointer.
+            // e.g we need to discriminate between one @lazy<<any>> and other @lazy<<any>>
             .lazy => |inner| {
                 hasher.update(&.{4});
-                inner.hashIn(hasher);
+                // updating on bytes of a pointer
+                hasher.update(std.mem.asBytes(&inner));
             },
             .int => hasher.update(&.{5}),
             .any => hasher.update(&.{6}),
@@ -107,20 +110,19 @@ pub fn init(gpa: std.mem.Allocator) Typs {
 pub fn clone(typs: *Typs, typ: Typ) !Typ {
     switch (typ) {
         .mut_ptr => |inner| {
-            const new = try typs.arena.allocator().create(Typ);
-            new.* = try typs.clone(inner.*);
-            return .{ .mut_ptr = new };
+            const new = try typs.clone(inner.*);
+            const ptr = try typs.box(new);
+            return .{ .mut_ptr = ptr };
         },
         .ptr => |inner| {
-            const new = try typs.arena.allocator().create(Typ);
-            new.* = try typs.clone(inner.*);
-            return .{ .ptr = new };
+            const new = try typs.clone(inner.*);
+            const ptr = try typs.box(new);
+            return .{ .ptr = ptr };
         },
         .array => |array| {
-            const new = try typs.arena.allocator().create(Typ.Array);
-            new.len = array.len;
-            new.typ = try typs.clone(array.typ);
-            return .{ .array = new };
+            const new = try typs.clone(array.typ);
+            const new_array = try typs.boxArray(.{ .len = array.len, .typ = new });
+            return .{ .array = new_array };
         },
         // invariant: everything in lazy is already stored in typs
         .lazy => return typ,
@@ -129,6 +131,9 @@ pub fn clone(typs: *Typs, typ: Typ) !Typ {
 }
 
 pub fn makeLazy(typs: *Typs) !*Typ {
+    // not calling `box` because we need a new pointer
+    // while `box` will memoize
+    // and will always give the same pointer to `any`
     const lazy = try typs.arena.allocator().create(Typ);
     lazy.* = .any;
     return lazy;
@@ -136,4 +141,45 @@ pub fn makeLazy(typs: *Typs) !*Typ {
 
 pub fn deinit(typs: Typs) void {
     typs.arena.deinit();
+}
+
+pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
+    switch (typ) {
+        .mut_ptr => |inner| {
+            const inner_typ = try typs.makeTyp(inner.*);
+            const ptr = try typs.box(inner_typ);
+            return .{ .mut_ptr = ptr };
+        },
+        .prime => |prime| return .{ .prime = prime },
+        .name => |name| return .{ .name = name },
+        .ptr => |inner| {
+            const inner_typ = try typs.makeTyp(inner.*);
+            const ptr = try typs.box(inner_typ);
+            return .{ .ptr = ptr };
+        },
+        .array => |array| {
+            const inner_typ = try typs.makeTyp(array.typ);
+            const array_typ = try typs.boxArray(.{
+                .len = array.len,
+                .typ = inner_typ,
+            });
+            return .{ .array = array_typ };
+        },
+    }
+}
+
+pub fn reset(typs: *Typs) void {
+    _ = typs.arena.reset(.retain_capacity);
+}
+
+pub fn box(typs: *Typs, typ: Typ) !*const Typ {
+    const res = try typs.arena.allocator().create(Typ);
+    res.* = typ;
+    return res;
+}
+
+fn boxArray(typs: *Typs, array: Typ.Array) !*const Typ.Array {
+    const res = try typs.arena.allocator().create(Typ.Array);
+    res.* = array;
+    return res;
 }
