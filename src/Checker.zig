@@ -242,12 +242,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
                 continue;
             },
             else => {
-                checker.fail(
-                    \\in {f}
-                    \\     wrong type:
-                    \\         expected  {f}
-                    \\            found  <struct>
-                , .{ lazy_struc.location, lazy_struc.typ });
+                checker.failWrongTyp(lazy_struc.location, lazy_struc.typ.*, .err);
                 continue;
             },
         };
@@ -468,15 +463,19 @@ fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) !void {
     if (try canUnify(a, b, &checker.info.typs)) {
         return;
     }
+    checker.failWrongTyp(location, a, b);
+    if (a == .ptr and a.ptr.* == .prime and a.ptr.*.prime == .u8 and b == .name and std.mem.eql(u8, b.name, "str")) {
+        std.log.info("append `.ptr` to get C-style string\n", .{});
+    }
+}
+
+fn failWrongTyp(checker: *Checker, location: Location, a: Typ, b: Typ) void {
     checker.fail(
         \\in {f}
         \\     wrong type:
         \\         expected  {f}
         \\            found  {f}
     , .{ location, a, b });
-    if (a == .ptr and a.ptr.* == .prime and a.ptr.*.prime == .u8 and b == .name and std.mem.eql(u8, b.name, "str")) {
-        std.log.info("append `.ptr` to get C-style string\n", .{});
-    }
 }
 
 fn canUnify(a: Typ, b: Typ, mtyps: ?*Typs) !bool {
@@ -701,12 +700,7 @@ fn failNotStruct(checker: *Checker, location: Location, typ: Typ) void {
 fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {
     var left = try checker.checkExpr(binary.left);
     if (!left.isNumber()) {
-        checker.fail(
-            \\in {f}
-            \\     wrong type:
-            \\         expected  <number>
-            \\            found  {f}
-        , .{ binary.left.location, left });
+        checker.failWrongTyp(binary.left.location, .int, left);
         left = .err;
     }
     const right = try checker.checkExpr(binary.right);
