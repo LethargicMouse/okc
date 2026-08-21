@@ -68,12 +68,14 @@ pub const Typ = union(enum) {
             .name => |name| hasher.update(name),
             .ptr => |inner| {
                 hasher.update(&.{0});
-                inner.hashIn(hasher);
+                // a == b <=> &a == &b due to memo
+                hasher.update(std.mem.asBytes(&inner));
             },
             .array => |array| {
                 hasher.update(&.{1});
                 hasher.update(array.len);
-                array.typ.hashIn(hasher);
+                // a == b <=> &a == &b due to memo
+                hasher.update(std.mem.asBytes(&array.typ));
             },
             .i1 => hasher.update(&.{2}),
             .i8 => hasher.update(&.{3}),

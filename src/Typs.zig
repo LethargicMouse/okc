@@ -28,6 +28,9 @@ pub const Typ = union(enum) {
                     }
                     return false;
                 },
+                // pointers in lazy types are not memoized
+                // but we need to discriminate lazy types by pointers
+                // as they are unique type variables
                 .lazy => |aptr| return aptr == b.lazy,
                 .int, .any, .err => return true,
             }
@@ -55,22 +58,25 @@ pub const Typ = union(enum) {
             .name => |name| hasher.update(name),
             .ptr => |inner| {
                 hasher.update(&.{0});
-                inner.hashIn(hasher);
+                // a == b <=> &a == &b due to memo
+                hasher.update(std.mem.asBytes(&inner));
             },
             .mut_ptr => |inner| {
                 hasher.update(&.{2});
-                inner.hashIn(hasher);
+                // a == b <=> &a == &b due to memo
+                hasher.update(std.mem.asBytes(&inner));
             },
             .array => |array| {
                 hasher.update(&.{3});
                 hasher.update(array.len);
-                array.typ.hashIn(hasher);
+                // a == b <=> &a == &b due to memo
+                hasher.update(std.mem.asBytes(&array.typ));
             },
-            // lazy type is determined by its pointer.
-            // e.g we need to discriminate between one @lazy<<any>> and other @lazy<<any>>
+            // pointers in lazy types are not memoized
+            // but we need to discriminate lazy types by pointers
+            // as they are unique type variables
             .lazy => |inner| {
                 hasher.update(&.{4});
-                // updating on bytes of a pointer
                 hasher.update(std.mem.asBytes(&inner));
             },
             .int => hasher.update(&.{5}),
