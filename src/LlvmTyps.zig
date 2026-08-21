@@ -3,6 +3,33 @@ const std = @import("std");
 const Ast = @import("Ast.zig");
 
 pub const Typ = union(enum) {
+    const HashContext = struct {
+        pub fn hash(_: HashContext, typ: Typ) u64 {
+            var hasher = std.hash.Wyhash.init(0);
+            typ.hashIn(&hasher);
+            return hasher.final();
+        }
+
+        pub fn eql(_: HashContext, a: Typ, b: Typ) bool {
+            if (@intFromEnum(a) != @intFromEnum(b)) {
+                return false;
+            }
+            switch (a) {
+                .name => |aname| return std.mem.eql(u8, aname, b.name),
+                // a == b <=> &a == &b due to memo
+                .ptr => |aptr| return aptr == b.ptr,
+                .array => |arr| {
+                    if (std.mem.eql(u8, arr.len, b.array.len)) {
+                        // a == b <=> &a == &b due to memo
+                        return arr.typ == b.array.typ;
+                    }
+                    return false;
+                },
+                .i1, .i8, .i32, .i64, .void => return true,
+            }
+        }
+    };
+
     const Array = struct {
         len: []const u8,
         typ: *const Typ,
@@ -35,16 +62,41 @@ pub const Typ = union(enum) {
             .void => return .void,
         }
     }
+
+    fn hashIn(typ: Typ, hasher: *std.hash.Wyhash) void {
+        switch (typ) {
+            .name => |name| hasher.update(name),
+            .ptr => |inner| {
+                hasher.update(&.{0});
+                inner.hashIn(hasher);
+            },
+            .array => |array| {
+                hasher.update(&.{1});
+                hasher.update(array.len);
+                array.typ.hashIn(hasher);
+            },
+            .i1 => hasher.update(&.{2}),
+            .i8 => hasher.update(&.{3}),
+            .i32 => hasher.update(&.{4}),
+            .i64 => hasher.update(&.{5}),
+            .void => hasher.update(&.{6}),
+        }
+    }
 };
+
+const Memo = std.HashMap(Typ, *const Typ, Typ.HashContext, std.hash_map.default_max_load_percentage);
 
 const LlvmTyps = @This();
 
 arena: std.heap.ArenaAllocator,
+memo: Memo,
 
 pub fn init(gpa: std.mem.Allocator) LlvmTyps {
     const arena = std.heap.ArenaAllocator.init(gpa);
+    const memo = Memo.init(gpa);
     return .{
         .arena = arena,
+        .memo = memo,
     };
 }
 
@@ -74,11 +126,16 @@ pub fn makeTyp(typs: *LlvmTyps, typ: Ast.Typ) !Typ {
 }
 
 pub fn box(typs: *LlvmTyps, typ: Typ) !*const Typ {
+    if (typs.memo.get(typ)) |res| {
+        return res;
+    }
     const res = try typs.arena.allocator().create(Typ);
     res.* = typ;
+    try typs.memo.put(typ, res);
     return res;
 }
 
 pub fn deinit(typs: *LlvmTyps) void {
+    typs.memo.deinit();
     typs.arena.deinit();
 }

@@ -10,18 +10,21 @@ pub const Typ = union(enum) {
             return hasher.final();
         }
 
-        pub fn eql(ctx: HashContext, a: Typ, b: Typ) bool {
+        pub fn eql(_: HashContext, a: Typ, b: Typ) bool {
             if (@intFromEnum(a) != @intFromEnum(b)) {
                 return false;
             }
             switch (a) {
                 .prime => |aprime| return aprime == b.prime,
                 .name => |aname| return std.mem.eql(u8, aname, b.name),
-                .ptr => |aptr| return ctx.eql(aptr.*, b.ptr.*),
-                .mut_ptr => |aptr| return ctx.eql(aptr.*, b.mut_ptr.*),
+                // a == b <=> &a == &b due to memo
+                .ptr => |aptr| return aptr == b.ptr,
+                // a == b <=> &a == &b due to memo
+                .mut_ptr => |aptr| return aptr == b.mut_ptr,
                 .array => |arr| {
                     if (std.mem.eql(u8, arr.len, b.array.len)) {
-                        return ctx.eql(arr.typ.*, b.array.typ.*);
+                        // a == b <=> &a == &b due to memo
+                        return arr.typ == b.array.typ;
                     }
                     return false;
                 },

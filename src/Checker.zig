@@ -533,11 +533,14 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
     switch (a) {
         .prime => |aprime| return aprime == b.prime,
         .name => |aname| return std.mem.eql(u8, aname, b.name),
-        .ptr => |atyp| return canUnify(atyp.*, b.ptr.*, active),
-        .mut_ptr => |atyp| return canUnify(atyp.*, b.mut_ptr.*, active),
+        // a == b <=> &a == &b due to memo
+        .ptr => |aptr| return aptr == b.ptr or try canUnify(aptr.*, b.ptr.*, active),
+        // a == b <=> &a == &b due to memo
+        .mut_ptr => |aptr| return aptr == b.mut_ptr or try canUnify(aptr.*, b.mut_ptr.*, active),
         .array => |arr| {
             if (std.mem.eql(u8, arr.len, b.array.len)) {
-                return canUnify(arr.typ.*, b.array.typ.*, active);
+                // a == b <=> &a == &b due to memo
+                return arr.typ == b.array.typ or try canUnify(arr.typ.*, b.array.typ.*, active);
             }
             return false;
         },
