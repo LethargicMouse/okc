@@ -132,32 +132,6 @@ pub fn init(gpa: std.mem.Allocator) Typs {
     };
 }
 
-pub fn clone(typs: *Typs, typ: Typ) !Typ {
-    switch (typ) {
-        .mut_ptr => |inner| {
-            const new = try typs.clone(inner.*);
-            const ptr = try typs.box(new);
-            return .{ .mut_ptr = ptr };
-        },
-        .ptr => |inner| {
-            const new = try typs.clone(inner.*);
-            const ptr = try typs.box(new);
-            return .{ .ptr = ptr };
-        },
-        .array => |array| {
-            const new = try typs.clone(array.typ.*);
-            const ptr = try typs.box(new);
-            return .{ .array = .{
-                .len = array.len,
-                .typ = ptr,
-            } };
-        },
-        // invariant: everything in lazy is already stored in typs
-        .lazy => return typ,
-        .name, .prime, .any, .int, .err => return typ,
-    }
-}
-
 pub fn makeLazy(typs: *Typs) !*Typ {
     // not calling `box` because we need a new pointer
     // while `box` will memoize

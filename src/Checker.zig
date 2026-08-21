@@ -1,8 +1,10 @@
 const std = @import("std");
 
 const Ast = @import("Ast.zig");
-const Location = @import("Location.zig");
 const Info = @import("Info.zig");
+const LlvmTyps = @import("LlvmTyps.zig");
+const LlvmTyp = LlvmTyps.Typ;
+const Location = @import("Location.zig");
 const Typs = @import("Typs.zig");
 const Typ = Typs.Typ;
 
@@ -46,6 +48,11 @@ const LazyStruct = struct {
     location: Location,
 };
 
+const Lazy = struct {
+    typ: *const Typ,
+    location: Location,
+};
+
 const Checker = @This();
 
 gpa: std.mem.Allocator,
@@ -55,18 +62,24 @@ structs: std.StringHashMap(Struct),
 vars: std.StringHashMap(Var),
 headers: std.StringHashMap(Header),
 lazy_strucs: std.ArrayList(LazyStruct) = .empty,
+lazies: []Lazy,
 info: Info,
 ret_typ: Typ = undefined,
 errors_cnt: u16 = 0,
 loops_nested: u16 = 0,
 
-pub fn init(gpa: std.mem.Allocator, ast_info: Ast.Info) !Checker {
+pub fn init(
+    gpa: std.mem.Allocator,
+    llvm_typs: *LlvmTyps,
+    ast_info: Ast.Info,
+) !Checker {
     const structs = std.StringHashMap(Struct).init(gpa);
     const vars = std.StringHashMap(Var).init(gpa);
     const headers = std.StringHashMap(Header).init(gpa);
-    const global_typs = Typs.init(gpa);
-    const info = try Info.init(gpa, ast_info);
+    var global_typs = Typs.init(gpa);
+    const info = try Info.init(llvm_typs, ast_info);
     const fun_arena = std.heap.ArenaAllocator.init(gpa);
+    const lazies = try global_typs.arena.allocator().alloc(Lazy, ast_info.typ_ids);
     return .{
         .gpa = gpa,
         .fun_arena = fun_arena,
@@ -75,21 +88,21 @@ pub fn init(gpa: std.mem.Allocator, ast_info: Ast.Info) !Checker {
         .headers = headers,
         .typs = global_typs,
         .info = info,
+        .lazies = lazies,
     };
 }
 
-pub fn run(checker: *Checker, ast: Ast) !Info {
+pub fn run(checker: *Checker, ast: Ast, llvm_typs: *LlvmTyps) !Info {
     defer checker.deinit();
-    try checker.checkAst(ast);
+    try checker.checkAst(ast, llvm_typs);
     if (checker.errors_cnt == 0) {
         return checker.info;
     }
-    checker.info.deinit();
     std.log.err("check failed with {} errors", .{checker.errors_cnt});
     return error.Handled;
 }
 
-fn checkAst(checker: *Checker, ast: Ast) !void {
+fn checkAst(checker: *Checker, ast: Ast, llvm_typs: *LlvmTyps) !void {
     try checker.regStrStruct();
     for (ast.items) |item| {
         try checker.regItem(item);
@@ -100,6 +113,47 @@ fn checkAst(checker: *Checker, ast: Ast) !void {
     checker.checkVars();
     checker.checkMain(ast.location);
     checker.checkHeaders();
+    try checker.checkLazyTyps(llvm_typs);
+}
+
+fn checkLazyTyps(checker: *Checker, llvm_typs: *LlvmTyps) !void {
+    for (checker.lazies, checker.info.typs) |lazy, *target| {
+        target.* = checker.convertTyp(lazy.typ.*, lazy.location, llvm_typs) catch |err| switch (err) {
+            error.BadConvert => continue,
+            else => return err,
+        };
+    }
+}
+
+fn convertTyp(checker: *Checker, typ: Typ, location: Location, llvm_typs: *LlvmTyps) !LlvmTyp {
+    switch (typ) {
+        .name => |name| return .{ .name = name },
+        .prime => |prime| return LlvmTyp.fromPrime(prime),
+        .ptr => |ptr| {
+            const inner = try checker.convertTyp(ptr.*, location, llvm_typs);
+            const new = try llvm_typs.box(inner);
+            return .{ .ptr = new };
+        },
+        .mut_ptr => |ptr| {
+            const inner = try checker.convertTyp(ptr.*, location, llvm_typs);
+            const new = try llvm_typs.box(inner);
+            return .{ .ptr = new };
+        },
+        .array => |array| {
+            const inner = try checker.convertTyp(array.typ.*, location, llvm_typs);
+            const new = try llvm_typs.box(inner);
+            return .{ .array = .{
+                .len = array.len,
+                .typ = new,
+            } };
+        },
+        .err => return error.BadConvert,
+        .any, .int => {
+            checker.failShouldKnowTyp(location);
+            return error.BadConvert;
+        },
+        .lazy => |inner| return checker.convertTyp(inner.*, location, llvm_typs),
+    }
 }
 
 fn checkHeaders(checker: *Checker) void {
@@ -436,7 +490,7 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location, mutable: boo
 }
 
 fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) !void {
-    if (try canUnify(a, b, &checker.info.typs)) {
+    if (try canUnify(a, b, true)) {
         return;
     }
     checker.failWrongTyp(location, a, b);
@@ -454,7 +508,7 @@ fn failWrongTyp(checker: *Checker, location: Location, a: Typ, b: Typ) void {
     , .{ location, a, b });
 }
 
-fn canUnify(a: Typ, b: Typ, mtyps: ?*Typs) !bool {
+fn canUnify(a: Typ, b: Typ, active: bool) !bool {
     if (a == .err or b == .err) {
         return true;
     }
@@ -465,10 +519,10 @@ fn canUnify(a: Typ, b: Typ, mtyps: ?*Typs) !bool {
         return true;
     }
     if (b == .lazy) {
-        const res = try canUnify(a, b.lazy.*, mtyps);
+        const res = try canUnify(a, b.lazy.*, active);
         if (res) {
-            if (mtyps) |typs| {
-                b.lazy.* = try typs.clone(a);
+            if (active) {
+                b.lazy.* = a;
             }
         }
         return res;
@@ -479,11 +533,11 @@ fn canUnify(a: Typ, b: Typ, mtyps: ?*Typs) !bool {
     switch (a) {
         .prime => |aprime| return aprime == b.prime,
         .name => |aname| return std.mem.eql(u8, aname, b.name),
-        .ptr => |atyp| return canUnify(atyp.*, b.ptr.*, mtyps),
-        .mut_ptr => |atyp| return canUnify(atyp.*, b.mut_ptr.*, mtyps),
+        .ptr => |atyp| return canUnify(atyp.*, b.ptr.*, active),
+        .mut_ptr => |atyp| return canUnify(atyp.*, b.mut_ptr.*, active),
         .array => |arr| {
             if (std.mem.eql(u8, arr.len, b.array.len)) {
-                return canUnify(arr.typ.*, b.array.typ.*, mtyps);
+                return canUnify(arr.typ.*, b.array.typ.*, active);
             }
             return false;
         },
@@ -523,7 +577,7 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
         .vari => |name| return checker.checkVar(expr.location, name, false),
         .char => return .{ .prime = .u8 },
         .bool => return .{ .prime = .bool },
-        .undef => |undef| return checker.checkUndef(undef),
+        .undef => |undef| return checker.checkUndef(undef, expr.location),
         .call => |call| return checker.checkCall(call, expr.location),
         .binary => |binary| return checker.checkBinary(binary.*),
         .field => |field| return checker.checkField(field.*, expr.location, false),
@@ -552,8 +606,11 @@ fn checkInferStruc(checker: *Checker, struc: Ast.InferStruct, location: Location
     for (struc.fields, typs) |field, *typ| {
         typ.* = try checker.checkExpr(field.expr);
     }
-    const lazy = try checker.info.typs.makeLazy();
-    checker.info.lazy_typs[struc.typ_id] = lazy;
+    const lazy = try checker.typs.makeLazy();
+    checker.lazies[struc.typ_id] = .{
+        .location = location,
+        .typ = lazy,
+    };
     try checker.lazy_strucs.append(checker.gpa, .{
         .typ = lazy,
         .fields = struc.fields,
@@ -608,9 +665,12 @@ fn checkStrucNow(
     }
 }
 
-fn checkUndef(checker: *Checker, undef: Ast.Undef) !Typ {
-    const lazy = try checker.info.typs.makeLazy();
-    checker.info.lazy_typs[undef.typ_id] = lazy;
+fn checkUndef(checker: *Checker, undef: Ast.Undef, location: Location) !Typ {
+    const lazy = try checker.typs.makeLazy();
+    checker.lazies[undef.typ_id] = .{
+        .location = location,
+        .typ = lazy,
+    };
     return .{ .lazy = lazy };
 }
 
@@ -666,10 +726,7 @@ fn failNoField(
 
 fn failNotStruct(checker: *Checker, location: Location, typ: Typ) void {
     if (typ == .lazy and typ.lazy.* == .any) {
-        checker.fail(
-            \\in {f}
-            \\     type should be known here
-        , .{location});
+        checker.failShouldKnowTyp(location);
         typ.lazy.* = .err;
         return;
     }
@@ -677,6 +734,13 @@ fn failNotStruct(checker: *Checker, location: Location, typ: Typ) void {
         \\in {f}
         \\     type `{f}` is not a struct
     , .{ location, typ });
+}
+
+fn failShouldKnowTyp(checker: *Checker, location: Location) void {
+    checker.fail(
+        \\in {f}
+        \\     type should be known here
+    , .{location});
 }
 
 fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {

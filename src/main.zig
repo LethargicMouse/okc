@@ -1,10 +1,11 @@
 const std = @import("std");
 
+const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
 const Lexer = @import("Lexer.zig");
+const LlvmTyps = @import("LlvmTyps.zig");
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
-const Checker = @import("Checker.zig");
 
 pub fn main(init: std.process.Init) !u8 {
     const code = run(init) catch |err| switch (err) {
@@ -48,13 +49,22 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     defer ast.deinit();
     const ast_info = parse_result[1];
 
-    var checker = try Checker.init(gpa, ast_info);
-    const info = try checker.run(ast);
+    var llvm_typs = LlvmTyps.init(gpa);
+
+    var checker = try Checker.init(gpa, &llvm_typs, ast_info);
+    const info = try checker.run(ast, &llvm_typs);
 
     try std.Io.Dir.cwd().createDirPath(io, build_dir_path);
 
     var write_buf: [256]u8 = undefined;
-    var gen = try Codegen.init(io, gpa, &write_buf, out_ll_path, info);
+    var gen = try Codegen.init(
+        io,
+        gpa,
+        llvm_typs,
+        &write_buf,
+        out_ll_path,
+        info,
+    );
     try gen.run(ast);
 
     const code = try runCmd(io, &.{ "clang", "-o", out_path, out_ll_path });

@@ -1,23 +1,16 @@
 const std = @import("std");
 
 const Ast = @import("Ast.zig");
-const Typs = @import("Typs.zig");
-const Typ = Typs.Typ;
+const LlvmTyps = @import("LlvmTyps.zig");
+const Typ = LlvmTyps.Typ;
 
 const Info = @This();
 
-typs: Typs,
-lazy_typs: []*const Typ,
+typs: []Typ,
 
-pub fn init(gpa: std.mem.Allocator, ast_info: Ast.Info) !Info {
-    var typs = Typs.init(gpa);
-    const lazy_typs = try typs.arena.allocator().alloc(*const Typ, ast_info.typ_ids);
+pub fn init(llvm_typs: *LlvmTyps, ast_info: Ast.Info) !Info {
+    const typs = try llvm_typs.arena.allocator().alloc(Typ, ast_info.typ_ids);
     return .{
         .typs = typs,
-        .lazy_typs = lazy_typs,
     };
-}
-
-pub fn deinit(info: *Info) void {
-    info.typs.deinit();
 }
