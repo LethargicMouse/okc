@@ -551,7 +551,7 @@ fn genTyp(gen: *Codegen, typ: Typs.Typ) !Typ {
             return .{ .ptr = typ_ptr };
         },
         .array => |array| {
-            const inner_typ = try gen.genTyp(array.typ);
+            const inner_typ = try gen.genTyp(array.typ.*);
             const array_typ = try gen.arena.allocator().create(ArrayTyp);
             array_typ.len = array.len;
             array_typ.typ = inner_typ;

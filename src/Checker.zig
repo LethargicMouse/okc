@@ -422,7 +422,7 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location, mutable: boo
     try checker.unify(elem.index.location, .int, index);
     const norm = typ.normalise();
     switch (norm) {
-        .array => |array| return array.typ,
+        .array => |array| return array.typ.*,
         .err => return .err,
         .prime, .name, .ptr, .any, .int, .mut_ptr => {
             checker.fail(
@@ -481,7 +481,13 @@ fn canUnify(a: Typ, b: Typ, mtyps: ?*Typs) !bool {
         .name => |aname| return std.mem.eql(u8, aname, b.name),
         .ptr => |atyp| return canUnify(atyp.*, b.ptr.*, mtyps),
         .mut_ptr => |atyp| return canUnify(atyp.*, b.mut_ptr.*, mtyps),
-        else => unreachable,
+        .array => |arr| {
+            if (std.mem.eql(u8, arr.len, b.array.len)) {
+                return canUnify(a, b, mtyps);
+            }
+            return false;
+        },
+        .lazy, .int, .any, .err => unreachable,
     }
 }
 

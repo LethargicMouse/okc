@@ -4,23 +4,43 @@ const Ast = @import("Ast.zig");
 
 pub const Typ = union(enum) {
     const HashContext = struct {
-        fn hash(_: HashContext, typ: Typ) u64 {
+        pub fn hash(_: HashContext, typ: Typ) u64 {
             var hasher = std.hash.Wyhash.init(0);
             typ.hashIn(&hasher);
             return hasher.final();
+        }
+
+        pub fn eql(ctx: HashContext, a: Typ, b: Typ) bool {
+            if (@intFromEnum(a) != @intFromEnum(b)) {
+                return false;
+            }
+            switch (a) {
+                .prime => |aprime| return aprime == b.prime,
+                .name => |aname| return std.mem.eql(u8, aname, b.name),
+                .ptr => |aptr| return ctx.eql(aptr.*, b.ptr.*),
+                .mut_ptr => |aptr| return ctx.eql(aptr.*, b.mut_ptr.*),
+                .array => |arr| {
+                    if (std.mem.eql(u8, arr.len, b.array.len)) {
+                        return ctx.eql(arr.typ.*, b.array.typ.*);
+                    }
+                    return false;
+                },
+                .lazy => |aptr| return aptr == b.lazy,
+                .int, .any, .err => return true,
+            }
         }
     };
 
     pub const Array = struct {
         len: []const u8,
-        typ: Typ,
+        typ: *const Typ,
     };
 
     prime: Ast.Prime,
     name: []const u8,
     ptr: *const Typ,
     mut_ptr: *const Typ,
-    array: *const Array,
+    array: Array,
     lazy: *Typ,
     int,
     any,
@@ -96,14 +116,19 @@ pub const Typ = union(enum) {
     }
 };
 
+const Memo = std.HashMap(Typ, *const Typ, Typ.HashContext, std.hash_map.default_max_load_percentage);
+
 const Typs = @This();
 
 arena: std.heap.ArenaAllocator,
+memo: Memo,
 
 pub fn init(gpa: std.mem.Allocator) Typs {
     const arena = std.heap.ArenaAllocator.init(gpa);
+    const memo = Memo.init(gpa);
     return .{
         .arena = arena,
+        .memo = memo,
     };
 }
 
@@ -120,9 +145,12 @@ pub fn clone(typs: *Typs, typ: Typ) !Typ {
             return .{ .ptr = ptr };
         },
         .array => |array| {
-            const new = try typs.clone(array.typ);
-            const new_array = try typs.boxArray(.{ .len = array.len, .typ = new });
-            return .{ .array = new_array };
+            const new = try typs.clone(array.typ.*);
+            const ptr = try typs.box(new);
+            return .{ .array = .{
+                .len = array.len,
+                .typ = ptr,
+            } };
         },
         // invariant: everything in lazy is already stored in typs
         .lazy => return typ,
@@ -139,8 +167,10 @@ pub fn makeLazy(typs: *Typs) !*Typ {
     return lazy;
 }
 
-pub fn deinit(typs: Typs) void {
+pub fn deinit(typs: *Typs) void {
     typs.arena.deinit();
+    typs.memo.deinit();
+    typs.* = undefined;
 }
 
 pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
@@ -159,11 +189,11 @@ pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
         },
         .array => |array| {
             const inner_typ = try typs.makeTyp(array.typ);
-            const array_typ = try typs.boxArray(.{
+            const ptr = try typs.box(inner_typ);
+            return .{ .array = .{
                 .len = array.len,
-                .typ = inner_typ,
-            });
-            return .{ .array = array_typ };
+                .typ = ptr,
+            } };
         },
     }
 }
@@ -173,13 +203,11 @@ pub fn reset(typs: *Typs) void {
 }
 
 pub fn box(typs: *Typs, typ: Typ) !*const Typ {
+    if (typs.memo.get(typ)) |res| {
+        return res;
+    }
     const res = try typs.arena.allocator().create(Typ);
     res.* = typ;
-    return res;
-}
-
-fn boxArray(typs: *Typs, array: Typ.Array) !*const Typ.Array {
-    const res = try typs.arena.allocator().create(Typ.Array);
-    res.* = array;
+    try typs.memo.put(typ, res);
     return res;
 }
