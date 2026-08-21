@@ -191,28 +191,19 @@ fn checkVars(checker: *Checker) void {
         if (!vari.used) {
             checker.failUnused(vari.location);
         } else if (vari.mutable and !vari.mutated) {
-            checker.fail(
-                \\in {f}
-                \\     variable is never mutated
-            , .{vari.location});
+            checker.fail(vari.location, "variable is never mutated", .{});
             std.log.info("remove `mut` before name\n", .{});
         }
     }
 }
 
 fn failUnused(checker: *Checker, location: Location) void {
-    checker.fail(
-        \\in {f}
-        \\     item is never used
-    , .{location});
+    checker.fail(location, "item is never used", .{});
 }
 
 fn checkMain(checker: *Checker, location: Location) void {
     const header = checker.headers.getPtr("main") orelse {
-        checker.fail(
-            \\in {f}
-            \\     `main` function not found
-        , .{location});
+        checker.fail(location, "`main` function not found", .{});
         return;
     };
     header.used = true;
@@ -248,9 +239,10 @@ fn failAlreadyDeclared(
     prev: Location,
 ) void {
     checker.fail(
-        \\in {f}
-        \\     {s} `{s}` is already declared in {f}
-    , .{ location, kind, name, prev });
+        location,
+        "{s} `{s}` is already declared in {f}",
+        .{ kind, name, prev },
+    );
 }
 
 fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
@@ -296,19 +288,13 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
     }
     const cf = try checker.checkBlock(fun.body);
     if (cf != .ret and !fun.header.ret_typ.isVoid()) {
-        checker.fail(
-            \\in {f}
-            \\     function may not return
-        , .{fun.header.location});
+        checker.fail(fun.header.location, "function may not return", .{});
     }
     for (checker.lazy_strucs.items) |lazy_struc| {
         const name = switch (lazy_struc.typ.*) {
             .name => |name| name,
             .any => {
-                checker.fail(
-                    \\in {f}
-                    \\     cannot infer type
-                , .{lazy_struc.location});
+                checker.fail(lazy_struc.location, "cannot infer type", .{});
                 continue;
             },
             else => {
@@ -336,10 +322,7 @@ fn checkBlock(checker: *Checker, block: []const Ast.Statement) !ControlFlow {
                 res = cf;
             }
             if (i + 1 != block.len) {
-                checker.fail(
-                    \\in {f}
-                    \\     statement is unreachable
-                , .{block[i + 1].location});
+                checker.fail(block[i + 1].location, "statement is unreachable", .{});
             }
         }
     }
@@ -374,10 +357,7 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!ControlFlow
 fn checkIgnore(checker: *Checker, ignore: Ast.Ignore, location: Location) !ControlFlow {
     const typ = try checker.checkExpr(ignore.expr);
     if (typ == .prime and typ.prime == .void) {
-        checker.fail(
-            \\in {f}
-            \\     redundant ignore
-        , .{location});
+        checker.fail(location, "redundant ignore", .{});
         std.log.info("remove `_ =` before expr\n", .{});
     }
     return .cont;
@@ -385,10 +365,7 @@ fn checkIgnore(checker: *Checker, ignore: Ast.Ignore, location: Location) !Contr
 
 fn checkBreak(checker: *Checker, location: Location) Error!ControlFlow {
     if (checker.loops_nested == 0) {
-        checker.fail(
-            \\in {f}
-            \\     `break` outside of loop
-        , .{location});
+        checker.fail(location, "`break` outside of loop", .{});
         return .cont;
     }
     return .brek;
@@ -519,10 +496,7 @@ fn checkDeref(checker: *Checker, expr: Ast.Expr, location: Location, mutable: bo
         },
         .err => return .err,
         .prime, .name, .any, .int, .array => {
-            checker.fail(
-                \\in {f}
-                \\     cannot dereference type `{f}`
-            , .{ location, typ });
+            checker.fail(location, "cannot dereference type `{f}`", .{typ});
             return .err;
         },
         .lazy => unreachable,
@@ -530,10 +504,7 @@ fn checkDeref(checker: *Checker, expr: Ast.Expr, location: Location, mutable: bo
 }
 
 fn failNotMut(checker: *Checker, location: Location) void {
-    checker.fail(
-        \\in {f}
-        \\     it is immutable
-    , .{location});
+    checker.fail(location, "it is immutable", .{});
 }
 
 fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location, mutable: bool) !Typ {
@@ -545,10 +516,7 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location, mutable: boo
         .array => |array| return array.typ.*,
         .err => return .err,
         .prime, .name, .ptr, .any, .int, .mut_ptr => {
-            checker.fail(
-                \\in {f}
-                \\     type `{f}` does not support indexing
-            , .{ location, typ });
+            checker.fail(location, "type `{f}` does not support indexing", .{typ});
             return .err;
         },
         .lazy => unreachable,
@@ -566,12 +534,11 @@ fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) !void {
 }
 
 fn failWrongTyp(checker: *Checker, location: Location, a: Typ, b: Typ) void {
-    checker.fail(
-        \\in {f}
-        \\     wrong type:
+    checker.fail(location,
+        \\wrong type:
         \\         expected  {f}
         \\            found  {f}
-    , .{ location, a, b });
+    , .{ a, b });
 }
 
 fn canUnify(a: Typ, b: Typ, active: bool) !bool {
@@ -731,10 +698,7 @@ fn checkStrucNow(
             }
         }
         if (unused) {
-            checker.fail(
-                \\in {f}
-                \\     field `{s}` is not initialized
-            , .{ location, field_decl.* });
+            checker.fail(location, "field `{s}` is not initialized", .{field_decl.*});
         }
     }
 }
@@ -750,10 +714,7 @@ fn checkUndef(checker: *Checker, undef: Ast.Undef, location: Location) !Typ {
 
 fn checkInt(checker: *Checker, location: Location, int: []const u8) Typ {
     _ = std.fmt.parseInt(u64, int, 10) catch {
-        checker.fail(
-            \\in {f}
-            \\     integer is too large
-        , .{location});
+        checker.fail(location, "integer is too large", .{});
     };
     return .int;
 }
@@ -792,10 +753,7 @@ fn failNoField(
     field: []const u8,
     struc: []const u8,
 ) void {
-    checker.fail(
-        \\in {f}
-        \\     no field `{s}` in struct `{s}`
-    , .{ location, field, struc });
+    checker.fail(location, "no field `{s}` in struct `{s}`", .{ field, struc });
 }
 
 fn failNotStruct(checker: *Checker, location: Location, typ: Typ) void {
@@ -804,17 +762,11 @@ fn failNotStruct(checker: *Checker, location: Location, typ: Typ) void {
         typ.lazy.* = .err;
         return;
     }
-    checker.fail(
-        \\in {f}
-        \\     type `{f}` is not a struct
-    , .{ location, typ });
+    checker.fail(location, "type `{f}` is not a struct", .{typ});
 }
 
 fn failShouldKnowTyp(checker: *Checker, location: Location) void {
-    checker.fail(
-        \\in {f}
-        \\     type should be known here
-    , .{location});
+    checker.fail(location, "type should be known here", .{});
 }
 
 fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {
@@ -833,10 +785,7 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {
 
 fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bool) Typ {
     const vari = checker.vars.getPtr(name) orelse {
-        checker.fail(
-            \\in {f}
-            \\     item `{s}` is not declared
-        , .{ location, name });
+        checker.fail(location, "item `{s}` is not declared", .{name});
         return .err;
     };
     vari.used = true;
@@ -855,10 +804,7 @@ fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bo
 
 fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !Typ {
     const header = checker.headers.getPtr(call.name) orelse {
-        checker.fail(
-            \\in {f}
-            \\     item `{s}` is not declared
-        , .{ location, call.name });
+        checker.fail(location, "item `{s}` is not declared", .{call.name});
         for (call.args) |arg| {
             _ = try checker.checkExpr(arg);
         }
@@ -877,10 +823,7 @@ fn checkRet(checker: *Checker, ret: Ast.Return, location: Location) !ControlFlow
         const typ = try checker.checkExpr(expr);
         try checker.unify(expr.location, checker.ret_typ, typ);
     } else if (checker.ret_typ != .prime or checker.ret_typ.prime != .void) {
-        checker.fail(
-            \\in {f}
-            \\     should return a value
-        , .{location});
+        checker.fail(location, "should return a value", .{});
     }
     return .ret;
 }
@@ -900,7 +843,7 @@ fn deinit(checker: *Checker) void {
     checker.* = undefined;
 }
 
-fn fail(checker: *Checker, comptime msg: []const u8, args: anytype) void {
-    std.log.err(msg ++ "\n", args);
+fn fail(checker: *Checker, location: Location, comptime msg: []const u8, args: anytype) void {
+    std.log.err("in {f}\n     " ++ msg ++ "\n", .{location} ++ args);
     checker.errors_cnt += 1;
 }
