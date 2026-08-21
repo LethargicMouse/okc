@@ -194,3 +194,7 @@ test "comment.ok" {
 test "ret_void.ok" {
     try testFile("ret_void", "hello");
 }
+
+test "nest_var.ok" {
+    try testFile("nest_var", "six\nseven\n");
+}

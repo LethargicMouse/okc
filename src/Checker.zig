@@ -63,6 +63,7 @@ typs: Typs,
 fun_arena: std.heap.ArenaAllocator,
 structs: std.StringHashMap(Struct),
 vars: std.StringHashMap(Var),
+vars_stack: std.ArrayList([]const u8) = .empty,
 headers: std.StringHashMap(Header),
 lazy_strucs: std.ArrayList(LazyStruct) = .empty,
 lazies: []Lazy,
@@ -327,6 +328,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
 
 fn checkBlock(checker: *Checker, block: []const Ast.Statement) !ControlFlow {
     var res = ControlFlow.cont;
+    const rbp = checker.vars_stack.items.len;
     for (0..block.len) |i| {
         const cf = try checker.checkStatement(block[i]);
         if (cf != .cont) {
@@ -341,6 +343,11 @@ fn checkBlock(checker: *Checker, block: []const Ast.Statement) !ControlFlow {
             }
         }
     }
+    for (checker.vars_stack.items[rbp..]) |name| {
+        const was = checker.vars.remove(name);
+        std.debug.assert(was);
+    }
+    checker.vars_stack.shrinkRetainingCapacity(rbp);
     return res;
 }
 
@@ -606,6 +613,7 @@ fn checkDeclare(
         checker.failAlreadyDeclared(location, "item", declare.name, prev.location);
         return .cont;
     }
+    try checker.vars_stack.append(checker.gpa, declare.name);
     try checker.vars.put(declare.name, .{
         .typ = typ,
         .location = location,
@@ -869,6 +877,7 @@ fn deinit(checker: *Checker) void {
     checker.lazy_strucs.deinit(checker.gpa);
     checker.typs.deinit();
     checker.fun_arena.deinit();
+    checker.vars_stack.deinit(checker.gpa);
     checker.* = undefined;
 }
 
