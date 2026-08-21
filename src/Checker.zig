@@ -49,8 +49,8 @@ const LazyStruct = struct {
 const Checker = @This();
 
 gpa: std.mem.Allocator,
-global_typs: Typs,
-fun_typs: Typs,
+typs: Typs,
+fun_arena: std.heap.ArenaAllocator,
 structs: std.StringHashMap(Struct),
 vars: std.StringHashMap(Var),
 headers: std.StringHashMap(Header),
@@ -65,15 +65,15 @@ pub fn init(gpa: std.mem.Allocator, ast_info: Ast.Info) !Checker {
     const vars = std.StringHashMap(Var).init(gpa);
     const headers = std.StringHashMap(Header).init(gpa);
     const global_typs = Typs.init(gpa);
-    const fun_typs = Typs.init(gpa);
     const info = try Info.init(gpa, ast_info);
+    const fun_arena = std.heap.ArenaAllocator.init(gpa);
     return .{
         .gpa = gpa,
+        .fun_arena = fun_arena,
         .structs = structs,
         .vars = vars,
         .headers = headers,
-        .global_typs = global_typs,
-        .fun_typs = fun_typs,
+        .typs = global_typs,
         .info = info,
     };
 }
@@ -161,11 +161,11 @@ fn checkMain(checker: *Checker, location: Location) void {
 }
 
 fn regHeader(checker: *Checker, header: Ast.Header) !void {
-    const params = try checker.global_typs.arena.allocator().alloc(Typ, header.params.len);
+    const params = try checker.typs.arena.allocator().alloc(Typ, header.params.len);
     for (header.params, 0..) |param, i| {
-        params[i] = try checker.global_typs.makeTyp(param.typ);
+        params[i] = try checker.typs.makeTyp(param.typ);
     }
-    const ret_typ = try checker.global_typs.makeTyp(header.ret_typ);
+    const ret_typ = try checker.typs.makeTyp(header.ret_typ);
     try checker.headers.put(header.name, .{
         .params = params,
         .ret_typ = ret_typ,
@@ -178,7 +178,7 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
         .fields = std.StringHashMap(Field).init(checker.structs.allocator),
     };
     for (struc.fields) |field| {
-        const typ = try checker.global_typs.makeTyp(field.typ);
+        const typ = try checker.typs.makeTyp(field.typ);
         try res.fields.put(field.name, .{
             .typ = typ,
         });
@@ -194,7 +194,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
     checker.ret_typ = checker.headers.get(fun.header.name).?.ret_typ;
     for (fun.header.params) |param| {
         try checker.vars.put(param.name, .{
-            .typ = try checker.fun_typs.makeTyp(param.typ),
+            .typ = try checker.typs.makeTyp(param.typ),
             .location = param.location,
             .mutable = false,
             .can_be_mutable = false,
@@ -228,7 +228,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
         }, lazy_struc.typs);
     }
     checker.lazy_strucs.clearRetainingCapacity();
-    checker.fun_typs.reset();
+    _ = checker.fun_arena.reset(.retain_capacity);
 }
 
 fn checkBlock(checker: *Checker, block: []const Ast.Statement) !ControlFlow {
@@ -500,7 +500,7 @@ fn checkDeclare(
     const expr_typ = try checker.checkExpr(declare.expr);
     var typ = expr_typ;
     if (declare.typ) |typ_decl| {
-        const decl_typ = try checker.fun_typs.makeTyp(typ_decl);
+        const decl_typ = try checker.typs.makeTyp(typ_decl);
         try checker.unify(declare.expr.location, decl_typ, expr_typ);
         // if expr_typ is `<any>`
         typ = decl_typ;
@@ -540,7 +540,7 @@ fn checkNotb(checker: *Checker, expr: Ast.Expr) !Typ {
 
 fn checkPtr(checker: *Checker, expr: Ast.Expr, mutable: bool) !Typ {
     const inner = try checker.checkExprWith(expr, mutable);
-    const typ = try checker.fun_typs.box(inner);
+    const typ = try checker.typs.box(inner);
     if (mutable) {
         return .{ .mut_ptr = typ };
     }
@@ -548,7 +548,7 @@ fn checkPtr(checker: *Checker, expr: Ast.Expr, mutable: bool) !Typ {
 }
 
 fn checkInferStruc(checker: *Checker, struc: Ast.InferStruct, location: Location) !Typ {
-    const typs = try checker.fun_typs.arena.allocator().alloc(Typ, struc.fields.len);
+    const typs = try checker.fun_arena.allocator().alloc(Typ, struc.fields.len);
     for (struc.fields, typs) |field, *typ| {
         typ.* = try checker.checkExpr(field.expr);
     }
@@ -756,8 +756,8 @@ fn deinit(checker: *Checker) void {
     checker.vars.deinit();
     checker.headers.deinit();
     checker.lazy_strucs.deinit(checker.gpa);
-    checker.global_typs.deinit();
-    checker.fun_typs.deinit();
+    checker.typs.deinit();
+    checker.fun_arena.deinit();
     checker.* = undefined;
 }
 
