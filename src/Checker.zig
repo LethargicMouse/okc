@@ -282,6 +282,10 @@ fn regStrStruct(checker: *Checker) !void {
 fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
     checker.ret_typ = checker.headers.get(fun.header.name).?.ret_typ;
     for (fun.header.params) |param| {
+        if (checker.vars.get(param.name)) |prev| {
+            checker.failAlreadyDeclared(param.location, "item", param.name, prev.location);
+            continue;
+        }
         try checker.vars.put(param.name, .{
             .typ = try checker.typs.makeTyp(param.typ),
             .location = param.location,
@@ -317,6 +321,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
         }, lazy_struc.typs);
     }
     checker.lazy_strucs.clearRetainingCapacity();
+    checker.vars.clearRetainingCapacity();
     _ = checker.fun_arena.reset(.retain_capacity);
 }
 
@@ -596,6 +601,10 @@ fn checkDeclare(
         try checker.unify(declare.expr.location, decl_typ, expr_typ);
         // if expr_typ is `<any>`
         typ = decl_typ;
+    }
+    if (checker.vars.get(declare.name)) |prev| {
+        checker.failAlreadyDeclared(location, "item", declare.name, prev.location);
+        return .cont;
     }
     try checker.vars.put(declare.name, .{
         .typ = typ,
