@@ -483,7 +483,7 @@ fn canUnify(a: Typ, b: Typ, mtyps: ?*Typs) !bool {
         .mut_ptr => |atyp| return canUnify(atyp.*, b.mut_ptr.*, mtyps),
         .array => |arr| {
             if (std.mem.eql(u8, arr.len, b.array.len)) {
-                return canUnify(a, b, mtyps);
+                return canUnify(arr.typ.*, b.array.typ.*, mtyps);
             }
             return false;
         },

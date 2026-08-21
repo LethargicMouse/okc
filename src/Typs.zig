@@ -200,6 +200,7 @@ pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
 
 pub fn reset(typs: *Typs) void {
     _ = typs.arena.reset(.retain_capacity);
+    typs.memo.clearRetainingCapacity();
 }
 
 pub fn box(typs: *Typs, typ: Typ) !*const Typ {
