@@ -349,7 +349,7 @@ fn genOpAssign(gen: *Codegen, op_assign: Ast.OpAssign) !void {
     const vari = try gen.genExprRef(op_assign.left);
     const typ_val = try gen.genBinary(.{
         .left = op_assign.left,
-        .op = op_assign.bin_op,
+        .kind = op_assign.kind,
         .right = op_assign.right,
     });
     try gen.storeInto(vari.tmp, typ_val);
@@ -634,23 +634,23 @@ fn genBinary(gen: *Codegen, binary: Ast.Binary) !TypVal {
     const right = try gen.genExpr(binary.right);
     const tmp = gen.newTmp();
     try gen.print("\n  %{} = ", .{tmp});
-    try gen.genBinOp(binary.op);
+    try gen.genBinOp(binary.kind);
     try gen.print(" {f}, {f}", .{ left, right.val });
     return .{
-        .typ = binOpRetTyp(binary.op, left.typ),
+        .typ = binOpRetTyp(binary.kind, left.typ),
         .val = .{ .tmp = tmp },
     };
 }
 
-fn binOpRetTyp(bin_op: Ast.BinOp, child_typ: Typ) Typ {
-    switch (bin_op) {
+fn binOpRetTyp(kind: Ast.Binary.Kind, child_typ: Typ) Typ {
+    switch (kind) {
         .sub, .add, .mul, .div, .rem, .andb, .orb => return child_typ,
         .equ, .les => return .i1,
     }
 }
 
-fn genBinOp(gen: *Codegen, bin_op: Ast.BinOp) !void {
-    switch (bin_op) {
+fn genBinOp(gen: *Codegen, kind: Ast.Binary.Kind) !void {
+    switch (kind) {
         .orb => try gen.print("or", .{}),
         .andb => try gen.print("and", .{}),
         .add => try gen.print("add", .{}),

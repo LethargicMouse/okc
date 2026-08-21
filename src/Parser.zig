@@ -12,12 +12,12 @@ const ExprStatementPostfix = union(enum) {
 };
 
 const OpAssignPostfix = struct {
-    bin_op: Ast.BinOp,
+    kind: Ast.Binary.Kind,
     expr: Ast.Expr,
 };
 
 const BinPostfix = struct {
-    bin_op: Ast.BinOp,
+    kind: Ast.Binary.Kind,
     expr: Ast.Expr,
 };
 
@@ -366,17 +366,17 @@ fn parseBreakStatement(parser: *Parser) !Ast.Statement {
 fn parseOpAssignStatementPostfix(
     parser: *Parser,
 ) !ExprStatementPostfix {
-    const bin_op = try parser.parseOpAssignBinOp();
+    const kind = try parser.parseOpAssignBinOp();
     try parser.expect(.equ);
     const expr = try parser.parseExprLoud();
     return .{ .op_assign = .{
-        .bin_op = bin_op,
+        .kind = kind,
         .expr = expr,
     } };
 }
 
-fn parseOpAssignBinOp(parser: *Parser) !Ast.BinOp {
-    return parser.parseEither(Ast.BinOp, &.{
+fn parseOpAssignBinOp(parser: *Parser) !Ast.Binary.Kind {
+    return parser.parseEither(Ast.Binary.Kind, &.{
         parseBitAnd,
     });
 }
@@ -509,7 +509,7 @@ fn parseExprStatement(parser: *Parser) !Ast.Statement {
                 .location = location,
                 .kind = .{ .op_assign = .{
                     .left = expr,
-                    .bin_op = op_assign.bin_op,
+                    .kind = op_assign.kind,
                     .right = op_assign.expr,
                 } },
             };
@@ -566,7 +566,7 @@ fn parseExprPrior(parser: *Parser, prior: u8, loud: bool) Error!Ast.Expr {
         const binary = try parser.arena.allocator().create(Ast.Binary);
         binary.* = .{
             .left = res,
-            .op = bin_postfix.bin_op,
+            .kind = bin_postfix.kind,
             .right = bin_postfix.expr,
         };
         res = .{
@@ -579,11 +579,11 @@ fn parseExprPrior(parser: *Parser, prior: u8, loud: bool) Error!Ast.Expr {
 
 fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
     const cursor_before = parser.cursor;
-    const bin_op = parser.parseBinOp(prior) catch |err| switch (err) {
+    const kind = parser.parseBinOp(prior) catch |err| switch (err) {
         error.ParseFailed => return null,
         else => return err,
     };
-    const expr = parser.parseExprPrior(bin_op.prior() + 1, true) catch |err| switch (err) {
+    const expr = parser.parseExprPrior(kind.prior() + 1, true) catch |err| switch (err) {
         error.ParseFailed => {
             parser.cursor = cursor_before;
             return null;
@@ -591,13 +591,13 @@ fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
         else => return err,
     };
     return .{
-        .bin_op = bin_op,
+        .kind = kind,
         .expr = expr,
     };
 }
 
-fn parseBinOp(parser: *Parser, prior: u8) !Ast.BinOp {
-    const res = try parser.parseEither(Ast.BinOp, .{
+fn parseBinOp(parser: *Parser, prior: u8) !Ast.Binary.Kind {
+    const res = try parser.parseEither(Ast.Binary.Kind, .{
         parseAdd,
         parseSub,
         parseMul,
@@ -615,47 +615,47 @@ fn parseBinOp(parser: *Parser, prior: u8) !Ast.BinOp {
     return res;
 }
 
-fn parseBitOr(parser: *Parser) !Ast.BinOp {
+fn parseBitOr(parser: *Parser) !Ast.Binary.Kind {
     try parser.expect(.pipe);
     return .orb;
 }
 
-fn parseBitAnd(parser: *Parser) !Ast.BinOp {
+fn parseBitAnd(parser: *Parser) !Ast.Binary.Kind {
     try parser.expect(.amp);
     return .andb;
 }
 
-fn parseRem(parser: *Parser) !Ast.BinOp {
+fn parseRem(parser: *Parser) !Ast.Binary.Kind {
     try parser.expect(.rem);
     return .rem;
 }
 
-fn parseLes(parser: *Parser) !Ast.BinOp {
+fn parseLes(parser: *Parser) !Ast.Binary.Kind {
     try parser.expect(.les);
     return .les;
 }
 
-fn parseEqu(parser: *Parser) !Ast.BinOp {
+fn parseEqu(parser: *Parser) !Ast.Binary.Kind {
     try parser.expect(.equ2);
     return .equ;
 }
 
-fn parseAdd(parser: *Parser) !Ast.BinOp {
+fn parseAdd(parser: *Parser) !Ast.Binary.Kind {
     try parser.expect(.plus);
     return .add;
 }
 
-fn parseSub(parser: *Parser) !Ast.BinOp {
+fn parseSub(parser: *Parser) !Ast.Binary.Kind {
     try parser.expect(.minus);
     return .sub;
 }
 
-fn parseMul(parser: *Parser) !Ast.BinOp {
+fn parseMul(parser: *Parser) !Ast.Binary.Kind {
     try parser.expect(.star);
     return .mul;
 }
 
-fn parseDiv(parser: *Parser) !Ast.BinOp {
+fn parseDiv(parser: *Parser) !Ast.Binary.Kind {
     try parser.expect(.slash);
     return .div;
 }

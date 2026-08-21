@@ -70,7 +70,7 @@ pub const Fun = struct {
 
 pub const OpAssign = struct {
     left: Expr,
-    bin_op: BinOp,
+    kind: Binary.Kind,
     right: Expr,
 };
 
@@ -193,31 +193,31 @@ pub const Field = struct {
 };
 
 pub const Binary = struct {
-    left: Expr,
-    op: BinOp,
-    right: Expr,
-};
+    pub const Kind = enum {
+        orb,
+        andb,
+        equ,
+        add,
+        sub,
+        mul,
+        div,
+        les,
+        rem,
 
-pub const BinOp = enum {
-    orb,
-    andb,
-    equ,
-    add,
-    sub,
-    mul,
-    div,
-    les,
-    rem,
-
-    pub fn prior(bin_op: BinOp) u8 {
-        switch (bin_op) {
-            .equ, .les => return 0,
-            .orb => return 1,
-            .andb => return 2,
-            .add, .sub => return 3,
-            .mul, .div, .rem => return 4,
+        pub fn prior(kind: Kind) u8 {
+            switch (kind) {
+                .equ, .les => return 0,
+                .orb => return 1,
+                .andb => return 2,
+                .add, .sub => return 3,
+                .mul, .div, .rem => return 4,
+            }
         }
-    }
+    };
+
+    left: Expr,
+    kind: Kind,
+    right: Expr,
 };
 
 pub const Struct = struct {

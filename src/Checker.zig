@@ -416,7 +416,7 @@ fn checkBranch(checker: *Checker, branch: Ast.Branch, loop: bool) !ControlFlow {
 fn checkOpAssign(checker: *Checker, op_assign: Ast.OpAssign) !ControlFlow {
     var left = try checker.checkExprMut(op_assign.left);
     const right = try checker.checkExpr(op_assign.right);
-    switch (op_assign.bin_op) {
+    switch (op_assign.kind) {
         .add, .andb, .div, .mul, .orb, .rem, .sub => {
             if (!left.isNumber()) {
                 checker.failWrongTyp(op_assign.left.location, .int, left);
@@ -777,7 +777,7 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {
     }
     const right = try checker.checkExpr(binary.right);
     try checker.unify(binary.right.location, left, right);
-    switch (binary.op) {
+    switch (binary.kind) {
         .equ, .les => return .{ .prime = .bool },
         else => return left,
     }
