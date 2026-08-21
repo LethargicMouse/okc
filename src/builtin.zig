@@ -16,6 +16,7 @@ pub const str_struct = Ast.Struct{
             .location = loc(pos(3, 3), pos(3, 6)),
         },
     },
+    .location = loc(pos(1, 8), pos(1, 11)),
 };
 
 const u8_ptr = &Ast.Typ{ .prime = .u8 };

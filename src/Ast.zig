@@ -216,6 +216,7 @@ pub const BinOp = enum {
 pub const Struct = struct {
     name: []const u8,
     fields: []const FieldDecl,
+    location: Location,
 };
 
 pub const FieldDecl = struct {

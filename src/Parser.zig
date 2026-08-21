@@ -152,6 +152,7 @@ fn parseStructItem(parser: *Parser) !Ast.Item {
 
 fn parseStruct(parser: *Parser) !Ast.Struct {
     try parser.expect(.struc);
+    const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.curl);
     const fields = try parser.parseSep(Ast.FieldDecl, parseFieldDeclLoud);
@@ -159,6 +160,7 @@ fn parseStruct(parser: *Parser) !Ast.Struct {
     return .{
         .name = name,
         .fields = fields,
+        .location = location,
     };
 }
 

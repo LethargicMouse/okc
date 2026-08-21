@@ -25,6 +25,7 @@ const Field = struct {
 
 const Struct = struct {
     fields: std.StringHashMap(Field),
+    location: Location,
 };
 
 const Var = struct {
@@ -252,8 +253,13 @@ fn failAlreadyDeclared(
 }
 
 fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
+    if (checker.structs.get(struc.name)) |prev| {
+        checker.failAlreadyDeclared(struc.location, "struct", struc.name, prev.location);
+        return;
+    }
     var res = Struct{
         .fields = std.StringHashMap(Field).init(checker.structs.allocator),
+        .location = struc.location,
     };
     for (struc.fields) |field| {
         if (res.fields.get(field.name)) |prev| {
