@@ -215,6 +215,15 @@ fn checkMain(checker: *Checker, location: Location) void {
 }
 
 fn regHeader(checker: *Checker, header: Ast.Header) !void {
+    if (checker.headers.get(header.name)) |prev| {
+        checker.failAlreadyDeclared(
+            header.location,
+            "function",
+            header.name,
+            prev.location,
+        );
+        return;
+    }
     const params = try checker.typs.arena.allocator().alloc(Typ, header.params.len);
     for (header.params, 0..) |param, i| {
         params[i] = try checker.typs.makeTyp(param.typ);
@@ -225,6 +234,19 @@ fn regHeader(checker: *Checker, header: Ast.Header) !void {
         .ret_typ = ret_typ,
         .location = header.location,
     });
+}
+
+fn failAlreadyDeclared(
+    checker: *Checker,
+    location: Location,
+    kind: []const u8,
+    name: []const u8,
+    prev: Location,
+) void {
+    checker.fail(
+        \\in {f}
+        \\     {s} `{s}` is already declared in {f}
+    , .{ location, kind, name, prev });
 }
 
 fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
