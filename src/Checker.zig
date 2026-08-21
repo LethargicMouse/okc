@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Ast = @import("Ast.zig");
+const builtin = @import("builtin.zig");
 const Info = @import("Info.zig");
 const LlvmTyps = @import("LlvmTyps.zig");
 const LlvmTyp = LlvmTyps.Typ;
@@ -18,6 +19,7 @@ const ControlFlow = enum(u2) {
 };
 
 const Field = struct {
+    location: Location,
     typ: Typ,
 };
 
@@ -254,8 +256,13 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
         .fields = std.StringHashMap(Field).init(checker.structs.allocator),
     };
     for (struc.fields) |field| {
+        if (res.fields.get(field.name)) |prev| {
+            checker.failAlreadyDeclared(field.location, "field", field.name, prev.location);
+            continue;
+        }
         const typ = try checker.typs.makeTyp(field.typ);
         try res.fields.put(field.name, .{
+            .location = field.location,
             .typ = typ,
         });
     }
@@ -263,7 +270,7 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
 }
 
 fn regStrStruct(checker: *Checker) !void {
-    try checker.regStruct(Ast.str_struct);
+    try checker.regStruct(builtin.str_struct);
 }
 
 fn checkFun(checker: *Checker, fun: Ast.Fun) !void {

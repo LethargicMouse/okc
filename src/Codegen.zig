@@ -4,6 +4,7 @@ const Ast = @import("Ast.zig");
 const Info = @import("Info.zig");
 const LlvmTyps = @import("LlvmTyps.zig");
 const Typ = LlvmTyps.Typ;
+const builtin = @import("builtin.zig");
 
 const Unescaped = struct { len: usize, repr: []const u8 };
 
@@ -148,7 +149,7 @@ fn regAndGenStruct(gen: *Codegen, struc: Ast.Struct) !void {
 }
 
 fn genStrStruct(gen: *Codegen) !void {
-    try gen.regAndGenStruct(Ast.str_struct);
+    try gen.regAndGenStruct(builtin.str_struct);
 }
 
 fn regHeader(gen: *Codegen, header: Ast.Header) !void {

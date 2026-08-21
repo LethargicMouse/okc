@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const builtin = @import("builtin");
+
 const Location = @import("Location.zig");
 
 pub const ExtFun = struct {
@@ -219,6 +221,7 @@ pub const Struct = struct {
 pub const FieldDecl = struct {
     name: []const u8,
     typ: Typ,
+    location: Location,
 };
 
 pub const Info = struct {
@@ -242,19 +245,3 @@ pub fn deinit(ast: *Ast) void {
     ast.arena.deinit();
     ast.* = undefined;
 }
-
-pub const str_struct = Struct{
-    .name = "str",
-    .fields = &.{
-        .{
-            .name = "ptr",
-            .typ = .{ .ptr = u8_ptr },
-        },
-        .{
-            .name = "len",
-            .typ = .{ .prime = .u64 },
-        },
-    },
-};
-
-const u8_ptr = &Ast.Typ{ .prime = .u8 };

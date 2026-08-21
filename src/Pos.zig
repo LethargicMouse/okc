@@ -7,7 +7,7 @@ symbol: u32,
 
 pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) ![]const Pos {
     var vec = try std.ArrayList(Pos).initCapacity(gpa, code.len + 2);
-    var current = Pos{ .line = 1, .symbol = 1 };
+    var current = start;
     for (code) |c| {
         try vec.append(gpa, current);
         if (c == '\n') {
@@ -28,3 +28,5 @@ pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) ![]const Pos {
 pub fn format(pos: Pos, writer: *std.Io.Writer) std.Io.Writer.Error!void {
     try writer.print("{}:{}", .{ pos.line, pos.symbol });
 }
+
+pub const start = Pos{ .line = 1, .symbol = 1 };

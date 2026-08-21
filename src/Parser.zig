@@ -167,6 +167,7 @@ fn parseFieldDeclLoud(parser: *Parser) !Ast.FieldDecl {
     return .{
         .name = param.name,
         .typ = param.typ,
+        .location = param.location,
     };
 }
 
