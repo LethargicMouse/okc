@@ -270,16 +270,18 @@ fn parseEither(parser: *Parser, typ: type, comptime parses: anytype) !typ {
 fn parseMutPtrTyp(parser: *Parser) !Ast.Typ {
     try parser.expect(.amp);
     try parser.expect(.mut);
-    const typ = try parser.arena.allocator().create(Ast.Typ);
-    typ.* = try parser.parseTypLoud();
-    return .{ .mut_ptr = typ };
+    const typ = try parser.parseTypLoud();
+    const ptr = try parser.arena.allocator().create(Ast.Typ);
+    ptr.* = typ;
+    return .{ .mut_ptr = ptr };
 }
 
 fn parsePtrTyp(parser: *Parser) !Ast.Typ {
     try parser.expect(.amp);
-    const typ = try parser.arena.allocator().create(Ast.Typ);
-    typ.* = try parser.parseTypLoud();
-    return .{ .ptr = typ };
+    const typ = try parser.parseTypLoud();
+    const ptr = try parser.arena.allocator().create(Ast.Typ);
+    ptr.* = typ;
+    return .{ .ptr = ptr };
 }
 
 fn parseVerbalTyp(parser: *Parser) !Ast.Typ {
