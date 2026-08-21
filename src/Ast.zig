@@ -68,12 +68,19 @@ pub const Fun = struct {
     body: Block,
 };
 
+pub const OpAssign = struct {
+    left: Expr,
+    bin_op: BinOp,
+    right: Expr,
+};
+
 pub const Statement = struct {
     pub const Kind = union(enum) {
         ret: Return,
         expr: Expr,
         declare: Declare,
         assign: Assign,
+        op_assign: OpAssign,
         iff: If,
         whi: While,
         ignore: Ignore,

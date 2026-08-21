@@ -360,6 +360,7 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!ControlFlow
         .declare => |declare| {
             return checker.checkDeclare(declare, statement.location, false);
         },
+        .op_assign => |op_assign| return checker.checkOpAssign(op_assign),
         .assign => |assign| return checker.checkAssign(assign),
         .iff => |iff| return checker.checkIf(iff),
         .whi => |whi| return checker.checkWhile(whi),
@@ -435,9 +436,27 @@ fn checkBranch(checker: *Checker, branch: Ast.Branch, loop: bool) !ControlFlow {
     return cf;
 }
 
+fn checkOpAssign(checker: *Checker, op_assign: Ast.OpAssign) !ControlFlow {
+    var left = try checker.checkExprMut(op_assign.left);
+    const right = try checker.checkExpr(op_assign.right);
+    switch (op_assign.bin_op) {
+        .add, .andb, .div, .mul, .orb, .rem, .sub => {
+            if (!left.isNumber()) {
+                checker.failWrongTyp(op_assign.left.location, .int, left);
+                left = .err;
+            }
+        },
+        .equ, .les => {
+            try checker.unify(op_assign.left.location, .{ .prime = .bool }, right);
+        },
+    }
+    try checker.unify(op_assign.right.location, left, right);
+    return .cont;
+}
+
 fn checkAssign(checker: *Checker, assign: Ast.Assign) !ControlFlow {
-    const typ = try checker.checkExpr(assign.expr);
     const left_typ = try checker.checkExprMut(assign.left);
+    const typ = try checker.checkExpr(assign.expr);
     try checker.unify(assign.expr.location, left_typ, typ);
     return .cont;
 }

@@ -1,10 +1,10 @@
 const std = @import("std");
 
 const Ast = @import("Ast.zig");
+const builtin = @import("builtin.zig");
 const Info = @import("Info.zig");
 const LlvmTyps = @import("LlvmTyps.zig");
 const Typ = LlvmTyps.Typ;
-const builtin = @import("builtin.zig");
 
 const Unescaped = struct { len: usize, repr: []const u8 };
 
@@ -257,6 +257,7 @@ fn genParam(gen: *Codegen, param: Ast.Param) !TypVal {
 
 fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
     switch (statement.kind) {
+        .op_assign => |op_assign| try gen.genOpAssign(op_assign),
         .unre => try gen.genUnreachable(),
         .ret => |ret| try gen.genRet(ret),
         .expr => |expr| _ = try gen.genExpr(expr),
@@ -342,6 +343,16 @@ fn genBranch(gen: *Codegen, branch: Ast.Branch, end_label: u32, loop: bool) !voi
     if (loop) {
         _ = gen.loop_ends.pop();
     }
+}
+
+fn genOpAssign(gen: *Codegen, op_assign: Ast.OpAssign) !void {
+    const vari = try gen.genExprRef(op_assign.left);
+    const typ_val = try gen.genBinary(.{
+        .left = op_assign.left,
+        .op = op_assign.bin_op,
+        .right = op_assign.right,
+    });
+    try gen.storeInto(vari.tmp, typ_val);
 }
 
 fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {

@@ -504,19 +504,13 @@ fn parseExprStatement(parser: *Parser) !Ast.Statement {
             };
         },
         .op_assign => |op_assign| {
-            const binary = try parser.arena.allocator().create(Ast.Binary);
-            binary.left = expr;
-            binary.op = op_assign.bin_op;
-            binary.right = op_assign.expr;
             const location = expr.location.combine(op_assign.expr.location);
             return .{
                 .location = location,
-                .kind = .{ .assign = .{
+                .kind = .{ .op_assign = .{
                     .left = expr,
-                    .expr = .{
-                        .location = location,
-                        .kind = .{ .binary = binary },
-                    },
+                    .bin_op = op_assign.bin_op,
+                    .right = op_assign.expr,
                 } },
             };
         },
