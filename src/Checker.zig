@@ -10,6 +10,15 @@ const Typs = @import("Typs.zig");
 const Typ = Typs.Typ;
 
 const Error = error{OutOfMemory};
+const ExprInfo = struct {
+    typ: Typ,
+    mutable: bool,
+
+    const err = ExprInfo{
+        .typ = .err,
+        .mutable = true,
+    };
+};
 
 // numbered to enable `<`
 const ControlFlow = enum(u2) {
@@ -24,6 +33,7 @@ const Field = struct {
 };
 
 const Struct = struct {
+    generics: []const []const u8,
     fields: std.StringHashMap(Field),
     location: Location,
 };
@@ -44,18 +54,6 @@ const Header = struct {
     used: bool = false,
 };
 
-const LazyStruct = struct {
-    typ: *const Typ,
-    fields: []const Ast.NewField,
-    typs: []const Typ,
-    location: Location,
-};
-
-const Lazy = struct {
-    typ: *const Typ,
-    location: Location,
-};
-
 const Checker = @This();
 
 gpa: std.mem.Allocator,
@@ -65,8 +63,7 @@ structs: std.StringHashMap(Struct),
 vars: std.StringHashMap(Var),
 vars_stack: std.ArrayList([]const u8) = .empty,
 headers: std.StringHashMap(Header),
-lazy_strucs: std.ArrayList(LazyStruct) = .empty,
-lazies: []Lazy,
+llvm_typs: *LlvmTyps,
 info: Info,
 ret_typ: Typ = undefined,
 errors_cnt: u16 = 0,
@@ -80,25 +77,24 @@ pub fn init(
     const structs = std.StringHashMap(Struct).init(gpa);
     const vars = std.StringHashMap(Var).init(gpa);
     const headers = std.StringHashMap(Header).init(gpa);
-    var global_typs = Typs.init(gpa);
+    const typs = Typs.init(gpa);
     const info = try Info.init(llvm_typs, ast_info);
     const fun_arena = std.heap.ArenaAllocator.init(gpa);
-    const lazies = try global_typs.arena.allocator().alloc(Lazy, ast_info.typ_ids);
     return .{
         .gpa = gpa,
         .fun_arena = fun_arena,
+        .llvm_typs = llvm_typs,
         .structs = structs,
         .vars = vars,
         .headers = headers,
-        .typs = global_typs,
+        .typs = typs,
         .info = info,
-        .lazies = lazies,
     };
 }
 
-pub fn run(checker: *Checker, ast: Ast, llvm_typs: *LlvmTyps) !Info {
+pub fn run(checker: *Checker, ast: Ast) !Info {
     defer checker.deinit();
-    try checker.checkAst(ast, llvm_typs);
+    try checker.checkAst(ast);
     if (checker.errors_cnt == 0) {
         return checker.info;
     }
@@ -106,7 +102,7 @@ pub fn run(checker: *Checker, ast: Ast, llvm_typs: *LlvmTyps) !Info {
     return error.Handled;
 }
 
-fn checkAst(checker: *Checker, ast: Ast, llvm_typs: *LlvmTyps) !void {
+fn checkAst(checker: *Checker, ast: Ast) !void {
     try checker.regStrStruct();
     for (ast.items) |item| {
         try checker.regItem(item);
@@ -114,49 +110,58 @@ fn checkAst(checker: *Checker, ast: Ast, llvm_typs: *LlvmTyps) !void {
     for (ast.items) |item| {
         try checker.checkItem(item);
     }
-    checker.checkVars();
     checker.checkMain(ast.location);
     checker.checkHeaders();
-    try checker.checkLazyTyps(llvm_typs);
 }
 
-fn checkLazyTyps(checker: *Checker, llvm_typs: *LlvmTyps) !void {
-    for (checker.lazies, checker.info.typs) |lazy, *target| {
-        target.* = checker.convertTyp(lazy.typ.*, lazy.location, llvm_typs) catch |err| switch (err) {
-            error.BadConvert => continue,
-            else => return err,
-        };
-    }
+fn convertTyp(checker: *Checker, typ: Typ, location: Location) !?LlvmTyp {
+    return checker.convertTypRec(typ, location) catch |err| switch (err) {
+        error.BadConvert => return null,
+        error.ConvertAny => {
+            checker.failCannotInfer(typ, location);
+            return null;
+        },
+        error.OutOfMemory => return error.OutOfMemory,
+    };
 }
 
-fn convertTyp(checker: *Checker, typ: Typ, location: Location, llvm_typs: *LlvmTyps) !LlvmTyp {
+fn convertTypRec(checker: *Checker, typ: Typ, location: Location) !LlvmTyp {
     switch (typ) {
-        .name => |name| return .{ .name = name },
+        .name => |name| {
+            const generics =
+                try checker.llvm_typs.arena.allocator().alloc(LlvmTyp, name.generics.len);
+            for (generics, name.generics) |*target, generic| {
+                target.* = try checker.convertTypRec(generic, location);
+            }
+            return .{ .name = .{
+                .name = name.name,
+                .generics = generics,
+            } };
+        },
         .prime => |prime| return LlvmTyp.fromPrime(prime),
         .ptr => |ptr| {
-            const inner = try checker.convertTyp(ptr.*, location, llvm_typs);
-            const new = try llvm_typs.box(inner);
+            const inner = try checker.convertTypRec(ptr.*, location);
+            const new = try checker.llvm_typs.box(inner);
             return .{ .ptr = new };
         },
         .mut_ptr => |ptr| {
-            const inner = try checker.convertTyp(ptr.*, location, llvm_typs);
-            const new = try llvm_typs.box(inner);
+            const inner = try checker.convertTypRec(ptr.*, location);
+            const new = try checker.llvm_typs.box(inner);
             return .{ .ptr = new };
         },
         .array => |array| {
-            const inner = try checker.convertTyp(array.typ.*, location, llvm_typs);
-            const new = try llvm_typs.box(inner);
+            const inner = try checker.convertTypRec(array.typ.*, location);
+            const new = try checker.llvm_typs.box(inner);
             return .{ .array = .{
                 .len = array.len,
                 .typ = new,
             } };
         },
         .err => return error.BadConvert,
-        .any, .int => {
-            checker.failShouldKnowTyp(location);
-            return error.BadConvert;
+        .any => {
+            return error.ConvertAny;
         },
-        .lazy => |inner| return checker.convertTyp(inner.*, location, llvm_typs),
+        .lazy => |inner| return checker.convertTypRec(inner.*, location),
     }
 }
 
@@ -185,15 +190,12 @@ fn checkItem(checker: *Checker, item: Ast.Item) !void {
     }
 }
 
-fn checkVars(checker: *Checker) void {
-    var iter = checker.vars.valueIterator();
-    while (iter.next()) |vari| {
-        if (!vari.used) {
-            checker.failUnused(vari.location);
-        } else if (vari.mutable and !vari.mutated) {
-            checker.fail(vari.location, "variable is never mutated", .{});
-            std.log.info("remove `mut` before name\n", .{});
-        }
+fn checkVarUsage(checker: *Checker, vari: Var) void {
+    if (!vari.used) {
+        checker.failUnused(vari.location);
+    } else if (vari.mutable and !vari.mutated) {
+        checker.fail(vari.location, "variable is never mutated", .{});
+        std.log.info("remove `mut` before name\n", .{});
     }
 }
 
@@ -251,6 +253,7 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
         return;
     }
     var res = Struct{
+        .generics = struc.generics,
         .fields = std.StringHashMap(Field).init(checker.structs.allocator),
         .location = struc.location,
     };
@@ -290,24 +293,6 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
     if (cf != .ret and !fun.header.ret_typ.isVoid()) {
         checker.fail(fun.header.location, "function may not return", .{});
     }
-    for (checker.lazy_strucs.items) |lazy_struc| {
-        const name = switch (lazy_struc.typ.*) {
-            .name => |name| name,
-            .any => {
-                checker.fail(lazy_struc.location, "cannot infer type", .{});
-                continue;
-            },
-            else => {
-                checker.failWrongTyp(lazy_struc.location, lazy_struc.typ.*, .err);
-                continue;
-            },
-        };
-        try checker.checkStrucNow(lazy_struc.location, .{
-            .name = name,
-            .fields = lazy_struc.fields,
-        }, lazy_struc.typs);
-    }
-    checker.lazy_strucs.clearRetainingCapacity();
     checker.vars.clearRetainingCapacity();
     _ = checker.fun_arena.reset(.retain_capacity);
 }
@@ -327,8 +312,8 @@ fn checkBlock(checker: *Checker, block: []const Ast.Statement) !ControlFlow {
         }
     }
     for (checker.vars_stack.items[rbp..]) |name| {
-        const was = checker.vars.remove(name);
-        std.debug.assert(was);
+        const kv = checker.vars.fetchRemove(name);
+        checker.checkVarUsage(kv.?.value);
     }
     checker.vars_stack.shrinkRetainingCapacity(rbp);
     return res;
@@ -355,8 +340,8 @@ fn checkStatement(checker: *Checker, statement: Ast.Statement) Error!ControlFlow
 }
 
 fn checkIgnore(checker: *Checker, ignore: Ast.Ignore, location: Location) !ControlFlow {
-    const typ = try checker.checkExpr(ignore.expr);
-    if (typ == .prime and typ.prime == .void) {
+    const info = try checker.checkExpr(ignore.expr, .any);
+    if (info.typ == .prime and info.typ.prime == .void) {
         checker.fail(location, "redundant ignore", .{});
         std.log.info("remove `_ =` before expr\n", .{});
     }
@@ -372,8 +357,9 @@ fn checkBreak(checker: *Checker, location: Location) Error!ControlFlow {
 }
 
 fn checkExprStatement(checker: *Checker, expr: Ast.Expr) !ControlFlow {
-    const typ = try checker.checkExpr(expr);
-    try checker.unify(expr.location, .{ .prime = .void }, typ);
+    // no type hints to disallow `undefined;`
+    const info = try checker.checkExpr(expr, .any);
+    try checker.unify(expr.location, .{ .prime = .void }, info.typ);
     return .cont;
 }
 
@@ -401,8 +387,8 @@ fn checkIf(checker: *Checker, iff: Ast.If) !ControlFlow {
 }
 
 fn checkBranch(checker: *Checker, branch: Ast.Branch, loop: bool) !ControlFlow {
-    const typ = try checker.checkExpr(branch.condition);
-    try checker.unify(branch.condition.location, .{ .prime = .bool }, typ);
+    const info = try checker.checkExpr(branch.condition, .any);
+    try checker.unify(branch.condition.location, .{ .prime = .bool }, info.typ);
     if (loop) {
         checker.loops_nested += 1;
     }
@@ -414,89 +400,73 @@ fn checkBranch(checker: *Checker, branch: Ast.Branch, loop: bool) !ControlFlow {
 }
 
 fn checkOpAssign(checker: *Checker, op_assign: Ast.OpAssign) !ControlFlow {
-    var left = try checker.checkExprMut(op_assign.left);
-    const right = try checker.checkExpr(op_assign.right);
-    switch (op_assign.kind) {
-        .add, .andb, .div, .mul, .orb, .rem, .sub => {
-            if (!left.isNumber()) {
-                checker.failWrongTyp(op_assign.left.location, .int, left);
-                left = .err;
-            }
-        },
-        .equ, .les => {
-            try checker.unify(op_assign.left.location, .{ .prime = .bool }, right);
-        },
+    const left = try checker.checkExpr(op_assign.left, .any);
+    if (!left.mutable) {
+        checker.failNotMut(op_assign.left.location);
     }
-    try checker.unify(op_assign.right.location, left, right);
+    // only numeric ops allowed
+    if (!left.typ.isNumber()) {
+        checker.failWrongTyp(op_assign.left.location, .named("<int>"), left.typ);
+    }
+    const right = try checker.checkExpr(op_assign.right, .any);
+    try checker.unify(op_assign.right.location, left.typ, right.typ);
     return .cont;
 }
 
 fn checkAssign(checker: *Checker, assign: Ast.Assign) !ControlFlow {
-    const left_typ = try checker.checkExprMut(assign.left);
-    const typ = try checker.checkExpr(assign.expr);
-    try checker.unify(assign.expr.location, left_typ, typ);
+    const left = try checker.checkExpr(assign.left, .any);
+    if (left.mutable) {
+        checker.markMutated(assign.left);
+    } else {
+        checker.failNotMut(assign.left.location);
+    }
+    const info = try checker.checkExpr(assign.expr, left.typ);
+    try checker.unify(assign.expr.location, left.typ, info.typ);
     return .cont;
 }
 
-fn checkExprMut(checker: *Checker, expr: Ast.Expr) Error!Typ {
+fn markMutated(checker: *Checker, expr: Ast.Expr) void {
     switch (expr.kind) {
-        .unary => |unary| return checker.checkUnaryMut(unary.*, expr.location),
-        .vari => |name| return checker.checkVar(expr.location, name, true),
-        .field => |field| return checker.checkField(field.*, expr.location, true),
-        .elem => |elem| return checker.checkElem(elem.*, expr.location, true),
-        .int,
-        .str,
-        .char,
-        .undef,
-        .bool,
-        .call,
-        .binary,
-        .struc,
-        .infer_struc,
-        => {
-            const typ = try checker.checkExpr(expr);
-            checker.failNotMut(expr.location);
-            return typ;
-        },
+        .vari => |name| checker.markVarMutated(name),
+        else => {},
     }
 }
 
-fn checkUnaryMut(checker: *Checker, unary: Ast.Unary, location: Location) !Typ {
-    switch (unary.kind) {
-        .deref => return checker.checkDeref(unary.expr, location, true),
-        .notb, .ptr, .mut_ptr => {
-            const typ = try checker.checkUnary(unary, location);
-            checker.failNotMut(location);
-            return typ;
-        },
+fn markVarMutated(checker: *Checker, name: []const u8) void {
+    if (checker.vars.getPtr(name)) |vari| {
+        vari.mutated = true;
     }
+    // not failing on absence cuz already failed in `checkVar`
 }
 
-fn checkUnary(checker: *Checker, unary: Ast.Unary, location: Location) !Typ {
+fn checkUnary(checker: *Checker, unary: Ast.Unary, location: Location) !ExprInfo {
     switch (unary.kind) {
-        .deref => return checker.checkDeref(unary.expr, location, false),
+        .deref => return checker.checkDeref(unary.expr, location),
         .notb => return checker.checkNotb(unary.expr),
-        .ptr => return checker.checkPtr(unary.expr, false),
-        .mut_ptr => return checker.checkPtr(unary.expr, true),
+        .ptr => return checker.checkPtr(unary.expr),
+        .mut_ptr => return checker.checkMutPtr(unary.expr),
     }
 }
 
-fn checkDeref(checker: *Checker, expr: Ast.Expr, location: Location, mutable: bool) !Typ {
-    const typ = try checker.checkExpr(expr);
-    const norm = typ.normalise();
+fn checkDeref(checker: *Checker, expr: Ast.Expr, location: Location) !ExprInfo {
+    const info = try checker.checkExpr(expr, .any);
+    const norm = info.typ.normalise();
     switch (norm) {
         .ptr => |inner| {
-            if (mutable) {
-                checker.failNotMut(location);
-            }
-            return inner.*;
+            return .{
+                .typ = inner.*,
+                .mutable = false,
+            };
         },
         .mut_ptr => |inner| {
-            return inner.*;
+            return .{
+                .typ = inner.*,
+                .mutable = true,
+            };
         },
         .err => return .err,
-        .prime, .name, .any, .int, .array => {
-            checker.fail(location, "cannot dereference type `{f}`", .{typ});
+        .prime, .name, .any, .array => {
+            checker.fail(location, "cannot dereference type `{f}`", .{info.typ});
             return .err;
         },
         .lazy => unreachable,
@@ -507,16 +477,21 @@ fn failNotMut(checker: *Checker, location: Location) void {
     checker.fail(location, "it is immutable", .{});
 }
 
-fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location, mutable: bool) !Typ {
-    const typ = try checker.checkExprWith(elem.expr, mutable);
-    const index = try checker.checkExpr(elem.index);
-    try checker.unify(elem.index.location, .int, index);
-    const norm = typ.normalise();
+fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location) !ExprInfo {
+    const info = try checker.checkExpr(elem.expr, .any);
+    const index = try checker.checkExpr(elem.index, .any);
+    if (!index.typ.isNumber()) {
+        checker.failWrongTyp(elem.index.location, .named("<int>"), index.typ);
+    }
+    const norm = info.typ.normalise();
     switch (norm) {
-        .array => |array| return array.typ.*,
+        .array => |array| return .{
+            .typ = array.typ.*,
+            .mutable = info.mutable,
+        },
         .err => return .err,
-        .prime, .name, .ptr, .any, .int, .mut_ptr => {
-            checker.fail(location, "type `{f}` does not support indexing", .{typ});
+        .prime, .name, .ptr, .any, .mut_ptr => {
+            checker.fail(location, "type `{f}` does not support indexing", .{info.typ});
             return .err;
         },
         .lazy => unreachable,
@@ -528,7 +503,12 @@ fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) !void {
         return;
     }
     checker.failWrongTyp(location, a, b);
-    if (a == .ptr and a.ptr.* == .prime and a.ptr.*.prime == .u8 and b == .name and std.mem.eql(u8, b.name, "str")) {
+    if (a == .ptr and
+        a.ptr.* == .prime and
+        a.ptr.*.prime == .u8 and
+        b == .name and
+        std.mem.eql(u8, b.name.name, "str"))
+    {
         std.log.info("append `.ptr` to get C-style string\n", .{});
     }
 }
@@ -548,9 +528,6 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
     if (a == .any or b == .any) {
         return true;
     }
-    if (a == .int and b.isNumber() or b == .int and a.isNumber()) {
-        return true;
-    }
     if (b == .lazy) {
         const res = try canUnify(a, b.lazy.*, active);
         if (res) {
@@ -565,7 +542,17 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
     }
     switch (a) {
         .prime => |aprime| return aprime == b.prime,
-        .name => |aname| return std.mem.eql(u8, aname, b.name),
+        .name => |aname| {
+            if (!std.mem.eql(u8, aname.name, b.name.name)) {
+                return false;
+            }
+            for (aname.generics, b.name.generics) |ag, bg| {
+                if (!try canUnify(ag, bg, active)) {
+                    return false;
+                }
+            }
+            return true;
+        },
         // a == b <=> &a == &b due to memo
         .ptr => |aptr| return aptr == b.ptr or try canUnify(aptr.*, b.ptr.*, active),
         // a == b <=> &a == &b due to memo
@@ -577,7 +564,7 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
             }
             return false;
         },
-        .lazy, .int, .any, .err => unreachable,
+        .lazy, .any, .err => unreachable,
     }
 }
 
@@ -587,13 +574,14 @@ fn checkDeclare(
     location: Location,
     mutable: bool,
 ) !ControlFlow {
-    const expr_typ = try checker.checkExpr(declare.expr);
-    var typ = expr_typ;
+    var decl_typ: Typ = .any;
     if (declare.typ) |typ_decl| {
-        const decl_typ = try checker.typs.makeTyp(typ_decl);
-        try checker.unify(declare.expr.location, decl_typ, expr_typ);
-        // if expr_typ is `<any>`
-        typ = decl_typ;
+        decl_typ = try checker.typs.makeTyp(typ_decl);
+    }
+    var info = try checker.checkExpr(declare.expr, decl_typ);
+    try checker.unify(declare.expr.location, decl_typ, info.typ);
+    if (info.typ == .any) {
+        info.typ = .err;
     }
     if (checker.vars.get(declare.name)) |prev| {
         checker.failAlreadyDeclared(location, "item", declare.name, prev.location);
@@ -601,7 +589,7 @@ fn checkDeclare(
     }
     try checker.vars_stack.append(checker.gpa, declare.name);
     try checker.vars.put(declare.name, .{
-        .typ = typ,
+        .typ = info.typ,
         .location = location,
         .mutable = mutable,
         .can_be_mutable = true,
@@ -609,89 +597,123 @@ fn checkDeclare(
     return .cont;
 }
 
-fn checkExpr(checker: *Checker, expr: Ast.Expr) Error!Typ {
+fn checkExpr(checker: *Checker, expr: Ast.Expr, hint: Typ) Error!ExprInfo {
     switch (expr.kind) {
         .unary => |unary| return checker.checkUnary(unary.*, expr.location),
-        .infer_struc => |struc| return checker.checkInferStruc(struc, expr.location),
-        .int => |int| return checker.checkInt(expr.location, int),
-        .str => return .{ .name = "str" },
-        .vari => |name| return checker.checkVar(expr.location, name, false),
-        .char => return .{ .prime = .u8 },
-        .bool => return .{ .prime = .bool },
-        .undef => |undef| return checker.checkUndef(undef, expr.location),
+        .infer_struc => |struc| return checker.checkInferStruc(struc, expr.location, hint),
+        .int => |int| return checker.checkInt(expr.location, int, hint),
+        .str => return .{
+            .typ = .{ .name = .{ .name = "str" } },
+            .mutable = false,
+        },
+        .vari => |name| return checker.checkVar(expr.location, name),
+        .char => return .{
+            .typ = .{ .prime = .u8 },
+            .mutable = false,
+        },
+        .bool => return .{
+            .typ = .{ .prime = .bool },
+            .mutable = false,
+        },
+        .undef => |undef| return checker.checkUndef(undef, expr.location, hint),
         .call => |call| return checker.checkCall(call, expr.location),
-        .binary => |binary| return checker.checkBinary(binary.*),
-        .field => |field| return checker.checkField(field.*, expr.location, false),
+        .binary => |binary| return checker.checkBinary(binary.*, hint),
+        .field => |field| return checker.checkField(field.*, expr.location),
         .struc => |struc| return checker.checkStruc(struc, expr.location),
-        .elem => |elem| return checker.checkElem(elem.*, expr.location, false),
+        .elem => |elem| return checker.checkElem(elem.*, expr.location),
     }
 }
 
-fn checkNotb(checker: *Checker, expr: Ast.Expr) !Typ {
-    const typ = try checker.checkExpr(expr);
-    try checker.unify(expr.location, .int, typ);
-    return typ;
-}
-
-fn checkPtr(checker: *Checker, expr: Ast.Expr, mutable: bool) !Typ {
-    const inner = try checker.checkExprWith(expr, mutable);
-    const typ = try checker.typs.box(inner);
-    if (mutable) {
-        return .{ .mut_ptr = typ };
+fn checkNotb(checker: *Checker, expr: Ast.Expr) !ExprInfo {
+    var info = try checker.checkExpr(expr, .any);
+    if (!info.typ.isNumber()) {
+        checker.failWrongTyp(expr.location, .named("<int>"), info.typ);
+        info.typ = .err;
     }
-    return .{ .ptr = typ };
-}
-
-fn checkInferStruc(checker: *Checker, struc: Ast.InferStruct, location: Location) !Typ {
-    const typs = try checker.fun_arena.allocator().alloc(Typ, struc.fields.len);
-    for (struc.fields, typs) |field, *typ| {
-        typ.* = try checker.checkExpr(field.expr);
-    }
-    const lazy = try checker.typs.makeLazy();
-    checker.lazies[struc.typ_id] = .{
-        .location = location,
-        .typ = lazy,
+    return .{
+        .typ = info.typ,
+        .mutable = false,
     };
-    try checker.lazy_strucs.append(checker.gpa, .{
-        .typ = lazy,
-        .fields = struc.fields,
-        .typs = typs,
-        .location = location,
-    });
-    return .{ .lazy = lazy };
 }
 
-fn checkStruc(checker: *Checker, struc: Ast.StructExpr, location: Location) !Typ {
-    const typs = try checker.gpa.alloc(Typ, struc.fields.len);
-    defer checker.gpa.free(typs);
-    for (struc.fields, typs) |field, *typ| {
-        typ.* = try checker.checkExpr(field.expr);
+fn checkPtr(checker: *Checker, expr: Ast.Expr) !ExprInfo {
+    const info = try checker.checkExpr(expr, .any);
+    const ptr = try checker.typs.box(info.typ);
+    return .{
+        .typ = .{ .ptr = ptr },
+        .mutable = false,
+    };
+}
+
+fn checkMutPtr(checker: *Checker, expr: Ast.Expr) !ExprInfo {
+    const info = try checker.checkExpr(expr, .any);
+    if (info.mutable) {
+        checker.markMutated(expr);
+    } else {
+        checker.failNotMut(expr.location);
     }
-    try checker.checkStrucNow(location, struc, typs);
-    return .{ .name = struc.name };
+    const typ = try checker.typs.box(info.typ);
+    return .{
+        .typ = .{ .mut_ptr = typ },
+        .mutable = false,
+    };
 }
 
-fn checkStrucNow(
+fn checkInferStruc(
     checker: *Checker,
+    struc: Ast.InferStruct,
     location: Location,
-    struc: Ast.StructExpr,
-    typs: []const Typ,
-) !void {
-    const decl = checker.structs.get(struc.name) orelse {
-        checker.failNotStruct(location, .{ .name = struc.name });
-        return;
+    hint: Typ,
+) Error!ExprInfo {
+    const name = switch (hint) {
+        .name => |name| name,
+        .err => return .err,
+        .lazy => unreachable,
+        .mut_ptr, .prime, .ptr, .any, .array => {
+            checker.failCannotInfer(.any, location);
+            for (struc.fields) |field| {
+                _ = try checker.checkExpr(field.expr, .any);
+            }
+            return .err;
+        },
     };
-    for (struc.fields, typs) |field, typ| {
+    return checker.checkTypedStruc(name, struc.fields, struc.struc_id, location);
+}
+
+fn checkTypedStruc(
+    checker: *Checker,
+    name: Typ.Name,
+    fields: []const Ast.NewField,
+    struc_id: usize,
+    location: Location,
+) !ExprInfo {
+    const decl = checker.structs.get(name.name) orelse {
+        checker.failNotStruct(location, .{ .name = name });
+        return .err;
+    };
+    var resolver = checker.typs.makeResolver(checker.gpa);
+    defer resolver.map.deinit();
+    for (decl.generics, 0..) |generic, i| {
+        if (name.generics.len != 0) {
+            try resolver.map.put(generic, name.generics[i]);
+        } else {
+            const lazy = try checker.typs.makeLazy();
+            try resolver.map.put(generic, .{ .lazy = lazy });
+        }
+    }
+    for (fields) |field| {
         const f_decl = decl.fields.get(field.name) orelse {
-            checker.failNoField(field.location, field.name, struc.name);
+            checker.failNoField(field.location, field.name, name.name);
             continue;
         };
-        try checker.unify(field.expr.location, f_decl.typ, typ);
+        const decl_typ = try resolver.resolve(f_decl.typ);
+        const info = try checker.checkExpr(field.expr, decl_typ);
+        try checker.unify(field.expr.location, decl_typ, info.typ);
     }
     var iter = decl.fields.keyIterator();
     while (iter.next()) |field_decl| {
         var unused = true;
-        for (struc.fields) |field| {
+        for (fields) |field| {
             if (std.mem.eql(u8, field_decl.*, field.name)) {
                 unused = false;
                 break;
@@ -701,50 +723,114 @@ fn checkStrucNow(
             checker.fail(location, "field `{s}` is not initialized", .{field_decl.*});
         }
     }
-}
-
-fn checkUndef(checker: *Checker, undef: Ast.Undef, location: Location) !Typ {
-    const lazy = try checker.typs.makeLazy();
-    checker.lazies[undef.typ_id] = .{
-        .location = location,
-        .typ = lazy,
+    var generics = name.generics;
+    if (generics.len == 0) {
+        const new_generics = try checker.typs.arena.allocator().alloc(Typ, decl.generics.len);
+        for (new_generics, decl.generics) |*target, generic| {
+            target.* = resolver.map.get(generic).?;
+        }
+        generics = new_generics;
+    }
+    const typ = Typ{ .name = .{
+        .name = name.name,
+        .generics = generics,
+    } };
+    if (try checker.convertTyp(typ, location)) |llvm_typ| {
+        checker.info.strucs[struc_id] = llvm_typ.name;
+    }
+    return .{
+        .typ = typ,
+        .mutable = false,
     };
-    return .{ .lazy = lazy };
 }
 
-fn checkInt(checker: *Checker, location: Location, int: []const u8) Typ {
-    _ = std.fmt.parseInt(u64, int, 10) catch {
+fn checkStruc(checker: *Checker, struc: Ast.StructExpr, location: Location) !ExprInfo {
+    return checker.checkTypedStruc(
+        .{ .name = struc.name },
+        struc.fields,
+        struc.struc_id,
+        location,
+    );
+}
+
+fn checkUndef(checker: *Checker, undef: Ast.Undef, location: Location, typ: Typ) !ExprInfo {
+    if (try checker.convertTyp(typ, location)) |llvm_typ| {
+        checker.info.typs[undef.typ_id] = llvm_typ;
+    }
+    return .{
+        .typ = typ,
+        .mutable = false,
+    };
+}
+
+fn checkInt(checker: *Checker, location: Location, int: Ast.Int, hint: Typ) !ExprInfo {
+    _ = std.fmt.parseInt(u64, int.str, 10) catch {
         checker.fail(location, "integer is too large", .{});
     };
-    return .int;
-}
-
-fn checkExprWith(checker: *Checker, expr: Ast.Expr, mutable: bool) !Typ {
-    if (mutable) {
-        return checker.checkExprMut(expr);
+    const typ = if (hint.isNumber()) hint else {
+        checker.failCannotInfer(.any, location);
+        return .err;
+    };
+    if (try checker.convertTyp(typ, location)) |llvm_typ| {
+        checker.info.typs[int.typ_id] = llvm_typ;
     }
-    return checker.checkExpr(expr);
+    return .{
+        .typ = typ,
+        .mutable = false,
+    };
 }
 
-fn checkField(checker: *Checker, field: Ast.Field, location: Location, mutable: bool) !Typ {
-    const expr_typ = try checker.checkExprWith(field.expr, mutable);
-    const norm = expr_typ.normalise();
+fn checkField(checker: *Checker, field: Ast.Field, location: Location) !ExprInfo {
+    var info = try checker.checkExpr(field.expr, .any);
+    const norm = info.typ.normalise();
     if (norm == .err) {
         return .err;
     }
-    const name = if (norm == .name) norm.name else {
-        checker.failNotStruct(field.expr.location, expr_typ);
-        return .err;
-    };
-    const struc = checker.structs.get(name) orelse {
-        checker.failNotStruct(field.expr.location, expr_typ);
+    var name: Typ.Name = undefined;
+    switch (norm) {
+        .name => |n| name = n,
+        .ptr => |ptr| if (ptr.* == .name) {
+            name = ptr.name;
+            // auto-deref
+            info.mutable = false;
+        } else {
+            checker.failNotStruct(field.expr.location, info.typ);
+            return .err;
+        },
+        .mut_ptr => |ptr| if (ptr.* == .name) {
+            name = ptr.name;
+            // auto-deref
+            info.mutable = true;
+        } else {
+            checker.failNotStruct(field.expr.location, info.typ);
+            return .err;
+        },
+        else => {
+            checker.failNotStruct(field.expr.location, info.typ);
+            return .err;
+        },
+    }
+    const struc = checker.structs.get(name.name) orelse {
+        checker.failNotStruct(field.expr.location, info.typ);
         return .err;
     };
     const fiel = struc.fields.get(field.name) orelse {
-        checker.failNoField(location, field.name, name);
+        checker.failNoField(location, field.name, name.name);
         return .err;
     };
-    return fiel.typ;
+    var resolver = checker.typs.makeResolver(checker.gpa);
+    defer resolver.map.deinit();
+    for (struc.generics, name.generics) |generic, typ| {
+        try resolver.map.put(generic, typ);
+    }
+    const typ = try resolver.resolve(fiel.typ);
+    if (try checker.convertTyp(typ, location)) |llvm_typ| {
+        checker.info.typs[field.typ_id] = llvm_typ;
+    }
+    return .{
+        .typ = typ,
+        .mutable = info.mutable,
+    };
 }
 
 fn failNoField(
@@ -757,71 +843,73 @@ fn failNoField(
 }
 
 fn failNotStruct(checker: *Checker, location: Location, typ: Typ) void {
-    if (typ == .lazy and typ.lazy.* == .any) {
-        checker.failShouldKnowTyp(location);
-        typ.lazy.* = .err;
-        return;
-    }
     checker.fail(location, "type `{f}` is not a struct", .{typ});
 }
 
-fn failShouldKnowTyp(checker: *Checker, location: Location) void {
-    checker.fail(location, "type should be known here", .{});
-}
-
-fn checkBinary(checker: *Checker, binary: Ast.Binary) !Typ {
-    var left = try checker.checkExpr(binary.left);
-    if (!left.isNumber()) {
-        checker.failWrongTyp(binary.left.location, .int, left);
-        left = .err;
-    }
-    const right = try checker.checkExpr(binary.right);
-    try checker.unify(binary.right.location, left, right);
-    switch (binary.kind) {
-        .equ, .les => return .{ .prime = .bool },
-        else => return left,
+fn failCannotInfer(checker: *Checker, typ: Typ, location: Location) void {
+    checker.fail(location, "cannot infer type", .{});
+    if (typ != .any) {
+        std.log.info("best guess is `{f}`\n", .{typ});
     }
 }
 
-fn checkVar(checker: *Checker, location: Location, name: []const u8, mutable: bool) Typ {
+fn checkBinary(checker: *Checker, binary: Ast.Binary, hint: Typ) !ExprInfo {
+    const inner_hint = switch (binary.kind) {
+        .add, .andb, .div, .mul, .orb, .rem, .sub => hint,
+        .equ, .les, .moreq => .any,
+    };
+    var left = try checker.checkExpr(binary.left, inner_hint);
+    if (!left.typ.isNumber()) {
+        checker.failWrongTyp(binary.left.location, .named("<int>"), left.typ);
+        left.typ = .err;
+    }
+    const right = try checker.checkExpr(binary.right, left.typ);
+    try checker.unify(binary.right.location, left.typ, right.typ);
+    const typ = switch (binary.kind) {
+        .equ, .les, .moreq => Typ{ .prime = .bool },
+        .add, .andb, .div, .mul, .orb, .rem, .sub => left.typ,
+    };
+    return .{
+        .typ = typ,
+        .mutable = false,
+    };
+}
+
+fn checkVar(checker: *Checker, location: Location, name: []const u8) ExprInfo {
     const vari = checker.vars.getPtr(name) orelse {
         checker.fail(location, "item `{s}` is not declared", .{name});
         return .err;
     };
     vari.used = true;
-    if (mutable) {
-        if (vari.mutable) {
-            vari.mutated = true;
-        } else {
-            checker.failNotMut(location);
-            if (vari.can_be_mutable) {
-                std.log.info("add `mut` before name in {f}\n", .{vari.location});
-            }
-        }
-    }
-    return vari.typ;
+    return .{
+        .typ = vari.typ,
+        .mutable = vari.mutable,
+    };
 }
 
-fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !Typ {
+fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !ExprInfo {
     const header = checker.headers.getPtr(call.name) orelse {
         checker.fail(location, "item `{s}` is not declared", .{call.name});
         for (call.args) |arg| {
-            _ = try checker.checkExpr(arg);
+            _ = try checker.checkExpr(arg, .any);
         }
         return .err;
     };
     header.used = true;
     for (call.args, header.params) |arg, param| {
-        const typ = try checker.checkExpr(arg);
-        try checker.unify(arg.location, param, typ);
+        const info = try checker.checkExpr(arg, param);
+        try checker.unify(arg.location, param, info.typ);
     }
-    return header.ret_typ;
+    return .{
+        .typ = header.ret_typ,
+        .mutable = false,
+    };
 }
 
 fn checkRet(checker: *Checker, ret: Ast.Return, location: Location) !ControlFlow {
     if (ret.expr) |expr| {
-        const typ = try checker.checkExpr(expr);
-        try checker.unify(expr.location, checker.ret_typ, typ);
+        const info = try checker.checkExpr(expr, checker.ret_typ);
+        try checker.unify(expr.location, checker.ret_typ, info.typ);
     } else if (checker.ret_typ != .prime or checker.ret_typ.prime != .void) {
         checker.fail(location, "should return a value", .{});
     }
@@ -836,7 +924,6 @@ fn deinit(checker: *Checker) void {
     checker.structs.deinit();
     checker.vars.deinit();
     checker.headers.deinit();
-    checker.lazy_strucs.deinit(checker.gpa);
     checker.typs.deinit();
     checker.fun_arena.deinit();
     checker.vars_stack.deinit(checker.gpa);

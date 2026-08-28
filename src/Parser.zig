@@ -76,6 +76,7 @@ strs: std.ArrayList([]const u8) = .empty,
 cursor: usize = 0,
 err_cursor: usize = 0,
 next_typ_id: usize = 0,
+next_struc_id: usize = 0,
 
 pub fn init(gpa: std.mem.Allocator, tokens: []const Lexer.Token) Parser {
     const arena = std.heap.ArenaAllocator.init(gpa);
@@ -106,6 +107,7 @@ pub fn run(parser: *Parser) !struct { Ast, Ast.Info } {
     };
     const ast_info = Ast.Info{
         .typ_ids = parser.next_typ_id,
+        .struc_ids = parser.next_struc_id,
     };
     return .{ ast, ast_info };
 }
@@ -154,14 +156,23 @@ fn parseStruct(parser: *Parser) !Ast.Struct {
     try parser.expect(.struc);
     const location = parser.getLocation();
     const name = try parser.parseNameLoud();
+    const generics = try parser.parseMaybe([]const []const u8, parseGenerics) orelse &.{};
     try parser.expectLoud(.curl);
     const fields = try parser.parseSep(Ast.FieldDecl, parseFieldDeclLoud);
     try parser.expect(.curr);
     return .{
         .name = name,
+        .generics = generics,
         .fields = fields,
         .location = location,
     };
+}
+
+fn parseGenerics(parser: *Parser) ![]const []const u8 {
+    try parser.expect(.les);
+    const res = try parser.parseSep([]const u8, parseNameLoud);
+    try parser.expect(.mor);
+    return res;
 }
 
 fn parseFieldDeclLoud(parser: *Parser) !Ast.FieldDecl {
@@ -237,6 +248,7 @@ fn parseParamLoud(parser: *Parser) !Ast.Param {
 
 fn parseTypLoud(parser: *Parser) Error!Ast.Typ {
     return parser.parseEither(Ast.Typ, .{
+        parseGenericTyp,
         parseVerbalTyp,
         parseMutPtrTyp,
         parsePtrTyp,
@@ -245,6 +257,17 @@ fn parseTypLoud(parser: *Parser) Error!Ast.Typ {
         try parser.fail("<type>");
         return err;
     };
+}
+
+fn parseGenericTyp(parser: *Parser) !Ast.Typ {
+    const name = try parser.parseName();
+    try parser.expect(.les);
+    const generics = try parser.parseSep(Ast.Typ, parseTypLoud);
+    try parser.expect(.mor);
+    return .{ .name = .{
+        .name = name,
+        .generics = generics,
+    } };
 }
 
 fn parseArrayTyp(parser: *Parser) !Ast.Typ {
@@ -600,6 +623,7 @@ fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
 
 fn parseBinOp(parser: *Parser, prior: u8) !Ast.Binary.Kind {
     const res = try parser.parseEither(Ast.Binary.Kind, .{
+        parseMoreq,
         parseAdd,
         parseSub,
         parseMul,
@@ -615,6 +639,11 @@ fn parseBinOp(parser: *Parser, prior: u8) !Ast.Binary.Kind {
         return error.ParseFailed;
     }
     return res;
+}
+
+fn parseMoreq(parser: *Parser) !Ast.Binary.Kind {
+    try parser.expect(.moreq);
+    return .moreq;
 }
 
 fn parseBitOr(parser: *Parser) !Ast.Binary.Kind {
@@ -672,10 +701,13 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
         switch (postfix) {
             .field => |field_postfix| {
                 const field = try parser.arena.allocator().create(Ast.Field);
-                field.expr = res;
-                field.name = field_postfix.name;
+                field.* = .{
+                    .expr = res,
+                    .name = field_postfix.name,
+                    .typ_id = parser.newTypId(),
+                };
                 res = .{
-                    .location = field_postfix.location,
+                    .location = res.location.combine(field_postfix.location),
                     .kind = .{ .field = field },
                 };
             },
@@ -797,12 +829,12 @@ fn parseInferStructExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     try parser.expect(.dot);
     const fields = try parser.parseStructExprBody();
-    const typ_id = parser.newTypId();
+    const struc_id = parser.newStrucId();
     return .{
         .location = location,
         .kind = .{ .infer_struc = .{
             .fields = fields,
-            .typ_id = typ_id,
+            .struc_id = struc_id,
         } },
     };
 }
@@ -821,11 +853,13 @@ fn parseStructExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     const name = try parser.parseName();
     const fields = try parser.parseStructExprBody();
+    const struc_id = parser.newStrucId();
     return .{
         .location = location,
         .kind = .{ .struc = .{
             .name = name,
             .fields = fields,
+            .struc_id = struc_id,
         } },
     };
 }
@@ -913,6 +947,11 @@ fn newTypId(parser: *Parser) usize {
     return parser.next_typ_id - 1;
 }
 
+fn newStrucId(parser: *Parser) usize {
+    parser.next_struc_id += 1;
+    return parser.next_struc_id - 1;
+}
+
 fn parseCharExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     const char = try parser.parseChar();
@@ -924,10 +963,13 @@ fn parseCharExpr(parser: *Parser) !Ast.Expr {
 
 fn parseIntExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
-    const int = try parser.parseInt();
+    const str = try parser.parseInt();
     return .{
         .location = location,
-        .kind = .{ .int = int },
+        .kind = .{ .int = .{
+            .str = str,
+            .typ_id = parser.newTypId(),
+        } },
     };
 }
 

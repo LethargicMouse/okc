@@ -12,9 +12,8 @@ fn main() i32 {
 }
 
 fn get_pair() Pair {
-  let res = .{
+  return .{
     first: '6',
     second: '7',
   };
-  return res;
 }

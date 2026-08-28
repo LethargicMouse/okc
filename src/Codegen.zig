@@ -47,6 +47,7 @@ const Field = struct {
 };
 
 const Struct = struct {
+    generics: []const []const u8,
     fields: std.StringHashMap(Field),
 };
 
@@ -57,18 +58,21 @@ gpa: std.mem.Allocator,
 info: Info,
 file: std.Io.File,
 writer: std.Io.File.Writer,
-llvm_typs: LlvmTyps,
+buffer: ?std.ArrayList(u8) = null,
+typs: *LlvmTyps,
 fun_ret_typs: std.StringHashMap(Typ),
 vars: std.StringHashMap(Var),
 structs: std.StringHashMap(Struct),
 str_lens: std.ArrayList(usize) = .empty,
-loop_ends: std.ArrayList(u32),
+loop_ends: std.ArrayList(u32) = .empty,
+struct_queue: std.ArrayList(Typ.Name) = .empty,
+generated_structs: std.HashMap(Typ, void, Typ.HashContext, std.hash_map.default_max_load_percentage),
 next_tmp: u32 = 0,
 
 pub fn init(
     io: std.Io,
     gpa: std.mem.Allocator,
-    llvm_typs: LlvmTyps,
+    llvm_typs: *LlvmTyps,
     write_buf: []u8,
     path: []const u8,
     info: Info,
@@ -77,14 +81,14 @@ pub fn init(
     return .{
         .io = io,
         .gpa = gpa,
-        .llvm_typs = llvm_typs,
+        .typs = llvm_typs,
         .info = info,
         .file = file,
         .writer = file.writer(io, write_buf),
-        .fun_ret_typs = std.StringHashMap(Typ).init(gpa),
-        .vars = std.StringHashMap(Var).init(gpa),
-        .structs = std.StringHashMap(Struct).init(gpa),
-        .loop_ends = std.ArrayList(u32).empty,
+        .fun_ret_typs = .init(gpa),
+        .vars = .init(gpa),
+        .structs = .init(gpa),
+        .generated_structs = .init(gpa),
     };
 }
 
@@ -96,7 +100,7 @@ pub fn run(gen: *Codegen, ast: Ast) !void {
 
 fn genAst(gen: *Codegen, ast: Ast) !void {
     try gen.print("target triple = \"x86_64-pc-linux-gnu\"", .{});
-    try gen.genStrStruct();
+    try gen.regAndGenStrStruct();
     for (ast.strs, 0..) |str, i| {
         const len = try gen.genStrDecl(i, str);
         try gen.str_lens.append(gen.gpa, len);
@@ -114,7 +118,7 @@ fn regItem(gen: *Codegen, item: Ast.Item) !void {
     switch (item) {
         .ext_fun => |ext_fun| try gen.regHeader(ext_fun.header),
         .fun => |fun| try gen.regHeader(fun.header),
-        .struc => |struc| try gen.regAndGenStruct(struc),
+        .struc => |struc| try gen.regStruct(struc),
     }
 }
 
@@ -128,42 +132,38 @@ fn genItem(gen: *Codegen, item: Ast.Item) !void {
 
 const i8_typ: Typ = .i8;
 
-fn regAndGenStruct(gen: *Codegen, struc: Ast.Struct) !void {
+fn regStruct(gen: *Codegen, struc: Ast.Struct) !void {
     var res = Struct{
+        .generics = struc.generics,
         .fields = std.StringHashMap(Field).init(gen.gpa),
     };
-    try gen.print("\n%{s} = type {{", .{struc.name});
     for (struc.fields, 0..) |field, i| {
-        const typ = try gen.llvm_typs.makeTyp(field.typ);
+        const typ = try gen.typs.makeTyp(field.typ);
         try res.fields.put(field.name, .{
             .typ = typ,
             .index = i,
         });
-        if (i != 0) {
-            try gen.print(",", .{});
-        }
-        try gen.print("\n  {f}", .{typ});
     }
-    try gen.print("\n}}", .{});
     try gen.structs.put(struc.name, res);
 }
 
-fn genStrStruct(gen: *Codegen) !void {
-    try gen.regAndGenStruct(builtin.str_struct);
+fn regAndGenStrStruct(gen: *Codegen) !void {
+    try gen.regStruct(builtin.str_struct);
+    try gen.genStruct(.{ .name = "str" });
 }
 
 fn regHeader(gen: *Codegen, header: Ast.Header) !void {
-    const typ = try gen.llvm_typs.makeTyp(header.ret_typ);
+    const typ = try gen.typs.makeTyp(header.ret_typ);
     try gen.fun_ret_typs.put(header.name, typ);
 }
 
 fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
     try gen.print("\ndeclare i32 @{s}(", .{ext_fun.header.name});
     if (ext_fun.header.params.len != 0) {
-        const first_typ = try gen.llvm_typs.makeTyp(ext_fun.header.params[0].typ);
+        const first_typ = try gen.typs.makeTyp(ext_fun.header.params[0].typ);
         try gen.print("{f}", .{first_typ});
         for (ext_fun.header.params[1..]) |param| {
-            const typ = try gen.llvm_typs.makeTyp(param.typ);
+            const typ = try gen.typs.makeTyp(param.typ);
             try gen.print(", {f}", .{typ});
         }
     }
@@ -216,7 +216,8 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
 }
 
 fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
-    const ret_typ = try gen.llvm_typs.makeTyp(fun.header.ret_typ);
+    gen.buffer = .empty; // to generate types first
+    const ret_typ = try gen.typs.makeTyp(fun.header.ret_typ);
     try gen.print("\ndefine {f} @{s}(", .{ ret_typ, fun.header.name });
     var param_typ_vals: [10]TypVal = undefined;
     if (fun.header.params.len != 0) {
@@ -246,10 +247,49 @@ fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
         try gen.genUnreachable();
     }
     try gen.print("\n}}", .{});
+    var buffer = gen.buffer.?;
+    defer buffer.deinit(gen.gpa);
+    gen.buffer = null;
+    try gen.flushStructQueue();
+    try gen.print("{s}", .{buffer.items});
+}
+
+fn flushStructQueue(gen: *Codegen) !void {
+    for (gen.struct_queue.items) |name| {
+        try gen.genStruct(name);
+    }
+    gen.struct_queue.clearRetainingCapacity();
+}
+
+fn genStruct(gen: *Codegen, name: Typ.Name) !void {
+    const was = try gen.generated_structs.getOrPut(.{ .name = name });
+    if (was.found_existing) {
+        return;
+    }
+    try gen.print("\n{f} = type {{", .{Typ{ .name = name }});
+    const struc = gen.structs.get(name.name).?;
+    const fields = try gen.gpa.alloc(Typ, struc.fields.count());
+    defer gen.gpa.free(fields);
+    var resolver = gen.typs.makeResolver(gen.gpa);
+    defer resolver.map.deinit();
+    for (struc.generics, name.generics) |generic, typ| {
+        try resolver.map.put(generic, typ);
+    }
+    if (fields.len != 0) {
+        var iter = struc.fields.valueIterator();
+        while (iter.next()) |field| {
+            fields[field.index] = try resolver.resolve(field.typ);
+        }
+        try gen.print("\n  {f}", .{fields[0]});
+        for (fields[1..]) |field| {
+            try gen.print(",\n  {f}", .{field});
+        }
+    }
+    try gen.print("\n}}", .{});
 }
 
 fn genParam(gen: *Codegen, param: Ast.Param) !TypVal {
-    const typ = try gen.llvm_typs.makeTyp(param.typ);
+    const typ = try gen.typs.makeTyp(param.typ);
     const tmp = gen.newTmp();
     try gen.print("{f} %{}", .{ typ, tmp });
     return .{ .typ = typ, .val = .{ .tmp = tmp } };
@@ -368,6 +408,9 @@ fn genDeclare(gen: *Codegen, declare: Ast.Declare) !void {
 }
 
 fn toStack(gen: *Codegen, typ_val: TypVal) !Var {
+    if (typ_val.typ == .name) {
+        try gen.struct_queue.append(gen.gpa, typ_val.typ.name);
+    }
     const tmp = gen.newTmp();
     try gen.print("\n  %{} = alloca {f}", .{ tmp, typ_val.typ });
     try gen.storeInto(tmp, typ_val);
@@ -420,8 +463,8 @@ fn genRet(gen: *Codegen, ret: Ast.Return) !void {
 fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
     switch (expr.kind) {
         .unary => |unary| return gen.genUnary(unary.*),
-        .infer_struc => |struc| return gen.genInferStruc(struc),
-        .int => |int| return genInt(int),
+        .infer_struc => |struc| return gen.genStructExpr(struc),
+        .int => |int| return gen.genInt(int),
         .str => |str| return gen.genStr(str),
         .vari => |name| return gen.genVar(name),
         .char => |char| return genChar(char),
@@ -430,7 +473,7 @@ fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
         .call => |call| return gen.genCall(call),
         .binary => |binary| return gen.genBinary(binary.*),
         .field => |field| return gen.genField(field.*),
-        .struc => |struc| return gen.genStructExpr(struc),
+        .struc => |struc| return gen.genNamedStructExpr(struc),
         .elem => |elem| return gen.genElem(elem.*),
     }
 }
@@ -478,7 +521,7 @@ fn genNotb(gen: *Codegen, expr: Ast.Expr) !TypVal {
 
 fn genPtr(gen: *Codegen, expr: Ast.Expr) !TypVal {
     const vari = try gen.genExprRef(expr);
-    const typ = try gen.llvm_typs.box(vari.inner_typ);
+    const typ = try gen.typs.box(vari.inner_typ);
     return .{
         .typ = .{ .ptr = typ },
         .val = .{ .tmp = vari.tmp },
@@ -491,15 +534,23 @@ fn genUndef(gen: *Codegen, undef: Ast.Undef) !TypVal {
 }
 
 fn genFieldRef(gen: *Codegen, field: Ast.Field) !Var {
-    const vari = try gen.genExprRef(field.expr);
-    const struc = gen.structs.get(vari.inner_typ.name).?;
+    var vari = try gen.genExprRef(field.expr);
+    if (vari.inner_typ == .ptr) {
+        const tmp = try gen.load(vari);
+        vari = .{
+            .inner_typ = vari.inner_typ.ptr.*,
+            .tmp = tmp,
+        };
+    }
+    const struc = gen.structs.get(vari.inner_typ.name.name).?;
     const fiel = struc.fields.get(field.name).?;
     const tmp = gen.newTmp();
     try gen.print(
-        "\n  %{} = getelementptr inbounds %{s}, ptr %{}, i32 0, i32 {}",
-        .{ tmp, vari.inner_typ.name, vari.tmp, fiel.index },
+        "\n  %{} = getelementptr inbounds {f}, ptr %{}, i32 0, i32 {}",
+        .{ tmp, vari.inner_typ, vari.tmp, fiel.index },
     );
-    return .{ .inner_typ = fiel.typ, .tmp = tmp };
+    const typ = gen.info.typs[field.typ_id];
+    return .{ .inner_typ = typ, .tmp = tmp };
 }
 
 fn genField(gen: *Codegen, field: Ast.Field) !TypVal {
@@ -569,11 +620,12 @@ fn load(gen: *Codegen, vari: Var) !u32 {
     return to;
 }
 
-fn genInt(int_str: []const u8) TypVal {
-    const int = std.fmt.parseInt(u64, int_str, 10) catch unreachable;
+fn genInt(gen: Codegen, int: Ast.Int) TypVal {
+    const val = std.fmt.parseInt(u64, int.str, 10) catch unreachable;
+    const typ = gen.info.typs[int.typ_id];
     return .{
-        .typ = .i32,
-        .val = .{ .int = int },
+        .typ = typ,
+        .val = .{ .int = val },
     };
 }
 
@@ -599,34 +651,35 @@ fn genStr(gen: *Codegen, str: usize) !TypVal {
     , .{ tmp1, str, tmp, tmp1, len });
 
     return .{
-        .typ = .{ .name = "str" },
+        .typ = .{ .name = .{ .name = "str" } },
         .val = .{ .tmp = tmp },
     };
 }
 
-fn genInferStruc(gen: *Codegen, struc: Ast.InferStruct) !TypVal {
-    const name = gen.info.typs[struc.typ_id].name;
-    return gen.genStructExpr(.{
-        .fields = struc.fields,
-        .name = name,
-    });
-}
-
-fn genStructExpr(gen: *Codegen, struc: Ast.StructExpr) !TypVal {
+fn genStructExpr(gen: *Codegen, struc: Ast.InferStruct) !TypVal {
+    const name = gen.info.strucs[struc.struc_id];
     var val: Val = .undef;
     for (struc.fields, 0..) |field, i| {
         const typ_val = try gen.genExpr(field.expr);
         const tmp = gen.newTmp();
         try gen.print(
-            "\n  %{} = insertvalue %{s} {f}, {f}, {d}",
-            .{ tmp, struc.name, val, typ_val, i },
+            "\n  %{} = insertvalue {f} {f}, {f}, {d}",
+            .{ tmp, Typ{ .name = name }, val, typ_val, i },
         );
         val = .{ .tmp = tmp };
     }
+    try gen.struct_queue.append(gen.gpa, name);
     return .{
-        .typ = .{ .name = struc.name },
+        .typ = .{ .name = name },
         .val = val,
     };
+}
+
+fn genNamedStructExpr(gen: *Codegen, struc: Ast.StructExpr) !TypVal {
+    return gen.genStructExpr(.{
+        .fields = struc.fields,
+        .struc_id = struc.struc_id,
+    });
 }
 
 fn genBinary(gen: *Codegen, binary: Ast.Binary) !TypVal {
@@ -645,12 +698,13 @@ fn genBinary(gen: *Codegen, binary: Ast.Binary) !TypVal {
 fn binOpRetTyp(kind: Ast.Binary.Kind, child_typ: Typ) Typ {
     switch (kind) {
         .sub, .add, .mul, .div, .rem, .andb, .orb => return child_typ,
-        .equ, .les => return .i1,
+        .equ, .les, .moreq => return .i1,
     }
 }
 
 fn genBinOp(gen: *Codegen, kind: Ast.Binary.Kind) !void {
     switch (kind) {
+        .moreq => try gen.print("icmp sge", .{}),
         .orb => try gen.print("or", .{}),
         .andb => try gen.print("and", .{}),
         .add => try gen.print("add", .{}),
@@ -669,7 +723,11 @@ fn genVar(gen: *Codegen, name: []const u8) !TypVal {
 }
 
 fn print(gen: *Codegen, comptime fmt: []const u8, args: anytype) !void {
-    try gen.writer.interface.print(fmt, args);
+    if (gen.buffer) |*buffer| {
+        try buffer.print(gen.gpa, fmt, args);
+    } else {
+        try gen.writer.interface.print(fmt, args);
+    }
 }
 
 const Error = error{ WriteFailed, OutOfMemory };
@@ -684,7 +742,8 @@ fn deinit(gen: *Codegen) void {
         struc.fields.deinit();
     }
     gen.structs.deinit();
-    gen.llvm_typs.deinit();
     gen.loop_ends.deinit(gen.gpa);
+    gen.struct_queue.deinit(gen.gpa);
+    gen.generated_structs.deinit();
     gen.* = undefined;
 }

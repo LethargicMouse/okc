@@ -15,20 +15,20 @@ extern fn read(fd: i32, ptr: &mut u8, len: u64) void;
 extern fn write(fd: i32, ptr: &u8, len: u64) void;
 
 fn main() i32 {
-  let mut termios = undefined;
-  let stdin = 0;
+  let mut termios: termios = undefined;
+  let stdin: i32 = 0;
   tcgetattr(stdin, &mut termios);
   let termios_before = termios;
-  let echo = 8;
-  let icanon = 2;
+  let echo: u32 = 8;
+  let icanon: u32 = 2;
   termios.lflag &= ~(echo | icanon);
-  let opost = 1;
+  let opost: u32 = 1;
   termios.oflag &= ~(opost);
-  let vtime = 5;
+  let vtime: u8 = 5;
   termios.cc[vtime] = 1;
-  let vmin = 6;
+  let vmin: u8 = 6;
   termios.cc[vmin] = 0;
-  let flush = 2;
+  let flush: i32 = 2;
   tcsetattr(stdin, flush, &termios);
   put_str("\x1b[2J    six seven");
   while (true) {
@@ -44,6 +44,6 @@ fn main() i32 {
 }
 
 fn put_str(str: str) void {
-  let stdout = 1;
+  let stdout: i32 = 1;
   write(stdout, str.ptr, str.len);
 }

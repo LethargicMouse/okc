@@ -1,7 +1,7 @@
 extern fn puts(s: &u8) void;
 
 fn main() i32 {
-  let sixseven = 67;
+  let sixseven: i32 = 67;
   if (sixseven == 67) {
     puts("SIXSEVEEEN!".ptr);
   } else {

@@ -1,0 +1,30 @@
+extern fn printf(fmt: &u8, n: i32) void;
+
+struct Array<t> {
+  buffer: [256]t,
+  len: u64,
+}
+
+fn get_i32(array: Array<i32>, index: u64) i32 {
+  if (index >= array.len) {
+    unreachable; // someday it will panic in debug mode
+  }
+  return array.buffer[index];
+}
+
+fn put_i32(array: &mut Array<i32>, index: u64, val: i32) void {
+  if (index >= array.len) {
+    unreachable;
+  }
+  array.buffer[index] = val;
+}
+
+fn main() i32 {
+  let mut array: Array<i32> = .{
+    buffer: undefined,
+    len: 100,
+  };
+  put_i32(&mut array, 42, 67);
+  printf("%d\n".ptr, get_i32(array, 42));
+  return 0;
+}

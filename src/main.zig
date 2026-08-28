@@ -50,9 +50,10 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     const ast_info = parse_result[1];
 
     var llvm_typs = LlvmTyps.init(gpa);
+    defer llvm_typs.deinit();
 
     var checker = try Checker.init(gpa, &llvm_typs, ast_info);
-    const info = try checker.run(ast, &llvm_typs);
+    const info = try checker.run(ast);
 
     try std.Io.Dir.cwd().createDirPath(io, build_dir_path);
 
@@ -60,7 +61,7 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var gen = try Codegen.init(
         io,
         gpa,
-        llvm_typs,
+        &llvm_typs,
         &write_buf,
         out_ll_path,
         info,
@@ -197,4 +198,8 @@ test "ret_void.ok" {
 
 test "nest_var.ok" {
     try testFile("nest_var", "six\nseven\n");
+}
+
+test "generic_struct.ok" {
+    try testFile("generic_struct", "67\n");
 }

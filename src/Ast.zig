@@ -27,8 +27,13 @@ pub const Typ = union(enum) {
         typ: Typ,
     };
 
+    pub const Name = struct {
+        name: []const u8,
+        generics: []const Typ = &.{},
+    };
+
     prime: Prime,
-    name: []const u8,
+    name: Name,
     ptr: *const Typ,
     mut_ptr: *const Typ,
     array: *const Array,
@@ -37,7 +42,7 @@ pub const Typ = union(enum) {
         if (std.meta.stringToEnum(Prime, name)) |prime| {
             return .{ .prime = prime };
         }
-        return .{ .name = name };
+        return .{ .name = .{ .name = name } };
     }
 
     pub fn isVoid(typ: Typ) bool {
@@ -147,11 +152,16 @@ pub const Unary = struct {
     expr: Expr,
 };
 
+pub const Int = struct {
+    str: []const u8,
+    typ_id: usize,
+};
+
 pub const Expr = struct {
     pub const Kind = union(enum) {
         unary: *const Unary,
         infer_struc: InferStruct,
-        int: []const u8,
+        int: Int,
         str: usize,
         vari: []const u8,
         char: u8,
@@ -170,11 +180,12 @@ pub const Expr = struct {
 pub const StructExpr = struct {
     name: []const u8,
     fields: []const NewField,
+    struc_id: usize,
 };
 
 pub const InferStruct = struct {
     fields: []const NewField,
-    typ_id: usize,
+    struc_id: usize,
 };
 
 pub const NewField = struct {
@@ -190,6 +201,7 @@ pub const Undef = struct {
 pub const Field = struct {
     expr: Expr,
     name: []const u8,
+    typ_id: usize,
 };
 
 pub const Binary = struct {
@@ -203,10 +215,11 @@ pub const Binary = struct {
         div,
         les,
         rem,
+        moreq,
 
         pub fn prior(kind: Kind) u8 {
             switch (kind) {
-                .equ, .les => return 0,
+                .equ, .les, .moreq => return 0,
                 .orb => return 1,
                 .andb => return 2,
                 .add, .sub => return 3,
@@ -222,6 +235,7 @@ pub const Binary = struct {
 
 pub const Struct = struct {
     name: []const u8,
+    generics: []const []const u8,
     fields: []const FieldDecl,
     location: Location,
 };
@@ -234,6 +248,7 @@ pub const FieldDecl = struct {
 
 pub const Info = struct {
     typ_ids: usize,
+    struc_ids: usize,
 };
 
 pub const Item = union(enum) {

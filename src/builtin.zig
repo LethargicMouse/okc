@@ -4,6 +4,7 @@ const Ast = @import("Ast.zig");
 
 pub const str_struct = Ast.Struct{
     .name = "str",
+    .generics = &.{},
     .fields = &.{
         .{
             .name = "ptr",

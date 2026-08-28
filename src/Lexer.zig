@@ -11,6 +11,8 @@ pub const Lexeme = union(enum) {
     int: []const u8,
     str: []const u8,
     char: u8,
+    moreq,
+    mor,
     unre,
     brek,
     tru,
@@ -52,6 +54,8 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .moreq => "`>=`",
+            .mor => "`>`",
             .unre => "`unreachable`",
             .brek => "`break`",
             .tru => "`true`",
@@ -244,6 +248,8 @@ fn lexByList(lexer: *Lexer) ?Token {
 }
 
 const lex_list = [_]LexPair{
+    .{ .str = ">=", .lexeme = .moreq },
+    .{ .str = ">", .lexeme = .mor },
     .{ .str = "|", .lexeme = .pipe },
     .{ .str = "~", .lexeme = .tild },
     .{ .str = "]", .lexeme = .brar },
