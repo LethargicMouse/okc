@@ -203,3 +203,7 @@ test "nest_var.ok" {
 test "generic_struct.ok" {
     try testFile("generic_struct", "67\n");
 }
+
+test "slice_elem.ok" {
+    try testFile("slice_elem", "6-7...");
+}

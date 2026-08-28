@@ -172,6 +172,15 @@ pub fn init(gpa: std.mem.Allocator) LlvmTyps {
 
 pub fn makeTyp(typs: *LlvmTyps, typ: Ast.Typ) !Typ {
     switch (typ) {
+        .slice => |inner| {
+            const new = try typs.makeTyp(inner.*);
+            const generics = try typs.arena.allocator().alloc(Typ, 1);
+            generics[0] = new;
+            return .{ .name = .{
+                .name = "[]",
+                .generics = generics,
+            } };
+        },
         .name => |name| {
             const generics = try typs.arena.allocator().alloc(Typ, name.generics.len);
             for (generics, name.generics) |*target, generic| {

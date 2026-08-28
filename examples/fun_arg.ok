@@ -5,6 +5,6 @@ fn main() i32 {
   return 0;
 }
 
-fn put_str(msg: str) void {
+fn put_str(msg: []u8) void {
   write(1, msg.ptr, msg.len);
 }

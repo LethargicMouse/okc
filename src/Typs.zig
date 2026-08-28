@@ -21,6 +21,11 @@ const Resolver = struct {
                     .generics = generics,
                 } };
             },
+            .slice => |ptr| {
+                const new = try resolver.resolve(ptr.*);
+                const new_ptr = try resolver.typs.box(new);
+                return .{ .slice = new_ptr };
+            },
             .ptr => |ptr| {
                 const new = try resolver.resolve(ptr.*);
                 const new_ptr = try resolver.typs.box(new);
@@ -70,6 +75,7 @@ pub const Typ = union(enum) {
                     }
                     return true;
                 },
+                .slice => |aslice| return aslice == b.slice,
                 // a == b <=> &a == &b due to memo
                 .ptr => |aptr| return aptr == b.ptr,
                 // a == b <=> &a == &b due to memo
@@ -103,6 +109,7 @@ pub const Typ = union(enum) {
     prime: Ast.Prime,
     name: Name,
     ptr: *const Typ,
+    slice: *const Typ,
     mut_ptr: *const Typ,
     array: Array,
     lazy: *Typ,
@@ -152,6 +159,10 @@ pub const Typ = union(enum) {
             },
             .any => hasher.update(&.{6}),
             .err => hasher.update(&.{7}),
+            .slice => |slice| {
+                hasher.update(&.{6});
+                hasher.update(std.mem.asBytes(&slice));
+            },
         }
     }
 
@@ -175,6 +186,7 @@ pub const Typ = union(enum) {
                 "[{s}]{f}",
                 .{ array.len, array.typ },
             ),
+            .slice => |inner| try writer.print("[]{f}", .{inner}),
             .lazy => |inner| if (show_lazy) {
                 try writer.print("@lazy<{f}>", .{inner});
             } else {
@@ -235,6 +247,11 @@ pub fn deinit(typs: *Typs) void {
 
 pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
     switch (typ) {
+        .slice => |inner| {
+            const new = try typs.makeTyp(inner.*);
+            const ptr = try typs.box(new);
+            return .{ .slice = ptr };
+        },
         .mut_ptr => |inner| {
             const inner_typ = try typs.makeTyp(inner.*);
             const ptr = try typs.box(inner_typ);

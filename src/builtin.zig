@@ -2,13 +2,13 @@ const Location = @import("Location.zig");
 const Pos = @import("Pos.zig");
 const Ast = @import("Ast.zig");
 
-pub const str_struct = Ast.Struct{
-    .name = "str",
-    .generics = &.{},
+pub const slice_struct = Ast.Struct{
+    .name = "[]",
+    .generics = &.{"t"},
     .fields = &.{
         .{
             .name = "ptr",
-            .typ = .{ .ptr = u8_ptr },
+            .typ = .{ .ptr = t_ptr },
             .location = loc(pos(2, 3), pos(2, 6)),
         },
         .{
@@ -20,11 +20,11 @@ pub const str_struct = Ast.Struct{
     .location = loc(pos(1, 8), pos(1, 11)),
 };
 
-const u8_ptr = &Ast.Typ{ .prime = .u8 };
+const t_ptr = &Ast.Typ{ .name = .{ .name = "t" } };
 
 const lines = &.{
-    "struct str {",
-    "  ptr: &u8,",
+    "struct []t {",
+    "  ptr: &t,",
     "  len: u64,",
     "}",
 };

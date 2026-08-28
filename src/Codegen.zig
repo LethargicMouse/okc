@@ -18,6 +18,13 @@ const TypVal = struct {
     ) std.Io.Writer.Error!void {
         try writer.print("{f} {f}", .{ typ_val.typ, typ_val.val });
     }
+
+    pub fn int(n: u64) TypVal {
+        return .{
+            .typ = .i32,
+            .val = .{ .int = n },
+        };
+    }
 };
 
 const Val = union(enum) {
@@ -36,7 +43,7 @@ const Val = union(enum) {
     }
 };
 
-const Var = struct {
+const Ref = struct {
     tmp: u32,
     inner_typ: Typ,
 };
@@ -61,7 +68,7 @@ writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 typs: *LlvmTyps,
 fun_ret_typs: std.StringHashMap(Typ),
-vars: std.StringHashMap(Var),
+vars: std.StringHashMap(Ref),
 structs: std.StringHashMap(Struct),
 str_lens: std.ArrayList(usize) = .empty,
 loop_ends: std.ArrayList(u32) = .empty,
@@ -148,8 +155,11 @@ fn regStruct(gen: *Codegen, struc: Ast.Struct) !void {
 }
 
 fn regAndGenStrStruct(gen: *Codegen) !void {
-    try gen.regStruct(builtin.str_struct);
-    try gen.genStruct(.{ .name = "str" });
+    try gen.regStruct(builtin.slice_struct);
+    try gen.genStruct(.{
+        .name = "[]",
+        .generics = &.{.i8},
+    });
 }
 
 fn regHeader(gen: *Codegen, header: Ast.Header) !void {
@@ -407,7 +417,7 @@ fn genDeclare(gen: *Codegen, declare: Ast.Declare) !void {
     try gen.vars.put(declare.name, vari);
 }
 
-fn toStack(gen: *Codegen, typ_val: TypVal) !Var {
+fn toStack(gen: *Codegen, typ_val: TypVal) !Ref {
     if (typ_val.typ == .name) {
         try gen.struct_queue.append(gen.gpa, typ_val.typ.name);
     }
@@ -487,7 +497,7 @@ fn genUnary(gen: *Codegen, unary: Ast.Unary) !TypVal {
     }
 }
 
-fn genDerefRef(gen: *Codegen, expr: Ast.Expr) !Var {
+fn genDerefRef(gen: *Codegen, expr: Ast.Expr) !Ref {
     const typ_val = try gen.genExpr(expr);
     const typ = typ_val.typ.ptr.*;
     return .{
@@ -501,7 +511,7 @@ fn genDeref(gen: *Codegen, deref: Ast.Expr) !TypVal {
     return gen.loadTypVal(ref);
 }
 
-fn loadTypVal(gen: *Codegen, vari: Var) !TypVal {
+fn loadTypVal(gen: *Codegen, vari: Ref) !TypVal {
     const tmp = try gen.load(vari);
     return .{
         .typ = vari.inner_typ,
@@ -533,7 +543,7 @@ fn genUndef(gen: *Codegen, undef: Ast.Undef) !TypVal {
     return .{ .typ = typ, .val = .undef };
 }
 
-fn genFieldRef(gen: *Codegen, field: Ast.Field) !Var {
+fn genFieldRef(gen: *Codegen, field: Ast.Field) !Ref {
     var vari = try gen.genExprRef(field.expr);
     if (vari.inner_typ == .ptr) {
         const tmp = try gen.load(vari);
@@ -544,11 +554,7 @@ fn genFieldRef(gen: *Codegen, field: Ast.Field) !Var {
     }
     const struc = gen.structs.get(vari.inner_typ.name.name).?;
     const fiel = struc.fields.get(field.name).?;
-    const tmp = gen.newTmp();
-    try gen.print(
-        "\n  %{} = getelementptr inbounds {f}, ptr %{}, i32 0, i32 {}",
-        .{ tmp, vari.inner_typ, vari.tmp, fiel.index },
-    );
+    const tmp = try gen.genGEP(vari, .int(fiel.index));
     const typ = gen.info.typs[field.typ_id];
     return .{ .inner_typ = typ, .tmp = tmp };
 }
@@ -558,18 +564,46 @@ fn genField(gen: *Codegen, field: Ast.Field) !TypVal {
     return gen.loadTypVal(ref);
 }
 
-fn genElemRef(gen: *Codegen, elem: Ast.Elem) !Var {
+fn genElemRef(gen: *Codegen, elem: Ast.Elem) !Ref {
     const ref = try gen.genExprRef(elem.expr);
     const index = try gen.genExpr(elem.index);
+    switch (ref.inner_typ) {
+        .array => {
+            const tmp = try gen.genGEP(ref, index);
+            return .{
+                .inner_typ = ref.inner_typ.array.typ.*,
+                .tmp = tmp,
+            };
+        },
+        .name => |name| {
+            std.debug.assert(std.mem.eql(u8, name.name, "[]"));
+            const ptrptr = try gen.genGEP(ref, .int(0));
+            const typ = try gen.typs.box(name.generics[0]);
+            const ptr = try gen.load(.{
+                .inner_typ = .{ .ptr = typ },
+                .tmp = ptrptr,
+            });
+            const tmp = gen.newTmp();
+            try gen.print(
+                "\n  %{} = getelementptr {f}, ptr %{}, {f}",
+                .{ tmp, typ, ptr, index },
+            );
+            return .{
+                .inner_typ = typ.*,
+                .tmp = tmp,
+            };
+        },
+        else => unreachable,
+    }
+}
+
+fn genGEP(gen: *Codegen, ref: Ref, index: TypVal) !u32 {
     const tmp = gen.newTmp();
     try gen.print(
-        "\n  %{} = getelementptr inbounds {f}, ptr %{d}, i32 0, {f}",
+        "\n  %{} = getelementptr inbounds {f}, ptr %{}, i32 0, {f}",
         .{ tmp, ref.inner_typ, ref.tmp, index },
     );
-    return .{
-        .inner_typ = ref.inner_typ.array.typ.*,
-        .tmp = tmp,
-    };
+    return tmp;
 }
 
 fn genElem(gen: *Codegen, elem: Ast.Elem) !TypVal {
@@ -577,7 +611,7 @@ fn genElem(gen: *Codegen, elem: Ast.Elem) !TypVal {
     return gen.loadTypVal(ref);
 }
 
-fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Var {
+fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Ref {
     switch (expr.kind) {
         .unary => |unary| return gen.genUnaryRef(unary.*),
         .vari => |name| return gen.vars.get(name).?,
@@ -600,7 +634,7 @@ fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Var {
     }
 }
 
-fn genUnaryRef(gen: *Codegen, unary: Ast.Unary) !Var {
+fn genUnaryRef(gen: *Codegen, unary: Ast.Unary) !Ref {
     switch (unary.kind) {
         .deref => return gen.genDerefRef(unary.expr),
         .mut_ptr, .notb, .ptr => {
@@ -611,7 +645,7 @@ fn genUnaryRef(gen: *Codegen, unary: Ast.Unary) !Var {
     }
 }
 
-fn load(gen: *Codegen, vari: Var) !u32 {
+fn load(gen: *Codegen, vari: Ref) !u32 {
     const to = gen.newTmp();
     try gen.print(
         "\n  %{} = load {f}, ptr %{}",
@@ -646,12 +680,15 @@ fn genStr(gen: *Codegen, str: usize) !TypVal {
     const tmp = gen.newTmp();
     try gen.print(
         \\
-        \\  %{} = insertvalue %str poison, ptr @.s{}, 0
-        \\  %{} = insertvalue %str %{}, i64 {}, 1
+        \\  %{} = insertvalue %"[]<i8>" poison, ptr @.s{}, 0
+        \\  %{} = insertvalue %"[]<i8>" %{}, i64 {}, 1
     , .{ tmp1, str, tmp, tmp1, len });
 
     return .{
-        .typ = .{ .name = .{ .name = "str" } },
+        .typ = .{ .name = .{
+            .name = "[]",
+            .generics = &.{.i8},
+        } },
         .val = .{ .tmp = tmp },
     };
 }

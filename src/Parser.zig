@@ -253,10 +253,20 @@ fn parseTypLoud(parser: *Parser) Error!Ast.Typ {
         parseMutPtrTyp,
         parsePtrTyp,
         parseArrayTyp,
+        parseSliceTyp,
     }) catch |err| {
         try parser.fail("<type>");
         return err;
     };
+}
+
+fn parseSliceTyp(parser: *Parser) !Ast.Typ {
+    try parser.expect(.bral);
+    try parser.expectLoud(.brar);
+    const typ = try parser.parseTypLoud();
+    const ptr = try parser.arena.allocator().create(Ast.Typ);
+    ptr.* = typ;
+    return .{ .slice = ptr };
 }
 
 fn parseGenericTyp(parser: *Parser) !Ast.Typ {
@@ -272,7 +282,7 @@ fn parseGenericTyp(parser: *Parser) !Ast.Typ {
 
 fn parseArrayTyp(parser: *Parser) !Ast.Typ {
     try parser.expect(.bral);
-    const len = try parser.parseIntLoud();
+    const len = try parser.parseInt();
     try parser.expectLoud(.brar);
     const typ = try parser.parseTypLoud();
     const array_typ = try parser.arena.allocator().create(Ast.Typ.Array);

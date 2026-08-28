@@ -1,0 +1,7 @@
+extern fn printf(fmt: &u8, a: u8, b: u8) void;
+
+fn main() i32 {
+  let digits: []u8 = "0123456789";
+  printf("%c-%c...".ptr, digits[6], digits[7]);
+  return 0;
+}

@@ -7,6 +7,6 @@ fn main() i32 {
   return 0;
 }
 
-fn modify(s: &mut str) void {
+fn modify(s: &mut []u8) void {
   *s = "six seven";
 }

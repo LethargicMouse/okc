@@ -34,6 +34,7 @@ pub const Typ = union(enum) {
 
     prime: Prime,
     name: Name,
+    slice: *const Typ,
     ptr: *const Typ,
     mut_ptr: *const Typ,
     array: *const Array,

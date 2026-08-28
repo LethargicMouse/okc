@@ -5,7 +5,7 @@ fn main() i32 {
   return 0;
 }
 
-fn put_str(s: str) void {
+fn put_str(s: []u8) void {
   if (s.len == 0) {
     return;
   }

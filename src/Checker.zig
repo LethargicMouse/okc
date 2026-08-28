@@ -103,7 +103,7 @@ pub fn run(checker: *Checker, ast: Ast) !Info {
 }
 
 fn checkAst(checker: *Checker, ast: Ast) !void {
-    try checker.regStrStruct();
+    try checker.regSliceStruct();
     for (ast.items) |item| {
         try checker.regItem(item);
     }
@@ -138,6 +138,10 @@ fn convertTypRec(checker: *Checker, typ: Typ, location: Location) !LlvmTyp {
                 .generics = generics,
             } };
         },
+        .slice => |slice| return checker.convertTypRec(.{ .name = .{
+            .name = "[]",
+            .generics = &.{slice.*},
+        } }, location),
         .prime => |prime| return LlvmTyp.fromPrime(prime),
         .ptr => |ptr| {
             const inner = try checker.convertTypRec(ptr.*, location);
@@ -271,8 +275,8 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
     try checker.structs.put(struc.name, res);
 }
 
-fn regStrStruct(checker: *Checker) !void {
-    try checker.regStruct(builtin.str_struct);
+fn regSliceStruct(checker: *Checker) !void {
+    try checker.regStruct(builtin.slice_struct);
 }
 
 fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
@@ -465,7 +469,7 @@ fn checkDeref(checker: *Checker, expr: Ast.Expr, location: Location) !ExprInfo {
             };
         },
         .err => return .err,
-        .prime, .name, .any, .array => {
+        .prime, .name, .any, .array, .slice => {
             checker.fail(location, "cannot dereference type `{f}`", .{info.typ});
             return .err;
         },
@@ -479,7 +483,7 @@ fn failNotMut(checker: *Checker, location: Location) void {
 
 fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location) !ExprInfo {
     const info = try checker.checkExpr(elem.expr, .any);
-    const index = try checker.checkExpr(elem.index, .any);
+    const index = try checker.checkExpr(elem.index, .{ .prime = .u64 });
     if (!index.typ.isNumber()) {
         checker.failWrongTyp(elem.index.location, .named("<int>"), index.typ);
     }
@@ -488,6 +492,10 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location) !ExprInfo {
         .array => |array| return .{
             .typ = array.typ.*,
             .mutable = info.mutable,
+        },
+        .slice => |ptr| return .{
+            .typ = ptr.*,
+            .mutable = false,
         },
         .err => return .err,
         .prime, .name, .ptr, .any, .mut_ptr => {
@@ -505,9 +513,10 @@ fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) !void {
     checker.failWrongTyp(location, a, b);
     if (a == .ptr and
         a.ptr.* == .prime and
-        a.ptr.*.prime == .u8 and
-        b == .name and
-        std.mem.eql(u8, b.name.name, "str"))
+        a.ptr.prime == .u8 and
+        b == .slice and
+        b.slice.* == .prime and
+        b.slice.prime == .u8)
     {
         std.log.info("append `.ptr` to get C-style string\n", .{});
     }
@@ -553,6 +562,7 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
             }
             return true;
         },
+        .slice => |aslice| return aslice == b.slice or try canUnify(aslice.*, b.slice.*, active),
         // a == b <=> &a == &b due to memo
         .ptr => |aptr| return aptr == b.ptr or try canUnify(aptr.*, b.ptr.*, active),
         // a == b <=> &a == &b due to memo
@@ -602,10 +612,7 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr, hint: Typ) Error!ExprInfo {
         .unary => |unary| return checker.checkUnary(unary.*, expr.location),
         .infer_struc => |struc| return checker.checkInferStruc(struc, expr.location, hint),
         .int => |int| return checker.checkInt(expr.location, int, hint),
-        .str => return .{
-            .typ = .{ .name = .{ .name = "str" } },
-            .mutable = false,
-        },
+        .str => return checker.checkStr(),
         .vari => |name| return checker.checkVar(expr.location, name),
         .char => return .{
             .typ = .{ .prime = .u8 },
@@ -622,6 +629,14 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr, hint: Typ) Error!ExprInfo {
         .struc => |struc| return checker.checkStruc(struc, expr.location),
         .elem => |elem| return checker.checkElem(elem.*, expr.location),
     }
+}
+
+fn checkStr(checker: *Checker) !ExprInfo {
+    const ptr = try checker.typs.box(.{ .prime = .u8 });
+    return .{
+        .typ = .{ .slice = ptr },
+        .mutable = false,
+    };
 }
 
 fn checkNotb(checker: *Checker, expr: Ast.Expr) !ExprInfo {
@@ -667,6 +682,10 @@ fn checkInferStruc(
 ) Error!ExprInfo {
     const name = switch (hint) {
         .name => |name| name,
+        .slice => Typ.Name{
+            .name = "[]",
+            .generics = &.{.{ .prime = .u8 }},
+        },
         .err => return .err,
         .lazy => unreachable,
         .mut_ptr, .prime, .ptr, .any, .array => {
@@ -804,6 +823,10 @@ fn checkField(checker: *Checker, field: Ast.Field, location: Location) !ExprInfo
         } else {
             checker.failNotStruct(field.expr.location, info.typ);
             return .err;
+        },
+        .slice => |inner| name = .{
+            .name = "[]",
+            .generics = &.{inner.*},
         },
         else => {
             checker.failNotStruct(field.expr.location, info.typ);
