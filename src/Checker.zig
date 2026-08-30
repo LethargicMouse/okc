@@ -13,11 +13,6 @@ const Error = error{OutOfMemory};
 const ExprInfo = struct {
     typ: Typ,
     mutable: bool,
-
-    const err = ExprInfo{
-        .typ = .err,
-        .mutable = true,
-    };
 };
 
 // numbered to enable `<`
@@ -474,6 +469,10 @@ fn checkUnary(checker: *Checker, unary: Ast.Unary, location: Location) !ExprInfo
 fn checkDeref(checker: *Checker, expr: Ast.Expr, location: Location) !ExprInfo {
     const info = try checker.checkExpr(expr, .any);
     const norm = info.typ.normalise();
+    const err = ExprInfo{
+        .typ = .err,
+        .mutable = true,
+    };
     switch (norm) {
         .ptr => |ptr| {
             return .{
@@ -481,10 +480,10 @@ fn checkDeref(checker: *Checker, expr: Ast.Expr, location: Location) !ExprInfo {
                 .mutable = ptr.mutable,
             };
         },
-        .err => return .err,
+        .err => return err,
         .prime, .name, .any, .array, .slice => {
             checker.fail(location, "cannot dereference type `{f}`", .{info.typ});
-            return .err;
+            return err;
         },
         .lazy => unreachable,
     }
@@ -501,6 +500,10 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location) !ExprInfo {
         checker.failWrongTyp(elem.index.location, .named("<int>"), index.typ);
     }
     const norm = info.typ.normalise();
+    const err = ExprInfo{
+        .typ = .err,
+        .mutable = true,
+    };
     switch (norm) {
         .array => |array| return .{
             .typ = array.typ.*,
@@ -510,10 +513,10 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location) !ExprInfo {
             .typ = ptr.*,
             .mutable = false,
         },
-        .err => return .err,
+        .err => return err,
         .prime, .name, .ptr, .any => {
             checker.fail(location, "type `{f}` does not support indexing", .{info.typ});
-            return .err;
+            return err;
         },
         .lazy => unreachable,
     }
@@ -701,20 +704,24 @@ fn checkInferStruc(
     location: Location,
     hint: Typ,
 ) Error!ExprInfo {
+    const err = ExprInfo{
+        .typ = .err,
+        .mutable = false,
+    };
     const name = switch (hint) {
         .name => |name| name,
         .slice => Typ.Name{
             .name = "[]",
             .generics = &.{.{ .prime = .u8 }},
         },
-        .err => return .err,
+        .err => return err,
         .lazy => unreachable,
         .prime, .ptr, .any, .array => {
             checker.failCannotInfer(.any, location);
             for (struc.fields) |field| {
                 _ = try checker.checkExpr(field.expr, .any);
             }
-            return .err;
+            return err;
         },
     };
     return checker.checkTypedStruc(name, struc.fields, struc.struc_id, location);
@@ -727,13 +734,17 @@ fn checkTypedStruc(
     struc_id: usize,
     location: Location,
 ) !ExprInfo {
+    const err = ExprInfo{
+        .typ = .err,
+        .mutable = false,
+    };
     const item = checker.items.get(name.name) orelse {
         checker.failNotDeclared(location, name.name);
-        return .err;
+        return err;
     };
     const decl = if (item.kind == .struc) item.kind.struc else {
         checker.failNotStruct(location, .{ .name = name });
-        return .err;
+        return err;
     };
     var resolver = checker.typs.makeResolver(checker.gpa);
     defer resolver.map.deinit();
@@ -813,7 +824,10 @@ fn checkInt(checker: *Checker, location: Location, int: Ast.Int, hint: Typ) !Exp
     };
     const typ = if (hint.isNumber()) hint else {
         checker.failCannotInfer(.any, location);
-        return .err;
+        return .{
+            .typ = .err,
+            .mutable = false,
+        };
     };
     if (try checker.convertTyp(typ, location)) |llvm_typ| {
         checker.info.typs[int.typ_id] = llvm_typ;
@@ -827,8 +841,12 @@ fn checkInt(checker: *Checker, location: Location, int: Ast.Int, hint: Typ) !Exp
 fn checkField(checker: *Checker, field: Ast.Field, location: Location) !ExprInfo {
     var info = try checker.checkExpr(field.expr, .any);
     const norm = info.typ.normalise();
+    const err = ExprInfo{
+        .typ = .err,
+        .mutable = true,
+    };
     if (norm == .err) {
-        return .err;
+        return err;
     }
     var name: Typ.Name = undefined;
     switch (norm) {
@@ -839,7 +857,7 @@ fn checkField(checker: *Checker, field: Ast.Field, location: Location) !ExprInfo
             info.mutable = ptr.mutable;
         } else {
             checker.failNotStruct(field.expr.location, info.typ);
-            return .err;
+            return err;
         },
         .slice => |inner| name = .{
             .name = "[]",
@@ -847,20 +865,20 @@ fn checkField(checker: *Checker, field: Ast.Field, location: Location) !ExprInfo
         },
         else => {
             checker.failNotStruct(field.expr.location, info.typ);
-            return .err;
+            return err;
         },
     }
     const item = checker.items.get(name.name) orelse {
         checker.failNotStruct(field.expr.location, info.typ);
-        return .err;
+        return err;
     };
     const struc = if (item.kind == .struc) item.kind.struc else {
         checker.failNotStruct(field.expr.location, info.typ);
-        return .err;
+        return err;
     };
     const fiel = struc.fields.get(field.name) orelse {
         checker.failNoField(location, field.name, name.name);
-        return .err;
+        return err;
     };
     var resolver = checker.typs.makeResolver(checker.gpa);
     defer resolver.map.deinit();
@@ -920,18 +938,22 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary, hint: Typ) !ExprInfo {
 }
 
 fn checkVar(checker: *Checker, location: Location, name: []const u8) ExprInfo {
+    const err = ExprInfo{
+        .typ = .err,
+        .mutable = true,
+    };
     const item = checker.items.getPtr(name) orelse {
         checker.failNotDeclared(location, name);
-        return .err;
+        return err;
     };
     const vari = switch (item.kind) {
         .fun => {
             checker.fail(location, "function pointers currently not supported", .{});
-            return .err;
+            return err;
         },
         .struc => {
             checker.fail(location, "it is a type", .{});
-            return .err;
+            return err;
         },
         .vari => |*vari| vari,
     };
@@ -947,21 +969,25 @@ fn failNotDeclared(checker: *Checker, location: Location, name: []const u8) void
 }
 
 fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !ExprInfo {
+    const err = ExprInfo{
+        .typ = .err,
+        .mutable = false,
+    };
     const item = checker.items.getPtr(call.name) orelse {
         checker.failNotDeclared(location, call.name);
         for (call.args) |arg| {
             _ = try checker.checkExpr(arg, .any);
         }
-        return .err;
+        return err;
     };
     const header = switch (item.kind) {
         .vari => {
             checker.fail(location, "function pointers currently not supported", .{});
-            return .err;
+            return err;
         },
         .struc => {
             checker.fail(location, "expected function, found type", .{});
-            return .err;
+            return err;
         },
         .fun => |*header| header,
     };
