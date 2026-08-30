@@ -149,12 +149,7 @@ fn convertTypRec(checker: *Checker, typ: Typ, location: Location) !LlvmTyp {
         } }, location),
         .prime => |prime| return LlvmTyp.fromPrime(prime),
         .ptr => |ptr| {
-            const inner = try checker.convertTypRec(ptr.*, location);
-            const new = try checker.llvm_typs.box(inner);
-            return .{ .ptr = new };
-        },
-        .mut_ptr => |ptr| {
-            const inner = try checker.convertTypRec(ptr.*, location);
+            const inner = try checker.convertTypRec(ptr.typ.*, location);
             const new = try checker.llvm_typs.box(inner);
             return .{ .ptr = new };
         },
@@ -480,16 +475,10 @@ fn checkDeref(checker: *Checker, expr: Ast.Expr, location: Location) !ExprInfo {
     const info = try checker.checkExpr(expr, .any);
     const norm = info.typ.normalise();
     switch (norm) {
-        .ptr => |inner| {
+        .ptr => |ptr| {
             return .{
-                .typ = inner.*,
-                .mutable = false,
-            };
-        },
-        .mut_ptr => |inner| {
-            return .{
-                .typ = inner.*,
-                .mutable = true,
+                .typ = ptr.typ.*,
+                .mutable = ptr.mutable,
             };
         },
         .err => return .err,
@@ -522,7 +511,7 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location) !ExprInfo {
             .mutable = false,
         },
         .err => return .err,
-        .prime, .name, .ptr, .any, .mut_ptr => {
+        .prime, .name, .ptr, .any => {
             checker.fail(location, "type `{f}` does not support indexing", .{info.typ});
             return .err;
         },
@@ -536,8 +525,8 @@ fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) !void {
     }
     checker.failWrongTyp(location, a, b);
     if (a == .ptr and
-        a.ptr.* == .prime and
-        a.ptr.prime == .u8 and
+        a.ptr.typ.* == .prime and
+        a.ptr.typ.prime == .u8 and
         b == .slice and
         b.slice.* == .prime and
         b.slice.prime == .u8)
@@ -587,10 +576,10 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
             return true;
         },
         .slice => |aslice| return aslice == b.slice or try canUnify(aslice.*, b.slice.*, active),
+        .ptr => |aptr| return aptr.mutable == b.ptr.mutable and
+            // a == b <=> &a == &b due to memo
+            (aptr.typ == b.ptr.typ or try canUnify(aptr.typ.*, b.ptr.typ.*, active)),
         // a == b <=> &a == &b due to memo
-        .ptr => |aptr| return aptr == b.ptr or try canUnify(aptr.*, b.ptr.*, active),
-        // a == b <=> &a == &b due to memo
-        .mut_ptr => |aptr| return aptr == b.mut_ptr or try canUnify(aptr.*, b.mut_ptr.*, active),
         .array => |arr| {
             if (std.mem.eql(u8, arr.len, b.array.len)) {
                 // a == b <=> &a == &b due to memo
@@ -681,7 +670,10 @@ fn checkPtr(checker: *Checker, expr: Ast.Expr) !ExprInfo {
     const info = try checker.checkExpr(expr, .any);
     const ptr = try checker.typs.box(info.typ);
     return .{
-        .typ = .{ .ptr = ptr },
+        .typ = .{ .ptr = .{
+            .typ = ptr,
+            .mutable = false,
+        } },
         .mutable = false,
     };
 }
@@ -695,7 +687,10 @@ fn checkMutPtr(checker: *Checker, expr: Ast.Expr) !ExprInfo {
     }
     const typ = try checker.typs.box(info.typ);
     return .{
-        .typ = .{ .mut_ptr = typ },
+        .typ = .{ .ptr = .{
+            .typ = typ,
+            .mutable = true,
+        } },
         .mutable = false,
     };
 }
@@ -714,7 +709,7 @@ fn checkInferStruc(
         },
         .err => return .err,
         .lazy => unreachable,
-        .mut_ptr, .prime, .ptr, .any, .array => {
+        .prime, .ptr, .any, .array => {
             checker.failCannotInfer(.any, location);
             for (struc.fields) |field| {
                 _ = try checker.checkExpr(field.expr, .any);
@@ -838,18 +833,10 @@ fn checkField(checker: *Checker, field: Ast.Field, location: Location) !ExprInfo
     var name: Typ.Name = undefined;
     switch (norm) {
         .name => |n| name = n,
-        .ptr => |ptr| if (ptr.* == .name) {
-            name = ptr.name;
-            // auto-deref
-            info.mutable = false;
-        } else {
-            checker.failNotStruct(field.expr.location, info.typ);
-            return .err;
-        },
-        .mut_ptr => |ptr| if (ptr.* == .name) {
-            name = ptr.name;
-            // auto-deref
-            info.mutable = true;
+        // auto-deref
+        .ptr => |ptr| if (ptr.typ.* == .name) {
+            name = ptr.typ.name;
+            info.mutable = ptr.mutable;
         } else {
             checker.failNotStruct(field.expr.location, info.typ);
             return .err;

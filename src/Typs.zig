@@ -27,14 +27,12 @@ const Resolver = struct {
                 return .{ .slice = new_ptr };
             },
             .ptr => |ptr| {
-                const new = try resolver.resolve(ptr.*);
+                const new = try resolver.resolve(ptr.typ.*);
                 const new_ptr = try resolver.typs.box(new);
-                return .{ .ptr = new_ptr };
-            },
-            .mut_ptr => |ptr| {
-                const new = try resolver.resolve(ptr.*);
-                const new_ptr = try resolver.typs.box(new);
-                return .{ .mut_ptr = new_ptr };
+                return .{ .ptr = .{
+                    .typ = new_ptr,
+                    .mutable = ptr.mutable,
+                } };
             },
             .array => |array| {
                 const new = try resolver.resolve(array.typ.*);
@@ -77,9 +75,8 @@ pub const Typ = union(enum) {
                 },
                 .slice => |aslice| return aslice == b.slice,
                 // a == b <=> &a == &b due to memo
-                .ptr => |aptr| return aptr == b.ptr,
+                .ptr => |aptr| return aptr.typ == b.ptr.typ and aptr.mutable == b.ptr.mutable,
                 // a == b <=> &a == &b due to memo
-                .mut_ptr => |aptr| return aptr == b.mut_ptr,
                 .array => |arr| {
                     if (std.mem.eql(u8, arr.len, b.array.len)) {
                         // a == b <=> &a == &b due to memo
@@ -106,11 +103,15 @@ pub const Typ = union(enum) {
         generics: []const Typ = &.{},
     };
 
+    pub const Ptr = struct {
+        typ: *const Typ,
+        mutable: bool,
+    };
+
     prime: Ast.Prime,
     name: Name,
-    ptr: *const Typ,
+    ptr: Ptr,
     slice: *const Typ,
-    mut_ptr: *const Typ,
     array: Array,
     lazy: *Typ,
     any,
@@ -121,31 +122,19 @@ pub const Typ = union(enum) {
     }
 
     fn hashIn(typ: Typ, hasher: *std.hash.Wyhash) void {
+        hasher.update(&.{@intFromEnum(typ)});
         switch (typ) {
-            .prime => |prime| {
-                hasher.update(&.{0});
-                hasher.update(&.{@intFromEnum(prime)});
-            },
+            .prime => |prime| hasher.update(&.{@intFromEnum(prime)}),
             .name => |name| {
-                hasher.update(&.{1});
                 hasher.update(name.name);
                 // `name.name` determines number of `name.generics`
                 for (name.generics) |gen| {
                     gen.hashIn(hasher);
                 }
             },
-            .ptr => |inner| {
-                hasher.update(&.{2});
-                // a == b <=> &a == &b due to memo
-                hasher.update(std.mem.asBytes(&inner));
-            },
-            .mut_ptr => |inner| {
-                hasher.update(&.{3});
-                // a == b <=> &a == &b due to memo
-                hasher.update(std.mem.asBytes(&inner));
-            },
+            // a == b <=> &a == &b due to memo
+            .ptr => |inner| hasher.update(std.mem.asBytes(&inner)),
             .array => |array| {
-                hasher.update(&.{4});
                 hasher.update(array.len);
                 // a == b <=> &a == &b due to memo
                 hasher.update(std.mem.asBytes(&array.typ));
@@ -153,16 +142,9 @@ pub const Typ = union(enum) {
             // pointers in lazy types are not memoized
             // but we need to discriminate lazy types by pointers
             // as they are unique type variables
-            .lazy => |inner| {
-                hasher.update(&.{5});
-                hasher.update(std.mem.asBytes(&inner));
-            },
-            .any => hasher.update(&.{6}),
-            .err => hasher.update(&.{7}),
-            .slice => |slice| {
-                hasher.update(&.{6});
-                hasher.update(std.mem.asBytes(&slice));
-            },
+            .lazy => |inner| hasher.update(std.mem.asBytes(&inner)),
+            .slice => |slice| hasher.update(std.mem.asBytes(&slice)),
+            .any, .err => {},
         }
     }
 
@@ -180,8 +162,11 @@ pub const Typ = union(enum) {
                     try writer.writeByte('>');
                 }
             },
-            .ptr => |inner| try writer.print("&{f}", .{inner}),
-            .mut_ptr => |inner| try writer.print("&mut {f}", .{inner}),
+            .ptr => |ptr| if (ptr.mutable) {
+                try writer.print("&mut {f}", .{ptr.typ});
+            } else {
+                try writer.print("&{f}", .{ptr.typ});
+            },
             .array => |array| try writer.print(
                 "[{s}]{f}",
                 .{ array.len, array.typ },
@@ -255,7 +240,10 @@ pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
         .mut_ptr => |inner| {
             const inner_typ = try typs.makeTyp(inner.*);
             const ptr = try typs.box(inner_typ);
-            return .{ .mut_ptr = ptr };
+            return .{ .ptr = .{
+                .typ = ptr,
+                .mutable = true,
+            } };
         },
         .prime => |prime| return .{ .prime = prime },
         .name => |name| {
@@ -271,7 +259,10 @@ pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
         .ptr => |inner| {
             const inner_typ = try typs.makeTyp(inner.*);
             const ptr = try typs.box(inner_typ);
-            return .{ .ptr = ptr };
+            return .{ .ptr = .{
+                .typ = ptr,
+                .mutable = false,
+            } };
         },
         .array => |array| {
             const inner_typ = try typs.makeTyp(array.typ);
