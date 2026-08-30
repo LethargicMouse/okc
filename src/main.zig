@@ -40,7 +40,7 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var source = try Source.read(io, gpa, path);
     defer source.deinit(gpa);
 
-    var lexer = try Lexer.init(gpa, &source);
+    var lexer = try Lexer.init(gpa, source);
     const tokens = try lexer.lex(gpa);
 
     var parser = Parser.init(gpa, tokens);

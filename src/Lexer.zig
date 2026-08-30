@@ -106,13 +106,16 @@ const LexPair = struct { str: []const u8, lexeme: Lexeme };
 
 const Lexer = @This();
 
-source: *const Source,
+source: Source,
 poses: []const Pos,
 cursor: usize = 0,
 
-pub fn init(gpa: std.mem.Allocator, source: *const Source) !Lexer {
+pub fn init(gpa: std.mem.Allocator, source: Source) !Lexer {
     const poses = try Pos.makePoses(gpa, source.code);
-    return .{ .source = source, .poses = poses };
+    return .{
+        .source = source,
+        .poses = poses,
+    };
 }
 
 pub fn lex(lexer: *Lexer, gpa: std.mem.Allocator) ![]const Token {
