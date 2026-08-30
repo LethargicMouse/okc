@@ -9,27 +9,27 @@ struct termios {
   ospeed: u32,
 }
 
-extern fn tcgetattr(fd: i32, termios: &mut termios) void;
-extern fn tcsetattr(fd: i32, action: i32, termios: &termios) void;
+extern fn tcgetattr(fd: i32, config: &mut termios) void;
+extern fn tcsetattr(fd: i32, action: i32, config: &termios) void;
 extern fn read(fd: i32, ptr: &mut u8, len: u64) void;
 extern fn write(fd: i32, ptr: &u8, len: u64) void;
 
 fn main() i32 {
-  let mut termios: termios = undefined;
+  let mut config: termios = undefined;
   let stdin: i32 = 0;
-  tcgetattr(stdin, &mut termios);
-  let termios_before = termios;
+  tcgetattr(stdin, &mut config);
+  let old_config = config;
   let echo: u32 = 8;
   let icanon: u32 = 2;
-  termios.lflag &= ~(echo | icanon);
+  config.lflag &= ~(echo | icanon);
   let opost: u32 = 1;
-  termios.oflag &= ~(opost);
+  config.oflag &= ~(opost);
   let vtime: u8 = 5;
-  termios.cc[vtime] = 1;
+  config.cc[vtime] = 1;
   let vmin: u8 = 6;
-  termios.cc[vmin] = 0;
+  config.cc[vmin] = 0;
   let flush: i32 = 2;
-  tcsetattr(stdin, flush, &termios);
+  tcsetattr(stdin, flush, &config);
   put_str("\x1b[2J    six seven");
   while (true) {
     let mut input: u8 = 0;
@@ -38,7 +38,7 @@ fn main() i32 {
       break;
     }
   }
-  tcsetattr(stdin, flush, &termios_before);
+  tcsetattr(stdin, flush, &old_config);
 
   return 0;
 }
