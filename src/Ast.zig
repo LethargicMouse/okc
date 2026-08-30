@@ -208,6 +208,11 @@ pub const Field = struct {
 
 pub const Binary = struct {
     pub const Kind = enum {
+        pub const Class = enum {
+            arith,
+            bool,
+        };
+
         orb,
         andb,
         equ,
@@ -219,7 +224,7 @@ pub const Binary = struct {
         rem,
         moreq,
 
-        pub fn prior(kind: Kind) u8 {
+        pub fn getPrior(kind: Kind) u8 {
             switch (kind) {
                 .equ, .les, .moreq => return 0,
                 .orb => return 1,
@@ -245,10 +250,10 @@ pub const Binary = struct {
             };
         }
 
-        pub fn canOpAssign(kind: Kind) bool {
+        pub fn getClass(kind: Kind) Class {
             return switch (kind) {
-                .orb, .andb, .add, .sub, .mul, .div, .rem => true,
-                .equ, .les, .moreq => false,
+                .orb, .andb, .add, .sub, .mul, .div, .rem => .arith,
+                .equ, .les, .moreq => .bool,
             };
         }
     };

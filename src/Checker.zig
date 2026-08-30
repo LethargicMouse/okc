@@ -430,7 +430,7 @@ fn checkOpAssign(checker: *Checker, op_assign: Ast.OpAssign) !ControlFlow {
     if (!left.mutable) {
         checker.failNotMut(op_assign.left.location);
     }
-    // only numeric ops allowed
+    std.debug.assert(op_assign.kind.getClass() == .arith);
     if (!left.typ.isNumber()) {
         checker.failWrongTyp(op_assign.left.location, .named("<int>"), left.typ);
     }
@@ -911,9 +911,9 @@ fn failCannotInfer(checker: *Checker, typ: Typ, location: Location) void {
 }
 
 fn checkBinary(checker: *Checker, binary: Ast.Binary, hint: Typ) !ExprInfo {
-    const inner_hint = switch (binary.kind) {
-        .add, .andb, .div, .mul, .orb, .rem, .sub => hint,
-        .equ, .les, .moreq => .any,
+    const inner_hint = switch (binary.kind.getClass()) {
+        .arith => hint,
+        .bool => .any,
     };
     var left = try checker.checkExpr(binary.left, inner_hint);
     if (!left.typ.isNumber()) {
@@ -922,9 +922,9 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary, hint: Typ) !ExprInfo {
     }
     const right = try checker.checkExpr(binary.right, left.typ);
     try checker.unify(binary.right.location, left.typ, right.typ);
-    const typ = switch (binary.kind) {
-        .equ, .les, .moreq => Typ{ .prime = .bool },
-        .add, .andb, .div, .mul, .orb, .rem, .sub => left.typ,
+    const typ = switch (binary.kind.getClass()) {
+        .arith => left.typ,
+        .bool => Typ{ .prime = .bool },
     };
     return .{
         .typ = typ,

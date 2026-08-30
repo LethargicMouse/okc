@@ -413,7 +413,7 @@ fn parseOpAssignStatementPostfix(
 fn parseOpAssignBinOp(parser: *Parser) !Ast.Binary.Kind {
     const res = Ast.Binary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
         return error.ParseFailed;
-    if (!res.canOpAssign()) {
+    if (res.getClass() != .arith) {
         return error.ParseFailed;
     }
     parser.cursor += 1;
@@ -619,7 +619,7 @@ fn parseExprPrior(parser: *Parser, prior: u8, loud: bool) Error!Ast.Expr {
 fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
     const cursor_before = parser.cursor;
     const kind = parser.parseBinOp(prior) orelse return null;
-    const expr = parser.parseExprPrior(kind.prior() + 1, true) catch |err| switch (err) {
+    const expr = parser.parseExprPrior(kind.getPrior() + 1, true) catch |err| switch (err) {
         error.ParseFailed => {
             parser.cursor = cursor_before;
             return null;
@@ -635,7 +635,7 @@ fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
 fn parseBinOp(parser: *Parser, prior: u8) ?Ast.Binary.Kind {
     const res = Ast.Binary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
         return null;
-    if (res.prior() < prior) {
+    if (res.getPrior() < prior) {
         return null;
     }
     parser.cursor += 1;
