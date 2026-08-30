@@ -411,9 +411,13 @@ fn parseOpAssignStatementPostfix(
 }
 
 fn parseOpAssignBinOp(parser: *Parser) !Ast.Binary.Kind {
-    return parser.parseEither(Ast.Binary.Kind, &.{
-        parseBitAnd,
-    });
+    const res = Ast.Binary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
+        return error.ParseFailed;
+    if (!res.canOpAssign()) {
+        return error.ParseFailed;
+    }
+    parser.cursor += 1;
+    return res;
 }
 
 fn parseIgnoreStatement(parser: *Parser) !Ast.Statement {
@@ -614,10 +618,7 @@ fn parseExprPrior(parser: *Parser, prior: u8, loud: bool) Error!Ast.Expr {
 
 fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
     const cursor_before = parser.cursor;
-    const kind = parser.parseBinOp(prior) catch |err| switch (err) {
-        error.ParseFailed => return null,
-        else => return err,
-    };
+    const kind = parser.parseBinOp(prior) orelse return null;
     const expr = parser.parseExprPrior(kind.prior() + 1, true) catch |err| switch (err) {
         error.ParseFailed => {
             parser.cursor = cursor_before;
@@ -631,74 +632,14 @@ fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
     };
 }
 
-fn parseBinOp(parser: *Parser, prior: u8) !Ast.Binary.Kind {
-    const res = try parser.parseEither(Ast.Binary.Kind, .{
-        parseMoreq,
-        parseAdd,
-        parseSub,
-        parseMul,
-        parseDiv,
-        parseEqu,
-        parseLes,
-        parseRem,
-        parseBitAnd,
-        parseBitOr,
-    });
+fn parseBinOp(parser: *Parser, prior: u8) ?Ast.Binary.Kind {
+    const res = Ast.Binary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
+        return null;
     if (res.prior() < prior) {
-        parser.cursor -= 1;
-        return error.ParseFailed;
+        return null;
     }
+    parser.cursor += 1;
     return res;
-}
-
-fn parseMoreq(parser: *Parser) !Ast.Binary.Kind {
-    try parser.expect(.moreq);
-    return .moreq;
-}
-
-fn parseBitOr(parser: *Parser) !Ast.Binary.Kind {
-    try parser.expect(.pipe);
-    return .orb;
-}
-
-fn parseBitAnd(parser: *Parser) !Ast.Binary.Kind {
-    try parser.expect(.amp);
-    return .andb;
-}
-
-fn parseRem(parser: *Parser) !Ast.Binary.Kind {
-    try parser.expect(.rem);
-    return .rem;
-}
-
-fn parseLes(parser: *Parser) !Ast.Binary.Kind {
-    try parser.expect(.les);
-    return .les;
-}
-
-fn parseEqu(parser: *Parser) !Ast.Binary.Kind {
-    try parser.expect(.equ2);
-    return .equ;
-}
-
-fn parseAdd(parser: *Parser) !Ast.Binary.Kind {
-    try parser.expect(.plus);
-    return .add;
-}
-
-fn parseSub(parser: *Parser) !Ast.Binary.Kind {
-    try parser.expect(.minus);
-    return .sub;
-}
-
-fn parseMul(parser: *Parser) !Ast.Binary.Kind {
-    try parser.expect(.star);
-    return .mul;
-}
-
-fn parseDiv(parser: *Parser) !Ast.Binary.Kind {
-    try parser.expect(.slash);
-    return .div;
 }
 
 fn parseExprPostedLoud(parser: *Parser) Error!Ast.Expr {

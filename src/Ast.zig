@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const builtin = @import("builtin");
+const Lexeme = @import("Lexer.zig").Lexeme;
 
 const Location = @import("Location.zig");
 
@@ -226,6 +227,29 @@ pub const Binary = struct {
                 .add, .sub => return 3,
                 .mul, .div, .rem => return 4,
             }
+        }
+
+        pub fn fromLexeme(lexeme: Lexeme) ?Kind {
+            return switch (lexeme) {
+                .pipe => .orb,
+                .amp => .andb,
+                .equ2 => .equ,
+                .plus => .add,
+                .minus => .sub,
+                .star => .mul,
+                .slash => .div,
+                .les => .les,
+                .rem => .rem,
+                .moreq => .moreq,
+                else => null,
+            };
+        }
+
+        pub fn canOpAssign(kind: Kind) bool {
+            return switch (kind) {
+                .orb, .andb, .add, .sub, .mul, .div, .rem => true,
+                .equ, .les, .moreq => false,
+            };
         }
     };
 
