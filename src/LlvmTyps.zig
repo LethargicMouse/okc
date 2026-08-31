@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Ast = @import("Ast.zig");
 
-const Resolver = struct {
+pub const Resolver = struct {
     typs: *LlvmTyps,
     map: std.StringHashMap(Typ),
 
@@ -85,6 +85,18 @@ pub const Typ = union(enum) {
     pub const Name = struct {
         name: []const u8,
         generics: []const Typ = &.{},
+
+        pub fn format(name: Name, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+            try writer.print("{s}", .{name.name});
+            if (name.generics.len != 0) {
+                try writer.writeByte('<');
+                try name.generics[0].formatInner(writer);
+                for (name.generics[1..]) |generic| {
+                    try writer.print(", {f}", .{generic});
+                }
+                try writer.writeByte('>');
+            }
+        }
     };
 
     name: Name,
@@ -98,19 +110,16 @@ pub const Typ = union(enum) {
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (typ) {
-            .name => |name| {
-                try writer.print("%\"{s}", .{name.name});
-                if (name.generics.len != 0) {
-                    try writer.print("<{f}", .{name.generics[0]});
-                    for (name.generics[1..]) |generic| {
-                        try writer.print(", {f}", .{generic});
-                    }
-                    try writer.writeByte('>');
-                }
-                try writer.writeByte('"');
-            },
+            .name => |name| try writer.print("%\"{f}\"", .{name}),
             .array => |array| try writer.print("[{s} x {f}]", .{ array.len, array.typ }),
             else => try writer.writeAll(@tagName(typ)),
+        }
+    }
+
+    pub fn formatInner(typ: Typ, writer: *std.Io.Writer) !void {
+        switch (typ) {
+            .name => |name| try name.format(writer),
+            else => try typ.format(writer),
         }
     }
 

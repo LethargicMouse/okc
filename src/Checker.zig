@@ -41,6 +41,7 @@ const Var = struct {
 };
 
 const Header = struct {
+    generics: []const []const u8,
     params: []const Typ,
     ret_typ: Typ,
     used: bool = false,
@@ -114,24 +115,26 @@ fn checkAst(checker: *Checker, ast: Ast) !void {
     checker.checkItems();
 }
 
-fn convertTyp(checker: *Checker, typ: Typ, location: Location) !?LlvmTyp {
-    return checker.convertTypRec(typ, location) catch |err| switch (err) {
+fn convertTyp(checker: *Checker, typ: Typ, location: ?Location) !?LlvmTyp {
+    return checker.convertTypRec(typ) catch |err| switch (err) {
         error.BadConvert => return null,
         error.ConvertAny => {
-            checker.failCannotInfer(typ, location);
+            if (location) |loc| {
+                checker.failCannotInfer(typ, loc);
+            }
             return null;
         },
         error.OutOfMemory => return error.OutOfMemory,
     };
 }
 
-fn convertTypRec(checker: *Checker, typ: Typ, location: Location) !LlvmTyp {
+fn convertTypRec(checker: Checker, typ: Typ) !LlvmTyp {
     switch (typ) {
         .name => |name| {
             const generics =
                 try checker.llvm_typs.arena.allocator().alloc(LlvmTyp, name.generics.len);
             for (generics, name.generics) |*target, generic| {
-                target.* = try checker.convertTypRec(generic, location);
+                target.* = try checker.convertTypRec(generic);
             }
             return .{ .name = .{
                 .name = name.name,
@@ -141,15 +144,15 @@ fn convertTypRec(checker: *Checker, typ: Typ, location: Location) !LlvmTyp {
         .slice => |slice| return checker.convertTypRec(.{ .name = .{
             .name = "[]",
             .generics = &.{slice.*},
-        } }, location),
+        } }),
         .prime => |prime| return LlvmTyp.fromPrime(prime),
         .ptr => |ptr| {
-            const inner = try checker.convertTypRec(ptr.typ.*, location);
+            const inner = try checker.convertTypRec(ptr.typ.*);
             const new = try checker.llvm_typs.box(inner);
             return .{ .ptr = new };
         },
         .array => |array| {
-            const inner = try checker.convertTypRec(array.typ.*, location);
+            const inner = try checker.convertTypRec(array.typ.*);
             const new = try checker.llvm_typs.box(inner);
             return .{ .array = .{
                 .len = array.len,
@@ -160,7 +163,7 @@ fn convertTypRec(checker: *Checker, typ: Typ, location: Location) !LlvmTyp {
         .any => {
             return error.ConvertAny;
         },
-        .lazy => |inner| return checker.convertTypRec(inner.*, location),
+        .lazy => |inner| return checker.convertTypRec(inner.*),
     }
 }
 
@@ -234,6 +237,7 @@ fn regHeader(checker: *Checker, header: Ast.Header) !void {
     try checker.items.put(header.name, .{
         .location = header.location,
         .kind = .{ .fun = .{
+            .generics = header.generics,
             .params = params,
             .ret_typ = ret_typ,
         } },
@@ -553,12 +557,17 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
     if (a == .any or b == .any) {
         return true;
     }
+    if (a == .lazy) {
+        const res = try canUnify(a.lazy.*, b, active);
+        if (res and active) {
+            a.lazy.* = b;
+        }
+        return res;
+    }
     if (b == .lazy) {
         const res = try canUnify(a, b.lazy.*, active);
-        if (res) {
-            if (active) {
-                b.lazy.* = a;
-            }
+        if (res and active) {
+            b.lazy.* = a;
         }
         return res;
     }
@@ -641,7 +650,7 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr, hint: Typ) Error!ExprInfo {
             .mutable = false,
         },
         .undef => |undef| return checker.checkUndef(undef, expr.location, hint),
-        .call => |call| return checker.checkCall(call, expr.location),
+        .call => |call| return checker.checkCall(call, expr.location, hint),
         .binary => |binary| return checker.checkBinary(binary.*, hint),
         .field => |field| return checker.checkField(field.*, expr.location),
         .struc => |struc| return checker.checkStruc(struc, expr.location),
@@ -968,7 +977,7 @@ fn failNotDeclared(checker: *Checker, location: Location, name: []const u8) void
     checker.fail(location, "item `{s}` is not declared", .{name});
 }
 
-fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !ExprInfo {
+fn checkCall(checker: *Checker, call: Ast.Call, location: Location, hint: Typ) !ExprInfo {
     const err = ExprInfo{
         .typ = .err,
         .mutable = false,
@@ -992,12 +1001,32 @@ fn checkCall(checker: *Checker, call: Ast.Call, location: Location) !ExprInfo {
         .fun => |*header| header,
     };
     header.used = true;
+    var resolver = checker.typs.makeResolver(checker.gpa);
+    defer resolver.map.deinit();
+    for (header.generics) |generic| {
+        const ptr = try checker.typs.makeLazy();
+        try resolver.map.put(generic, .{ .lazy = ptr });
+    }
+    const ret_typ = try resolver.resolve(header.ret_typ);
+    // to propagate hint to generics
+    _ = try canUnify(ret_typ, hint, true);
     for (call.args, header.params) |arg, param| {
-        const info = try checker.checkExpr(arg, param);
-        try checker.unify(arg.location, param, info.typ);
+        const param_typ = try resolver.resolve(param);
+        const info = try checker.checkExpr(arg, param_typ.normalise());
+        try checker.unify(arg.location, param_typ, info.typ);
+    }
+    const generics = try checker.llvm_typs.arena.allocator().alloc(LlvmTyp, header.generics.len);
+    for (generics, header.generics) |*target, generic| {
+        if (try checker.convertTyp(resolver.map.get(generic).?, null)) |llvm_typ| {
+            target.* = llvm_typ;
+        }
+    }
+    checker.info.calls[call.call_id].generics = generics;
+    if (try checker.convertTyp(ret_typ, location)) |llvm_typ| {
+        checker.info.calls[call.call_id].ret_typ = llvm_typ;
     }
     return .{
-        .typ = header.ret_typ,
+        .typ = ret_typ,
         .mutable = false,
     };
 }

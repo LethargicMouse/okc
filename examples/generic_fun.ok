@@ -1,0 +1,12 @@
+extern fn printf(fmt: &u8, s: &u8, n: i32) void;
+
+fn main() i32 {
+  let six = id("six").ptr;
+  let seven: i32 = id(7);
+  printf("%s %d\n".ptr, six, seven);
+  return 0;
+}
+
+fn id<t>(val: t) t {
+  return val;
+}

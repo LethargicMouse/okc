@@ -77,6 +77,7 @@ cursor: usize = 0,
 err_cursor: usize = 0,
 next_typ_id: usize = 0,
 next_struc_id: usize = 0,
+next_call_id: usize = 0,
 
 pub fn init(gpa: std.mem.Allocator, tokens: []const Lexer.Token) Parser {
     const arena = std.heap.ArenaAllocator.init(gpa);
@@ -108,6 +109,7 @@ pub fn run(parser: *Parser) !struct { Ast, Ast.Info } {
     const ast_info = Ast.Info{
         .typ_ids = parser.next_typ_id,
         .struc_ids = parser.next_struc_id,
+        .call_ids = parser.next_call_id,
     };
     return .{ ast, ast_info };
 }
@@ -205,12 +207,14 @@ fn parseHeader(parser: *Parser) !Ast.Header {
     try parser.expect(.fun);
     const location = parser.getLocation();
     const name = try parser.parseNameLoud();
+    const generics = try parser.parseMaybe([]const []const u8, parseGenerics) orelse &.{};
     try parser.expectLoud(.parl);
     const params = try parser.parseSep(Ast.Param, parseParamLoud);
     try parser.expect(.parr);
     const ret_typ = try parser.parseTypLoud();
     return .{
         .name = name,
+        .generics = generics,
         .params = params,
         .ret_typ = ret_typ,
         .location = location,
@@ -571,7 +575,13 @@ fn parseCall(parser: *Parser) !Ast.Call {
     return .{
         .name = name,
         .args = args,
+        .call_id = parser.newCallId(),
     };
+}
+
+fn newCallId(parser: *Parser) usize {
+    parser.next_call_id += 1;
+    return parser.next_call_id - 1;
 }
 
 fn parseRetStatement(parser: *Parser) !Ast.Statement {

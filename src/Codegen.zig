@@ -67,13 +67,15 @@ file: std.Io.File,
 writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 typs: *LlvmTyps,
-fun_ret_typs: std.StringHashMap(Typ),
 vars: std.StringHashMap(Ref),
 structs: std.StringHashMap(Struct),
+funs: std.StringHashMap(Ast.Fun),
 str_lens: std.ArrayList(usize) = .empty,
 loop_ends: std.ArrayList(u32) = .empty,
 struct_queue: std.ArrayList(Typ.Name) = .empty,
+fun_queue: std.ArrayList(Typ.Name) = .empty,
 generated_structs: std.HashMap(Typ, void, Typ.HashContext, std.hash_map.default_max_load_percentage),
+resolver: LlvmTyps.Resolver,
 next_tmp: u32 = 0,
 
 pub fn init(
@@ -91,10 +93,11 @@ pub fn init(
         .typs = llvm_typs,
         .info = info,
         .file = file,
+        .resolver = llvm_typs.makeResolver(gpa),
         .writer = file.writer(io, write_buf),
-        .fun_ret_typs = .init(gpa),
         .vars = .init(gpa),
         .structs = .init(gpa),
+        .funs = .init(gpa),
         .generated_structs = .init(gpa),
     };
 }
@@ -115,25 +118,28 @@ fn genAst(gen: *Codegen, ast: Ast) !void {
     for (ast.items) |item| {
         try gen.regItem(item);
     }
-    for (ast.items) |item| {
-        try gen.genItem(item);
+    try gen.genFunNamed(.{ .name = "main" });
+    while (gen.fun_queue.items.len != 0) {
+        const name = gen.fun_queue.pop().?;
+        try gen.genFunNamed(name);
     }
     try gen.print("\n", .{});
 }
 
-fn regItem(gen: *Codegen, item: Ast.Item) !void {
-    switch (item) {
-        .ext_fun => |ext_fun| try gen.regHeader(ext_fun.header),
-        .fun => |fun| try gen.regHeader(fun.header),
-        .struc => |struc| try gen.regStruct(struc),
+fn genFunNamed(gen: *Codegen, name: Typ.Name) !void {
+    const fun = gen.funs.get(name.name) orelse return;
+    for (fun.header.generics, name.generics) |generic, typ| {
+        try gen.resolver.map.put(generic, typ);
     }
+    try gen.genFun(fun, name.generics);
 }
 
-fn genItem(gen: *Codegen, item: Ast.Item) !void {
+fn regItem(gen: *Codegen, item: Ast.Item) !void {
     switch (item) {
+        // yeah why do I care reg gen its the same thing
         .ext_fun => |ext_fun| try gen.genExtFun(ext_fun),
-        .fun => |fun| try gen.genFun(fun),
-        .struc => {}, // already gen'd during reg phase
+        .fun => |fun| try gen.funs.put(fun.header.name, fun),
+        .struc => |struc| try gen.regStruct(struc),
     }
 }
 
@@ -160,11 +166,6 @@ fn regAndGenStrStruct(gen: *Codegen) !void {
         .name = "[]",
         .generics = &.{.i8},
     });
-}
-
-fn regHeader(gen: *Codegen, header: Ast.Header) !void {
-    const typ = try gen.typs.makeTyp(header.ret_typ);
-    try gen.fun_ret_typs.put(header.name, typ);
 }
 
 fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
@@ -225,16 +226,28 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
     };
 }
 
-fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
+fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
     gen.buffer = .empty; // to generate types first
     const ret_typ = try gen.typs.makeTyp(fun.header.ret_typ);
-    try gen.print("\ndefine {f} @{s}(", .{ ret_typ, fun.header.name });
-    var param_typ_vals: [10]TypVal = undefined;
+    const ret_resolved = try gen.resolver.resolve(ret_typ);
+    try gen.print(
+        "\ndefine {f} @\"{f}\"(",
+        .{ ret_resolved, Typ.Name{
+            .name = fun.header.name,
+            .generics = generics,
+        } },
+    );
+    var param_typ_vals = try gen.gpa.alloc(TypVal, fun.header.params.len);
+    defer gen.gpa.free(param_typ_vals);
     if (fun.header.params.len != 0) {
-        param_typ_vals[0] = try gen.genParam(fun.header.params[0]);
-        for (fun.header.params[1..], 1..) |param, i| {
+        const first = try gen.typs.makeTyp(fun.header.params[0].typ);
+        const first_resolved = try gen.resolver.resolve(first);
+        param_typ_vals[0] = try gen.genParam(first_resolved);
+        for (param_typ_vals[1..], fun.header.params[1..]) |*target, param| {
             try gen.print(", ", .{});
-            param_typ_vals[i] = try gen.genParam(param);
+            const typ = try gen.typs.makeTyp(param.typ);
+            const resolved = try gen.resolver.resolve(typ);
+            target.* = try gen.genParam(resolved);
         }
     }
     try gen.print(
@@ -262,6 +275,8 @@ fn genFun(gen: *Codegen, fun: Ast.Fun) !void {
     gen.buffer = null;
     try gen.flushStructQueue();
     try gen.print("{s}", .{buffer.items});
+    gen.vars.clearRetainingCapacity();
+    gen.resolver.map.clearRetainingCapacity();
 }
 
 fn flushStructQueue(gen: *Codegen) !void {
@@ -298,8 +313,7 @@ fn genStruct(gen: *Codegen, name: Typ.Name) !void {
     try gen.print("\n}}", .{});
 }
 
-fn genParam(gen: *Codegen, param: Ast.Param) !TypVal {
-    const typ = try gen.typs.makeTyp(param.typ);
+fn genParam(gen: *Codegen, typ: Typ) !TypVal {
     const tmp = gen.newTmp();
     try gen.print("{f} %{}", .{ typ, tmp });
     return .{ .typ = typ, .val = .{ .tmp = tmp } };
@@ -432,20 +446,27 @@ fn storeInto(gen: *Codegen, tmp: u32, typ_val: TypVal) !void {
 }
 
 fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
+    try gen.fun_queue.append(gen.gpa, .{
+        .name = call.name,
+        .generics = gen.info.calls[call.call_id].generics,
+    });
     var arg_typ_vals = try std.ArrayList(TypVal).initCapacity(gen.gpa, call.args.len);
     defer arg_typ_vals.deinit(gen.gpa);
     for (call.args) |arg| {
         const typ_val = try gen.genExpr(arg);
         try arg_typ_vals.append(gen.gpa, typ_val);
     }
-    const ret_typ = gen.fun_ret_typs.get(call.name).?;
+    const ret_typ = gen.info.calls[call.call_id].ret_typ;
     const ret_tmp = gen.newTmp();
     if (ret_typ != .void) {
         try gen.print("\n  %{} = ", .{ret_tmp});
     } else {
         try gen.print("\n  ", .{});
     }
-    try gen.print("call {f} @{s}(", .{ ret_typ, call.name });
+    try gen.print("call {f} @\"{f}\"(", .{ ret_typ, Typ.Name{
+        .name = call.name,
+        .generics = gen.info.calls[call.call_id].generics,
+    } });
     if (call.args.len != 0) {
         try gen.print("{f}", .{arg_typ_vals.items[0]});
         for (arg_typ_vals.items[1..]) |val| {
@@ -770,7 +791,6 @@ fn print(gen: *Codegen, comptime fmt: []const u8, args: anytype) !void {
 const Error = error{ WriteFailed, OutOfMemory };
 
 fn deinit(gen: *Codegen) void {
-    gen.fun_ret_typs.deinit();
     gen.vars.deinit();
     gen.file.close(gen.io);
     gen.str_lens.deinit(gen.gpa);
@@ -781,6 +801,9 @@ fn deinit(gen: *Codegen) void {
     gen.structs.deinit();
     gen.loop_ends.deinit(gen.gpa);
     gen.struct_queue.deinit(gen.gpa);
+    gen.fun_queue.deinit(gen.gpa);
     gen.generated_structs.deinit();
+    gen.funs.deinit();
+    gen.resolver.map.deinit();
     gen.* = undefined;
 }

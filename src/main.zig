@@ -207,3 +207,7 @@ test "generic_struct.ok" {
 test "slice_elem.ok" {
     try testFile("slice_elem", "6-7...");
 }
+
+test "generic_fun.ok" {
+    try testFile("generic_fun", "six 7\n");
+}

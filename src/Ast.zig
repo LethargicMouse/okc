@@ -11,6 +11,7 @@ pub const ExtFun = struct {
 
 pub const Header = struct {
     name: []const u8,
+    generics: []const []const u8,
     params: []const Param,
     ret_typ: Typ,
     location: Location,
@@ -136,6 +137,7 @@ pub const Declare = struct {
 pub const Call = struct {
     name: []const u8,
     args: []const Expr,
+    call_id: usize,
 };
 
 pub const Elem = struct {
@@ -279,6 +281,7 @@ pub const FieldDecl = struct {
 pub const Info = struct {
     typ_ids: usize,
     struc_ids: usize,
+    call_ids: usize,
 };
 
 pub const Item = union(enum) {

@@ -149,7 +149,7 @@ pub const Typ = union(enum) {
     }
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        const show_lazy = false;
+        const show_lazy = true;
         switch (typ) {
             .prime => |prime| try writer.writeAll(@tagName(prime)),
             .name => |name| {
@@ -173,9 +173,9 @@ pub const Typ = union(enum) {
             ),
             .slice => |inner| try writer.print("[]{f}", .{inner}),
             .lazy => |inner| if (show_lazy) {
-                try writer.print("@lazy<{f}>", .{inner});
+                try writer.print("{*}<{f}>", .{ inner, inner });
             } else {
-                try writer.print("{f}", .{inner});
+                try inner.format(writer);
             },
             .err => try writer.writeAll("<err>"),
             .any => try writer.writeAll("_"),
