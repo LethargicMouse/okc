@@ -34,9 +34,14 @@ pub const Typ = union(enum) {
         generics: []const Typ = &.{},
     };
 
+    pub const Slice = struct {
+        typ: Typ,
+        mutable: bool,
+    };
+
     prime: Prime,
     name: Name,
-    slice: *const Typ,
+    slice: *const Slice,
     ptr: *const Typ,
     mut_ptr: *const Typ,
     array: *const Array,

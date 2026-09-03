@@ -21,10 +21,13 @@ const Resolver = struct {
                     .generics = generics,
                 } };
             },
-            .slice => |ptr| {
-                const new = try resolver.resolve(ptr.*);
-                const new_ptr = try resolver.typs.box(new);
-                return .{ .slice = new_ptr };
+            .slice => |slice| {
+                const new = try resolver.resolve(slice.typ.*);
+                const ptr = try resolver.typs.box(new);
+                return .{ .slice = .{
+                    .typ = ptr,
+                    .mutable = slice.mutable,
+                } };
             },
             .ptr => |ptr| {
                 const new = try resolver.resolve(ptr.typ.*);
@@ -73,9 +76,11 @@ pub const Typ = union(enum) {
                     }
                     return true;
                 },
-                .slice => |aslice| return aslice == b.slice,
+                .slice => |aslice| return aslice.typ == b.slice.typ and
+                    aslice.mutable == b.slice.mutable,
                 // a == b <=> &a == &b due to memo
-                .ptr => |aptr| return aptr.typ == b.ptr.typ and aptr.mutable == b.ptr.mutable,
+                .ptr => |aptr| return aptr.typ == b.ptr.typ and
+                    aptr.mutable == b.ptr.mutable,
                 // a == b <=> &a == &b due to memo
                 .array => |arr| {
                     if (std.mem.eql(u8, arr.len, b.array.len)) {
@@ -108,10 +113,15 @@ pub const Typ = union(enum) {
         mutable: bool,
     };
 
+    pub const Slice = struct {
+        typ: *const Typ,
+        mutable: bool,
+    };
+
     prime: Ast.Prime,
     name: Name,
     ptr: Ptr,
-    slice: *const Typ,
+    slice: Slice,
     array: Array,
     lazy: *Typ,
     any,
@@ -171,7 +181,13 @@ pub const Typ = union(enum) {
                 "[{s}]{f}",
                 .{ array.len, array.typ },
             ),
-            .slice => |inner| try writer.print("[]{f}", .{inner}),
+            .slice => |inner| {
+                try writer.writeAll("[]");
+                if (inner.mutable) {
+                    try writer.writeAll("mut ");
+                }
+                try inner.typ.format(writer);
+            },
             .lazy => |inner| if (show_lazy) {
                 try writer.print("{*}<{f}>", .{ inner, inner });
             } else {
@@ -233,9 +249,12 @@ pub fn deinit(typs: *Typs) void {
 pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
     switch (typ) {
         .slice => |inner| {
-            const new = try typs.makeTyp(inner.*);
+            const new = try typs.makeTyp(inner.typ);
             const ptr = try typs.box(new);
-            return .{ .slice = ptr };
+            return .{ .slice = .{
+                .typ = ptr,
+                .mutable = inner.mutable,
+            } };
         },
         .mut_ptr => |inner| {
             const inner_typ = try typs.makeTyp(inner.*);

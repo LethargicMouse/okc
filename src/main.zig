@@ -211,3 +211,7 @@ test "slice_elem.ok" {
 test "generic_fun.ok" {
     try testFile("generic_fun", "six 7\n");
 }
+
+test "mut_slice.ok" {
+    try testFile("mut_slice", "6 7\n");
+}

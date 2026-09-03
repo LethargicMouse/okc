@@ -1,0 +1,14 @@
+extern fn malloc<T>(size: u64) &T;
+extern fn puts(s: &u8) void;
+
+fn main() i32 {
+  let msg: []mut u8 = .{
+    ptr: malloc(3),
+    len: 3,
+  };
+  msg[0] = '6';
+  msg[1] = ' ';
+  msg[2] = '7';
+  puts(msg.ptr);
+  return 0;
+}

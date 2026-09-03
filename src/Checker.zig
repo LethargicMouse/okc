@@ -45,6 +45,7 @@ const Header = struct {
     params: []const Typ,
     ret_typ: Typ,
     used: bool = false,
+    is_extern: bool,
 };
 
 const Item = struct {
@@ -143,7 +144,7 @@ fn convertTypRec(checker: Checker, typ: Typ) !LlvmTyp {
         },
         .slice => |slice| return checker.convertTypRec(.{ .name = .{
             .name = "[]",
-            .generics = &.{slice.*},
+            .generics = &.{slice.typ.*},
         } }),
         .prime => |prime| return LlvmTyp.fromPrime(prime),
         .ptr => |ptr| {
@@ -186,9 +187,9 @@ fn checkHeaderUsage(checker: *Checker, header: Header, location: Location) void 
 
 fn regItem(checker: *Checker, item: Ast.Item) !void {
     switch (item) {
-        .ext_fun => |ext_fun| try checker.regHeader(ext_fun.header),
+        .ext_fun => |ext_fun| try checker.regHeader(ext_fun.header, true),
         .struc => |struc| try checker.regStruct(struc),
-        .fun => |fun| try checker.regHeader(fun.header),
+        .fun => |fun| try checker.regHeader(fun.header, false),
     }
 }
 
@@ -224,7 +225,7 @@ fn checkMain(checker: *Checker, location: Location) void {
     item.kind.fun.used = true;
 }
 
-fn regHeader(checker: *Checker, header: Ast.Header) !void {
+fn regHeader(checker: *Checker, header: Ast.Header, is_extern: bool) !void {
     if (checker.items.get(header.name)) |prev| {
         checker.failAlreadyDeclared(header.location, header.name, prev.location);
         return;
@@ -240,6 +241,7 @@ fn regHeader(checker: *Checker, header: Ast.Header) !void {
             .generics = header.generics,
             .params = params,
             .ret_typ = ret_typ,
+            .is_extern = is_extern,
         } },
     });
 }
@@ -513,9 +515,9 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location) !ExprInfo {
             .typ = array.typ.*,
             .mutable = info.mutable,
         },
-        .slice => |ptr| return .{
-            .typ = ptr.*,
-            .mutable = false,
+        .slice => |slice| return .{
+            .typ = slice.typ.*,
+            .mutable = slice.mutable,
         },
         .err => return err,
         .prime, .name, .ptr, .any => {
@@ -535,8 +537,8 @@ fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) !void {
         a.ptr.typ.* == .prime and
         a.ptr.typ.prime == .u8 and
         b == .slice and
-        b.slice.* == .prime and
-        b.slice.prime == .u8)
+        b.slice.typ.* == .prime and
+        b.slice.typ.prime == .u8)
     {
         std.log.info("append `.ptr` to get C-style string\n", .{});
     }
@@ -587,14 +589,12 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
             }
             return true;
         },
-        .slice => |aslice| return aslice == b.slice or try canUnify(aslice.*, b.slice.*, active),
+        .slice => |aslice| return aslice.mutable == b.slice.mutable and
+            (aslice.typ == b.slice.typ or try canUnify(aslice.typ.*, b.slice.typ.*, active)),
         .ptr => |aptr| return aptr.mutable == b.ptr.mutable and
-            // a == b <=> &a == &b due to memo
             (aptr.typ == b.ptr.typ or try canUnify(aptr.typ.*, b.ptr.typ.*, active)),
-        // a == b <=> &a == &b due to memo
         .array => |arr| {
             if (std.mem.eql(u8, arr.len, b.array.len)) {
-                // a == b <=> &a == &b due to memo
                 return arr.typ == b.array.typ or try canUnify(arr.typ.*, b.array.typ.*, active);
             }
             return false;
@@ -661,7 +661,10 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr, hint: Typ) Error!ExprInfo {
 fn checkStr(checker: *Checker) !ExprInfo {
     const ptr = try checker.typs.box(.{ .prime = .u8 });
     return .{
-        .typ = .{ .slice = ptr },
+        .typ = .{ .slice = .{
+            .typ = ptr,
+            .mutable = false,
+        } },
         .mutable = false,
     };
 }
@@ -733,7 +736,20 @@ fn checkInferStruc(
             return err;
         },
     };
-    return checker.checkTypedStruc(name, struc.fields, struc.struc_id, location);
+    var info = try checker.checkTypedStruc(
+        name,
+        struc.fields,
+        struc.struc_id,
+        location,
+    );
+    if (std.mem.eql(u8, info.typ.name.name, "[]")) {
+        const ptr = try checker.typs.box(info.typ.name.generics[0]);
+        info.typ = .{ .slice = .{
+            .typ = ptr,
+            .mutable = hint.slice.mutable,
+        } };
+    }
+    return info;
 }
 
 fn checkTypedStruc(
@@ -870,7 +886,7 @@ fn checkField(checker: *Checker, field: Ast.Field, location: Location) !ExprInfo
         },
         .slice => |inner| name = .{
             .name = "[]",
-            .generics = &.{inner.*},
+            .generics = &.{inner.typ.*},
         },
         else => {
             checker.failNotStruct(field.expr.location, info.typ);
@@ -1021,7 +1037,11 @@ fn checkCall(checker: *Checker, call: Ast.Call, location: Location, hint: Typ) !
             target.* = llvm_typ;
         }
     }
-    checker.info.calls[call.call_id].generics = generics;
+    if (header.is_extern) {
+        checker.info.calls[call.call_id].generics = &.{};
+    } else {
+        checker.info.calls[call.call_id].generics = generics;
+    }
     if (try checker.convertTyp(ret_typ, location)) |llvm_typ| {
         checker.info.calls[call.call_id].ret_typ = llvm_typ;
     }

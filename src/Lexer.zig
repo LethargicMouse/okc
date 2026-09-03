@@ -11,6 +11,8 @@ pub const Lexeme = union(enum) {
     int: []const u8,
     str: []const u8,
     char: u8,
+    unclosed_char,
+    invalid_char,
     moreq,
     mor,
     unre,
@@ -54,6 +56,8 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .unclosed_char => "<unclosed char>",
+            .invalid_char => "<invalid char>",
             .moreq => "`>=`",
             .mor => "`>`",
             .unre => "`unreachable`",
@@ -179,8 +183,28 @@ fn lexNext(lexer: *Lexer) ?Token {
 
 fn lexChar(lexer: *Lexer) ?Token {
     const rest = lexer.getRest();
-    if (rest.len >= 3 and rest[0] == '\'' and rest[0] == '\'') {
-        return lexer.makeToken(.{ .char = rest[1] }, 3);
+    if (std.mem.startsWith(u8, rest, "'")) {
+        if (rest.len == 1) {
+            return lexer.makeToken(.unclosed_char, 1);
+        }
+        const c = rest[1];
+        if (c == '\\') {
+            if (rest.len == 2) {
+                return lexer.makeToken(.unclosed_char, 2);
+            }
+            const msc: ?u8 = switch (rest[2]) {
+                'n' => '\n',
+                else => null,
+            };
+            if (rest.len == 3 or rest[3] != '\'') {
+                return lexer.makeToken(.unclosed_char, 3);
+            }
+            const sc = msc orelse {
+                return lexer.makeToken(.invalid_char, 4);
+            };
+            return lexer.makeToken(.{ .char = sc }, 4);
+        }
+        return lexer.makeToken(.{ .char = c }, 3);
     }
     return null;
 }

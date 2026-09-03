@@ -267,10 +267,17 @@ fn parseTypLoud(parser: *Parser) Error!Ast.Typ {
 fn parseSliceTyp(parser: *Parser) !Ast.Typ {
     try parser.expect(.bral);
     try parser.expectLoud(.brar);
+    var mutable = true;
+    parser.expect(.mut) catch |err| switch (err) {
+        error.ParseFailed => mutable = false,
+    };
     const typ = try parser.parseTypLoud();
-    const ptr = try parser.arena.allocator().create(Ast.Typ);
-    ptr.* = typ;
-    return .{ .slice = ptr };
+    const slice = try parser.arena.allocator().create(Ast.Typ.Slice);
+    slice.* = .{
+        .typ = typ,
+        .mutable = mutable,
+    };
+    return .{ .slice = slice };
 }
 
 fn parseGenericTyp(parser: *Parser) !Ast.Typ {
