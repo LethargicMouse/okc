@@ -8,7 +8,10 @@ pub const slice_struct = Ast.Struct{
     .fields = &.{
         .{
             .name = "ptr",
-            .typ = .{ .ptr = t_ptr },
+            .typ = .{ .ptr = .{
+                .typ = &.{ .name = .{ .name = "t" } },
+                .mutable = false,
+            } },
             .location = loc(pos(2, 3), pos(2, 6)),
         },
         .{
@@ -19,8 +22,6 @@ pub const slice_struct = Ast.Struct{
     },
     .location = loc(pos(1, 8), pos(1, 11)),
 };
-
-const t_ptr = &Ast.Typ{ .name = .{ .name = "t" } };
 
 const lines = &.{
     "struct []t {",

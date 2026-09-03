@@ -2,6 +2,8 @@ const std = @import("std");
 
 const builtin = @import("builtin");
 const Lexeme = @import("Lexer.zig").Lexeme;
+pub const Typs = @import("AstTyps.zig");
+pub const Typ = Typs.Typ;
 
 const Location = @import("Location.zig");
 
@@ -21,57 +23,6 @@ pub const Param = struct {
     name: []const u8,
     typ: Typ,
     location: Location,
-};
-
-pub const Typ = union(enum) {
-    pub const Array = struct {
-        len: []const u8,
-        typ: Typ,
-    };
-
-    pub const Name = struct {
-        name: []const u8,
-        generics: []const Typ = &.{},
-    };
-
-    pub const Slice = struct {
-        typ: Typ,
-        mutable: bool,
-    };
-
-    prime: Prime,
-    name: Name,
-    slice: *const Slice,
-    ptr: *const Typ,
-    mut_ptr: *const Typ,
-    array: *const Array,
-
-    pub fn fromName(name: []const u8) Typ {
-        if (std.meta.stringToEnum(Prime, name)) |prime| {
-            return .{ .prime = prime };
-        }
-        return .{ .name = .{ .name = name } };
-    }
-
-    pub fn isVoid(typ: Typ) bool {
-        return typ == .prime and typ.prime == .void;
-    }
-};
-
-pub const Prime = enum {
-    u8,
-    i32,
-    u32,
-    u64,
-    bool,
-    void,
-
-    pub fn isNumber(prime: Prime) bool {
-        switch (prime) {
-            .i32, .u8, .u32, .u64 => return true,
-            .bool, .void => return false,
-        }
-    }
 };
 
 const Block = []const Statement;
@@ -297,12 +248,12 @@ pub const Item = union(enum) {
 
 const Ast = @This();
 
-arena: std.heap.ArenaAllocator,
+typs: Typs,
 items: []const Item,
 strs: []const []const u8,
 location: Location,
 
 pub fn deinit(ast: *Ast) void {
-    ast.arena.deinit();
+    ast.typs.deinit();
     ast.* = undefined;
 }

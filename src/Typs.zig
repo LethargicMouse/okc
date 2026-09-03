@@ -118,7 +118,7 @@ pub const Typ = union(enum) {
         mutable: bool,
     };
 
-    prime: Ast.Prime,
+    prime: Ast.Typ.Prime,
     name: Name,
     ptr: Ptr,
     slice: Slice,
@@ -249,19 +249,11 @@ pub fn deinit(typs: *Typs) void {
 pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
     switch (typ) {
         .slice => |inner| {
-            const new = try typs.makeTyp(inner.typ);
+            const new = try typs.makeTyp(inner.typ.*);
             const ptr = try typs.box(new);
             return .{ .slice = .{
                 .typ = ptr,
                 .mutable = inner.mutable,
-            } };
-        },
-        .mut_ptr => |inner| {
-            const inner_typ = try typs.makeTyp(inner.*);
-            const ptr = try typs.box(inner_typ);
-            return .{ .ptr = .{
-                .typ = ptr,
-                .mutable = true,
             } };
         },
         .prime => |prime| return .{ .prime = prime },
@@ -276,15 +268,15 @@ pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
             } };
         },
         .ptr => |inner| {
-            const inner_typ = try typs.makeTyp(inner.*);
+            const inner_typ = try typs.makeTyp(inner.typ.*);
             const ptr = try typs.box(inner_typ);
             return .{ .ptr = .{
                 .typ = ptr,
-                .mutable = false,
+                .mutable = inner.mutable,
             } };
         },
         .array => |array| {
-            const inner_typ = try typs.makeTyp(array.typ);
+            const inner_typ = try typs.makeTyp(array.typ.*);
             const ptr = try typs.box(inner_typ);
             return .{ .array = .{
                 .len = array.len,

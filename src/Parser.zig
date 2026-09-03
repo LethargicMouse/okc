@@ -70,7 +70,7 @@ const Parser = @This();
 
 gpa: std.mem.Allocator,
 tokens: []const Lexer.Token,
-arena: std.heap.ArenaAllocator,
+typs: Ast.Typs,
 err_msgs: ErrMsgs = .empty,
 strs: std.ArrayList([]const u8) = .empty,
 cursor: usize = 0,
@@ -80,19 +80,17 @@ next_struc_id: usize = 0,
 next_call_id: usize = 0,
 
 pub fn init(gpa: std.mem.Allocator, tokens: []const Lexer.Token) Parser {
-    const arena = std.heap.ArenaAllocator.init(gpa);
     return .{
         .gpa = gpa,
         .tokens = tokens,
-        .arena = arena,
+        .typs = .init(gpa),
     };
 }
 
 pub fn run(parser: *Parser) !struct { Ast, Ast.Info } {
     defer parser.deinit();
+    errdefer parser.typs.deinit();
     const ast = try parser.parseMaybe(Ast, parseAst) orelse {
-        // arena is not passed to ast, freeing it
-        parser.arena.deinit();
         std.log.err("failed to parse {f}\n{f}\n        found  {s}", .{
             parser.tokens[parser.err_cursor].location,
             parser.err_msgs,
@@ -118,10 +116,10 @@ fn parseAst(parser: *Parser) !Ast {
     const items = try parser.parseMany(Ast.Item, parseItemLoud);
     const location = parser.getLocation();
     try parser.expectLoud(.eof);
-    const strs = try parser.arena.allocator().alloc([]const u8, parser.strs.items.len);
+    const strs = try parser.typs.arena.allocator().alloc([]const u8, parser.strs.items.len);
     @memcpy(strs, parser.strs.items);
     return .{
-        .arena = parser.arena,
+        .typs = parser.typs,
         .items = items,
         .strs = strs,
         .location = location,
@@ -233,7 +231,7 @@ fn parseSep(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) ![]const 
             } else break;
         }
     }
-    const slice = try parser.arena.allocator().alloc(typ, vec.items.len);
+    const slice = try parser.typs.arena.allocator().alloc(typ, vec.items.len);
     @memcpy(slice, vec.items);
     return slice;
 }
@@ -272,12 +270,11 @@ fn parseSliceTyp(parser: *Parser) !Ast.Typ {
         error.ParseFailed => mutable = false,
     };
     const typ = try parser.parseTypLoud();
-    const slice = try parser.arena.allocator().create(Ast.Typ.Slice);
-    slice.* = .{
-        .typ = typ,
+    const ptr = try parser.typs.box(typ);
+    return .{ .slice = .{
+        .typ = ptr,
         .mutable = mutable,
-    };
-    return .{ .slice = slice };
+    } };
 }
 
 fn parseGenericTyp(parser: *Parser) !Ast.Typ {
@@ -296,10 +293,11 @@ fn parseArrayTyp(parser: *Parser) !Ast.Typ {
     const len = try parser.parseInt();
     try parser.expectLoud(.brar);
     const typ = try parser.parseTypLoud();
-    const array_typ = try parser.arena.allocator().create(Ast.Typ.Array);
-    array_typ.len = len;
-    array_typ.typ = typ;
-    return .{ .array = array_typ };
+    const ptr = try parser.typs.box(typ);
+    return .{ .array = .{
+        .len = len,
+        .typ = ptr,
+    } };
 }
 
 fn parseEither(parser: *Parser, typ: type, comptime parses: anytype) !typ {
@@ -315,17 +313,21 @@ fn parseMutPtrTyp(parser: *Parser) !Ast.Typ {
     try parser.expect(.amp);
     try parser.expect(.mut);
     const typ = try parser.parseTypLoud();
-    const ptr = try parser.arena.allocator().create(Ast.Typ);
-    ptr.* = typ;
-    return .{ .mut_ptr = ptr };
+    const ptr = try parser.typs.box(typ);
+    return .{ .ptr = .{
+        .typ = ptr,
+        .mutable = true,
+    } };
 }
 
 fn parsePtrTyp(parser: *Parser) !Ast.Typ {
     try parser.expect(.amp);
     const typ = try parser.parseTypLoud();
-    const ptr = try parser.arena.allocator().create(Ast.Typ);
-    ptr.* = typ;
-    return .{ .ptr = ptr };
+    const ptr = try parser.typs.box(typ);
+    return .{ .ptr = .{
+        .typ = ptr,
+        .mutable = false,
+    } };
 }
 
 fn parseVerbalTyp(parser: *Parser) !Ast.Typ {
@@ -339,7 +341,7 @@ fn parseMany(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) ![]const
     while (try parser.parseMaybe(typ, parse)) |item| {
         try vec.append(parser.gpa, item);
     }
-    const slice = try parser.arena.allocator().alloc(typ, vec.items.len);
+    const slice = try parser.typs.arena.allocator().alloc(typ, vec.items.len);
     @memcpy(slice, vec.items);
     return slice;
 }
@@ -619,7 +621,7 @@ fn parseExpr(parser: *Parser) !Ast.Expr {
 fn parseExprPrior(parser: *Parser, prior: u8, loud: bool) Error!Ast.Expr {
     var res = try parser.parseExprPosted(loud);
     while (try parser.parseBinPostfix(prior)) |bin_postfix| {
-        const binary = try parser.arena.allocator().create(Ast.Binary);
+        const binary = try parser.typs.arena.allocator().create(Ast.Binary);
         binary.* = .{
             .left = res,
             .kind = bin_postfix.kind,
@@ -668,7 +670,7 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
     while (try parser.parseMaybe(Postfix, parsePostfix)) |postfix| {
         switch (postfix) {
             .field => |field_postfix| {
-                const field = try parser.arena.allocator().create(Ast.Field);
+                const field = try parser.typs.arena.allocator().create(Ast.Field);
                 field.* = .{
                     .expr = res,
                     .name = field_postfix.name,
@@ -680,7 +682,7 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
                 };
             },
             .elem => |elem_postfix| {
-                const elem = try parser.arena.allocator().create(Ast.Elem);
+                const elem = try parser.typs.arena.allocator().create(Ast.Elem);
                 elem.expr = res;
                 elem.index = elem_postfix.index;
                 res = .{
@@ -752,7 +754,7 @@ fn parseUnaryExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     const kind = try parser.parseUnaryOp();
     const expr = try parser.parseExprPostedLoud();
-    const unary = try parser.arena.allocator().create(Ast.Unary);
+    const unary = try parser.typs.arena.allocator().create(Ast.Unary);
     unary.* = .{
         .kind = kind,
         .expr = expr,

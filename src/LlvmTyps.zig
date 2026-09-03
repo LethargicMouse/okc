@@ -123,7 +123,7 @@ pub const Typ = union(enum) {
         }
     }
 
-    pub fn fromPrime(prime: Ast.Prime) Typ {
+    pub fn fromPrime(prime: Ast.Typ.Prime) Typ {
         switch (prime) {
             .i32 => return .i32,
             .u8 => return .i8,
@@ -182,7 +182,7 @@ pub fn init(gpa: std.mem.Allocator) LlvmTyps {
 pub fn makeTyp(typs: *LlvmTyps, typ: Ast.Typ) !Typ {
     switch (typ) {
         .slice => |inner| {
-            const new = try typs.makeTyp(inner.typ);
+            const new = try typs.makeTyp(inner.typ.*);
             const generics = try typs.arena.allocator().alloc(Typ, 1);
             generics[0] = new;
             return .{ .name = .{
@@ -202,17 +202,12 @@ pub fn makeTyp(typs: *LlvmTyps, typ: Ast.Typ) !Typ {
         },
         .prime => |prime| return Typ.fromPrime(prime),
         .ptr => |ptr| {
-            const inner = try typs.makeTyp(ptr.*);
-            const new = try typs.box(inner);
-            return .{ .ptr = new };
-        },
-        .mut_ptr => |ptr| {
-            const inner = try typs.makeTyp(ptr.*);
+            const inner = try typs.makeTyp(ptr.typ.*);
             const new = try typs.box(inner);
             return .{ .ptr = new };
         },
         .array => |array| {
-            const inner = try typs.makeTyp(array.typ);
+            const inner = try typs.makeTyp(array.typ.*);
             const new = try typs.box(inner);
             return .{ .array = .{
                 .len = array.len,
