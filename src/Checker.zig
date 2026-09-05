@@ -34,14 +34,12 @@ const Var = struct {
     can_be_mutable: bool,
     mutable: bool,
     mutated: bool = false,
-    used: bool = false,
 };
 
 const Header = struct {
     generics: []const []const u8,
     params: []const Typ,
     ret_typ: Typ,
-    used: bool = false,
     is_extern: bool,
 };
 
@@ -61,6 +59,7 @@ const Item = struct {
     };
     kind: Kind,
     location: Location,
+    used: bool = false,
 };
 
 const Checker = @This();
@@ -174,16 +173,17 @@ fn convertTypRec(checker: Checker, typ: Typ) !Ast.Typ {
 fn checkItems(checker: *Checker) void {
     var iter = checker.items.valueIterator();
     while (iter.next()) |item| {
+        checker.checkUsage(item.used, item.location);
         switch (item.kind) {
-            .fun => |header| checker.checkHeaderUsage(header, item.location),
+            .fun => {},
             .vari => unreachable,
             .struc => {},
         }
     }
 }
 
-fn checkHeaderUsage(checker: *Checker, header: Header, location: Location) void {
-    if (!header.used) {
+fn checkUsage(checker: *Checker, used: bool, location: Location) void {
+    if (!used) {
         checker.failUnused(location);
     }
 }
@@ -204,8 +204,8 @@ fn checkItem(checker: *Checker, item: Ast.Item) !void {
     }
 }
 
-fn checkVarUsage(checker: *Checker, vari: Var, location: Location) void {
-    if (!vari.used) {
+fn checkVarUsage(checker: *Checker, vari: Var, used: bool, location: Location) void {
+    if (!used) {
         checker.failUnused(location);
     } else if (vari.mutable and !vari.mutated) {
         checker.fail(location, "variable is never mutated", .{});
@@ -225,7 +225,7 @@ fn checkMain(checker: *Checker, location: Location) void {
     if (item.kind != .fun) {
         checker.fail(item.location, "item `main` is not a function", .{});
     }
-    item.kind.fun.used = true;
+    item.used = true;
 }
 
 fn regHeader(checker: *Checker, header: Ast.Header, is_extern: bool) !void {
@@ -235,9 +235,9 @@ fn regHeader(checker: *Checker, header: Ast.Header, is_extern: bool) !void {
     }
     const params = try checker.typs.arena.allocator().alloc(Typ, header.params.len);
     for (header.params, 0..) |param, i| {
-        params[i] = try checker.typs.makeTyp(param.typ);
+        params[i] = try checker.checkTyp(param.typ);
     }
-    const ret_typ = try checker.typs.makeTyp(header.ret_typ);
+    const ret_typ = try checker.checkTyp(header.ret_typ);
     try checker.items.put(header.name, .{
         .location = header.location,
         .kind = .{ .fun = .{
@@ -276,7 +276,7 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
             checker.failAlreadyDeclared(field.location, field.name, prev.location);
             continue;
         }
-        const typ = try checker.typs.makeTyp(field.typ);
+        const typ = try checker.checkTyp(field.typ);
         try res.fields.put(field.name, .{
             .location = field.location,
             .typ = typ,
@@ -300,7 +300,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
         try checker.items.put(param.name, .{
             .location = param.location,
             .kind = .{ .vari = .{
-                .typ = try checker.typs.makeTyp(param.typ),
+                .typ = try checker.checkTyp(param.typ),
                 .mutable = false,
                 .can_be_mutable = false,
             } },
@@ -334,8 +334,8 @@ fn checkBlock(checker: *Checker, block: []const Ast.Statement) !ControlFlow {
 
 fn freeVars(checker: *Checker, rbp: usize) void {
     for (checker.vars_stack.items[rbp..]) |name| {
-        const kv = checker.items.fetchRemove(name).?.value;
-        checker.checkVarUsage(kv.kind.vari, kv.location);
+        const item = checker.items.fetchRemove(name).?.value;
+        checker.checkVarUsage(item.kind.vari, item.used, item.location);
     }
     checker.vars_stack.shrinkRetainingCapacity(rbp);
 }
@@ -611,7 +611,7 @@ fn checkDeclare(
 ) !ControlFlow {
     var decl_typ: Typ = .any;
     if (declare.typ) |typ_decl| {
-        decl_typ = try checker.typs.makeTyp(typ_decl);
+        decl_typ = try checker.checkTyp(typ_decl);
     }
     var info = try checker.checkExpr(declare.expr, decl_typ);
     try checker.unify(declare.expr.location, decl_typ, info.typ);
@@ -1051,7 +1051,7 @@ fn checkVar(checker: *Checker, location: Location, name: []const u8) ExprInfo {
         },
         .vari => |*vari| vari,
     };
-    vari.used = true;
+    item.used = true;
     return .{
         .typ = vari.typ,
         .mutable = vari.mutable,
@@ -1085,7 +1085,7 @@ fn checkCall(checker: *Checker, call: Ast.Call, location: Location, hint: Typ) !
         },
         .fun => |*header| header,
     };
-    header.used = true;
+    item.used = true;
     var resolver = checker.typs.makeResolver(checker.gpa);
     defer resolver.map.deinit();
     for (header.generics) |generic| {
@@ -1149,4 +1149,54 @@ fn deinit(checker: *Checker) void {
 fn fail(checker: *Checker, location: Location, comptime msg: []const u8, args: anytype) void {
     std.log.err("in {f}\n     " ++ msg ++ "\n", .{location} ++ args);
     checker.errors_cnt += 1;
+}
+
+pub fn checkTypDecl(checker: *Checker, name: Ast.Typ.Name) void {
+    const item = checker.items.getPtr(name.name) orelse return;
+    switch (item.kind) {
+        .fun, .vari => return,
+        .struc => {},
+    }
+    item.used = true;
+}
+
+pub fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
+    switch (typ) {
+        .slice => |inner| {
+            const new = try checker.checkTyp(inner.typ.*);
+            const ptr = try checker.typs.box(new);
+            return .{ .slice = .{
+                .typ = ptr,
+                .mutable = inner.mutable,
+            } };
+        },
+        .prime => |prime| return .{ .prime = prime },
+        .name => |name| {
+            checker.checkTypDecl(name);
+            const generics = try checker.typs.arena.allocator().alloc(Typ, name.generics.len);
+            for (generics, name.generics) |*target, generic| {
+                target.* = try checker.checkTyp(generic);
+            }
+            return .{ .name = .{
+                .name = name.name,
+                .generics = generics,
+            } };
+        },
+        .ptr => |inner| {
+            const inner_typ = try checker.checkTyp(inner.typ.*);
+            const ptr = try checker.typs.box(inner_typ);
+            return .{ .ptr = .{
+                .typ = ptr,
+                .mutable = inner.mutable,
+            } };
+        },
+        .array => |array| {
+            const inner_typ = try checker.checkTyp(array.typ.*);
+            const ptr = try checker.typs.box(inner_typ);
+            return .{ .array = .{
+                .len = array.len,
+                .typ = ptr,
+            } };
+        },
+    }
 }

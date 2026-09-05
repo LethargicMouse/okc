@@ -246,46 +246,6 @@ pub fn deinit(typs: *Typs) void {
     typs.* = undefined;
 }
 
-pub fn makeTyp(typs: *Typs, typ: Ast.Typ) !Typ {
-    switch (typ) {
-        .slice => |inner| {
-            const new = try typs.makeTyp(inner.typ.*);
-            const ptr = try typs.box(new);
-            return .{ .slice = .{
-                .typ = ptr,
-                .mutable = inner.mutable,
-            } };
-        },
-        .prime => |prime| return .{ .prime = prime },
-        .name => |name| {
-            const generics = try typs.arena.allocator().alloc(Typ, name.generics.len);
-            for (generics, name.generics) |*target, generic| {
-                target.* = try typs.makeTyp(generic);
-            }
-            return .{ .name = .{
-                .name = name.name,
-                .generics = generics,
-            } };
-        },
-        .ptr => |inner| {
-            const inner_typ = try typs.makeTyp(inner.typ.*);
-            const ptr = try typs.box(inner_typ);
-            return .{ .ptr = .{
-                .typ = ptr,
-                .mutable = inner.mutable,
-            } };
-        },
-        .array => |array| {
-            const inner_typ = try typs.makeTyp(array.typ.*);
-            const ptr = try typs.box(inner_typ);
-            return .{ .array = .{
-                .len = array.len,
-                .typ = ptr,
-            } };
-        },
-    }
-}
-
 pub fn box(typs: *Typs, typ: Typ) !*const Typ {
     if (typs.memo.get(typ)) |res| {
         return res;
