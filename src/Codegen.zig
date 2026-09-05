@@ -1,10 +1,38 @@
 const std = @import("std");
 
 const Ast = @import("Ast.zig");
-const builtin = @import("builtin.zig");
+const Typ = Ast.Typ;
+const HashContext = @import("hash_context.zig").HashContext;
 const Info = @import("Info.zig");
-const LlvmTyps = @import("LlvmTyps.zig");
-const Typ = LlvmTyps.Typ;
+
+const LlvmTyp = struct {
+    inner: Typ,
+
+    pub fn format(typ: LlvmTyp, writer: *std.Io.Writer) !void {
+        switch (typ.inner) {
+            .prime => |prime| {
+                const s = switch (prime) {
+                    .u8 => "i8",
+                    .i32 => "i32",
+                    .u32 => "i32",
+                    .u64 => "i64",
+                    .bool => "i1",
+                    .void => "void",
+                };
+                try writer.writeAll(s);
+            },
+            .array => |array| {
+                try writer.print("[{s} x {f}]", .{
+                    array.len,
+                    LlvmTyp{ .inner = array.typ.* },
+                });
+            },
+            .slice => try writer.writeAll("%\"[]\""),
+            .ptr => try writer.writeAll("ptr"),
+            .name => try writer.print("%\"{f}\"", .{typ.inner}),
+        }
+    }
+};
 
 const Unescaped = struct { len: usize, repr: []const u8 };
 
@@ -16,12 +44,12 @@ const TypVal = struct {
         typ_val: TypVal,
         writer: *std.Io.Writer,
     ) std.Io.Writer.Error!void {
-        try writer.print("{f} {f}", .{ typ_val.typ, typ_val.val });
+        try writer.print("{f} {f}", .{ LlvmTyp{ .inner = typ_val.typ }, typ_val.val });
     }
 
     pub fn int(n: u64) TypVal {
         return .{
-            .typ = .i32,
+            .typ = .{ .prime = .i32 },
             .val = .{ .int = n },
         };
     }
@@ -66,7 +94,7 @@ info: Info,
 file: std.Io.File,
 writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
-typs: *LlvmTyps,
+typs: *Ast.Typs,
 vars: std.StringHashMap(Ref),
 structs: std.StringHashMap(Struct),
 funs: std.StringHashMap(Ast.Fun),
@@ -74,14 +102,19 @@ str_lens: std.ArrayList(usize) = .empty,
 loop_ends: std.ArrayList(u32) = .empty,
 struct_queue: std.ArrayList(Typ.Name) = .empty,
 fun_queue: std.ArrayList(Typ.Name) = .empty,
-generated_structs: std.HashMap(Typ, void, Typ.HashContext, std.hash_map.default_max_load_percentage),
-resolver: LlvmTyps.Resolver,
+generated_structs: std.HashMap(
+    Typ,
+    void,
+    HashContext(Typ),
+    std.hash_map.default_max_load_percentage,
+),
+resolver: Ast.Typs.Resolver,
 next_tmp: u32 = 0,
 
 pub fn init(
     io: std.Io,
     gpa: std.mem.Allocator,
-    llvm_typs: *LlvmTyps,
+    ast_typs: *Ast.Typs,
     write_buf: []u8,
     path: []const u8,
     info: Info,
@@ -90,10 +123,10 @@ pub fn init(
     return .{
         .io = io,
         .gpa = gpa,
-        .typs = llvm_typs,
+        .typs = ast_typs,
         .info = info,
         .file = file,
-        .resolver = llvm_typs.makeResolver(gpa),
+        .resolver = ast_typs.makeResolver(gpa),
         .writer = file.writer(io, write_buf),
         .vars = .init(gpa),
         .structs = .init(gpa),
@@ -110,7 +143,7 @@ pub fn run(gen: *Codegen, ast: Ast) !void {
 
 fn genAst(gen: *Codegen, ast: Ast) !void {
     try gen.print("target triple = \"x86_64-pc-linux-gnu\"", .{});
-    try gen.regAndGenStrStruct();
+    try gen.genSliceDecl();
     for (ast.strs, 0..) |str, i| {
         const len = try gen.genStrDecl(i, str);
         try gen.str_lens.append(gen.gpa, len);
@@ -151,31 +184,24 @@ fn regStruct(gen: *Codegen, struc: Ast.Struct) !void {
         .fields = std.StringHashMap(Field).init(gen.gpa),
     };
     for (struc.fields, 0..) |field, i| {
-        const typ = try gen.typs.makeTyp(field.typ);
         try res.fields.put(field.name, .{
-            .typ = typ,
+            .typ = field.typ,
             .index = i,
         });
     }
     try gen.structs.put(struc.name, res);
 }
 
-fn regAndGenStrStruct(gen: *Codegen) !void {
-    try gen.regStruct(builtin.slice_struct);
-    try gen.genStruct(.{
-        .name = "[]",
-        .generics = &.{.i8},
-    });
+fn genSliceDecl(gen: *Codegen) !void {
+    try gen.print("%\"[]\" = type {{ ptr, i64 }}", .{});
 }
 
 fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
     try gen.print("\ndeclare i32 @{s}(", .{ext_fun.header.name});
     if (ext_fun.header.params.len != 0) {
-        const first_typ = try gen.typs.makeTyp(ext_fun.header.params[0].typ);
-        try gen.print("{f}", .{first_typ});
+        try gen.print("{f}", .{LlvmTyp{ .inner = ext_fun.header.params[0].typ }});
         for (ext_fun.header.params[1..]) |param| {
-            const typ = try gen.typs.makeTyp(param.typ);
-            try gen.print(", {f}", .{typ});
+            try gen.print(", {f}", .{LlvmTyp{ .inner = param.typ }});
         }
     }
     try gen.print(")", .{});
@@ -228,11 +254,10 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
 
 fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
     gen.buffer = .empty; // to generate types first
-    const ret_typ = try gen.typs.makeTyp(fun.header.ret_typ);
-    const ret_resolved = try gen.resolver.resolve(ret_typ);
+    const ret_resolved = try gen.resolver.resolve(fun.header.ret_typ);
     try gen.print(
         "\ndefine {f} @\"{f}\"(",
-        .{ ret_resolved, Typ.Name{
+        .{ LlvmTyp{ .inner = ret_resolved }, Typ.Name{
             .name = fun.header.name,
             .generics = generics,
         } },
@@ -240,13 +265,11 @@ fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
     var param_typ_vals = try gen.gpa.alloc(TypVal, fun.header.params.len);
     defer gen.gpa.free(param_typ_vals);
     if (fun.header.params.len != 0) {
-        const first = try gen.typs.makeTyp(fun.header.params[0].typ);
-        const first_resolved = try gen.resolver.resolve(first);
+        const first_resolved = try gen.resolver.resolve(fun.header.params[0].typ);
         param_typ_vals[0] = try gen.genParam(first_resolved);
         for (param_typ_vals[1..], fun.header.params[1..]) |*target, param| {
             try gen.print(", ", .{});
-            const typ = try gen.typs.makeTyp(param.typ);
-            const resolved = try gen.resolver.resolve(typ);
+            const resolved = try gen.resolver.resolve(param.typ);
             target.* = try gen.genParam(resolved);
         }
     }
@@ -264,7 +287,7 @@ fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
     for (fun.body) |statement| {
         try gen.genStatement(statement);
     }
-    if (ret_typ == .void) {
+    if (fun.header.ret_typ == .prime and fun.header.ret_typ.prime == .void) {
         try gen.genRet(.{ .expr = null });
     } else {
         try gen.genUnreachable();
@@ -291,7 +314,7 @@ fn genStruct(gen: *Codegen, name: Typ.Name) !void {
     if (was.found_existing) {
         return;
     }
-    try gen.print("\n{f} = type {{", .{Typ{ .name = name }});
+    try gen.print("\n%\"{f}\" = type {{", .{name});
     const struc = gen.structs.get(name.name).?;
     const fields = try gen.gpa.alloc(Typ, struc.fields.count());
     defer gen.gpa.free(fields);
@@ -305,9 +328,9 @@ fn genStruct(gen: *Codegen, name: Typ.Name) !void {
         while (iter.next()) |field| {
             fields[field.index] = try resolver.resolve(field.typ);
         }
-        try gen.print("\n  {f}", .{fields[0]});
+        try gen.print("\n  {f}", .{LlvmTyp{ .inner = fields[0] }});
         for (fields[1..]) |field| {
-            try gen.print(",\n  {f}", .{field});
+            try gen.print(",\n  {f}", .{LlvmTyp{ .inner = field }});
         }
     }
     try gen.print("\n}}", .{});
@@ -315,7 +338,7 @@ fn genStruct(gen: *Codegen, name: Typ.Name) !void {
 
 fn genParam(gen: *Codegen, typ: Typ) !TypVal {
     const tmp = gen.newTmp();
-    try gen.print("{f} %{}", .{ typ, tmp });
+    try gen.print("{f} %{}", .{ LlvmTyp{ .inner = typ }, tmp });
     return .{ .typ = typ, .val = .{ .tmp = tmp } };
 }
 
@@ -436,7 +459,7 @@ fn toStack(gen: *Codegen, typ_val: TypVal) !Ref {
         try gen.struct_queue.append(gen.gpa, typ_val.typ.name);
     }
     const tmp = gen.newTmp();
-    try gen.print("\n  %{} = alloca {f}", .{ tmp, typ_val.typ });
+    try gen.print("\n  %{} = alloca {f}", .{ tmp, LlvmTyp{ .inner = typ_val.typ } });
     try gen.storeInto(tmp, typ_val);
     return .{ .tmp = tmp, .inner_typ = typ_val.typ };
 }
@@ -458,12 +481,12 @@ fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
     }
     const ret_typ = gen.info.calls[call.call_id].ret_typ;
     const ret_tmp = gen.newTmp();
-    if (ret_typ != .void) {
+    if (ret_typ != .prime or ret_typ.prime != .void) {
         try gen.print("\n  %{} = ", .{ret_tmp});
     } else {
         try gen.print("\n  ", .{});
     }
-    try gen.print("call {f} @\"{f}\"(", .{ ret_typ, Typ.Name{
+    try gen.print("call {f} @\"{f}\"(", .{ LlvmTyp{ .inner = ret_typ }, Typ.Name{
         .name = call.name,
         .generics = gen.info.calls[call.call_id].generics,
     } });
@@ -520,9 +543,8 @@ fn genUnary(gen: *Codegen, unary: Ast.Unary) !TypVal {
 
 fn genDerefRef(gen: *Codegen, expr: Ast.Expr) !Ref {
     const typ_val = try gen.genExpr(expr);
-    const typ = typ_val.typ.ptr.*;
     return .{
-        .inner_typ = typ,
+        .inner_typ = typ_val.typ.ptr.typ.*,
         .tmp = typ_val.val.tmp,
     };
 }
@@ -554,7 +576,10 @@ fn genPtr(gen: *Codegen, expr: Ast.Expr) !TypVal {
     const vari = try gen.genExprRef(expr);
     const typ = try gen.typs.box(vari.inner_typ);
     return .{
-        .typ = .{ .ptr = typ },
+        .typ = .{ .ptr = .{
+            .typ = typ,
+            .mutable = false,
+        } },
         .val = .{ .tmp = vari.tmp },
     };
 }
@@ -566,10 +591,19 @@ fn genUndef(gen: *Codegen, undef: Ast.Undef) !TypVal {
 
 fn genFieldRef(gen: *Codegen, field: Ast.Field) !Ref {
     var vari = try gen.genExprRef(field.expr);
+    if (vari.inner_typ == .slice) {
+        const index: usize = if (std.mem.eql(u8, field.name, "ptr")) 0 else 1;
+        const tmp = try gen.genGEP(vari, .int(index));
+        const typ = gen.info.typs[field.typ_id];
+        return .{
+            .inner_typ = typ,
+            .tmp = tmp,
+        };
+    }
     if (vari.inner_typ == .ptr) {
         const tmp = try gen.load(vari);
         vari = .{
-            .inner_typ = vari.inner_typ.ptr.*,
+            .inner_typ = vari.inner_typ.ptr.typ.*,
             .tmp = tmp,
         };
     }
@@ -596,21 +630,22 @@ fn genElemRef(gen: *Codegen, elem: Ast.Elem) !Ref {
                 .tmp = tmp,
             };
         },
-        .name => |name| {
-            std.debug.assert(std.mem.eql(u8, name.name, "[]"));
+        .slice => |slice| {
             const ptrptr = try gen.genGEP(ref, .int(0));
-            const typ = try gen.typs.box(name.generics[0]);
             const ptr = try gen.load(.{
-                .inner_typ = .{ .ptr = typ },
+                .inner_typ = .{ .ptr = .{
+                    .typ = slice.typ,
+                    .mutable = false,
+                } },
                 .tmp = ptrptr,
             });
             const tmp = gen.newTmp();
             try gen.print(
                 "\n  %{} = getelementptr {f}, ptr %{}, {f}",
-                .{ tmp, typ, ptr, index },
+                .{ tmp, LlvmTyp{ .inner = slice.typ.* }, ptr, index },
             );
             return .{
-                .inner_typ = typ.*,
+                .inner_typ = slice.typ.*,
                 .tmp = tmp,
             };
         },
@@ -622,7 +657,7 @@ fn genGEP(gen: *Codegen, ref: Ref, index: TypVal) !u32 {
     const tmp = gen.newTmp();
     try gen.print(
         "\n  %{} = getelementptr inbounds {f}, ptr %{}, i32 0, {f}",
-        .{ tmp, ref.inner_typ, ref.tmp, index },
+        .{ tmp, LlvmTyp{ .inner = ref.inner_typ }, ref.tmp, index },
     );
     return tmp;
 }
@@ -670,7 +705,7 @@ fn load(gen: *Codegen, vari: Ref) !u32 {
     const to = gen.newTmp();
     try gen.print(
         "\n  %{} = load {f}, ptr %{}",
-        .{ to, vari.inner_typ, vari.tmp },
+        .{ to, LlvmTyp{ .inner = vari.inner_typ }, vari.tmp },
     );
     return to;
 }
@@ -686,13 +721,16 @@ fn genInt(gen: Codegen, int: Ast.Int) TypVal {
 
 fn genChar(char: u8) TypVal {
     return .{
-        .typ = .i8,
+        .typ = .{ .prime = .u8 },
         .val = .{ .int = char },
     };
 }
 
 fn genBool(boo: bool) TypVal {
-    return .{ .typ = .i1, .val = .{ .int = @intFromBool(boo) } };
+    return .{
+        .typ = .{ .prime = .bool },
+        .val = .{ .int = @intFromBool(boo) },
+    };
 }
 
 fn genStr(gen: *Codegen, str: usize) !TypVal {
@@ -701,34 +739,36 @@ fn genStr(gen: *Codegen, str: usize) !TypVal {
     const tmp = gen.newTmp();
     try gen.print(
         \\
-        \\  %{} = insertvalue %"[]<i8>" poison, ptr @.s{}, 0
-        \\  %{} = insertvalue %"[]<i8>" %{}, i64 {}, 1
+        \\  %{} = insertvalue %"[]" poison, ptr @.s{}, 0
+        \\  %{} = insertvalue %"[]" %{}, i64 {}, 1
     , .{ tmp1, str, tmp, tmp1, len });
 
     return .{
-        .typ = .{ .name = .{
-            .name = "[]",
-            .generics = &.{.i8},
+        .typ = .{ .slice = .{
+            .typ = try gen.typs.box(.{ .prime = .u8 }),
+            .mutable = false,
         } },
         .val = .{ .tmp = tmp },
     };
 }
 
 fn genStructExpr(gen: *Codegen, struc: Ast.InferStruct) !TypVal {
-    const name = gen.info.strucs[struc.struc_id];
+    const typ = gen.info.strucs[struc.struc_id];
     var val: Val = .undef;
     for (struc.fields, 0..) |field, i| {
         const typ_val = try gen.genExpr(field.expr);
         const tmp = gen.newTmp();
         try gen.print(
             "\n  %{} = insertvalue {f} {f}, {f}, {d}",
-            .{ tmp, Typ{ .name = name }, val, typ_val, i },
+            .{ tmp, LlvmTyp{ .inner = typ }, val, typ_val, i },
         );
         val = .{ .tmp = tmp };
     }
-    try gen.struct_queue.append(gen.gpa, name);
+    if (typ == .name) {
+        try gen.struct_queue.append(gen.gpa, typ.name);
+    }
     return .{
-        .typ = .{ .name = name },
+        .typ = typ,
         .val = val,
     };
 }
@@ -756,7 +796,7 @@ fn genBinary(gen: *Codegen, binary: Ast.Binary) !TypVal {
 fn binOpRetTyp(kind: Ast.Binary.Kind, child_typ: Typ) Typ {
     switch (kind) {
         .sub, .add, .mul, .div, .rem, .andb, .orb => return child_typ,
-        .equ, .les, .moreq => return .i1,
+        .equ, .les, .moreq => return .{ .prime = .bool },
     }
 }
 

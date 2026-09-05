@@ -159,7 +159,7 @@ pub const Typ = union(enum) {
     }
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        const show_lazy = true;
+        const show_lazy = false;
         switch (typ) {
             .prime => |prime| try writer.writeAll(@tagName(prime)),
             .name => |name| {

@@ -1,4 +1,4 @@
-extern fn malloc<T>(size: u64) &T;
+extern fn malloc<T>(size: u64) &mut T;
 extern fn puts(s: &u8) void;
 
 fn main() i32 {

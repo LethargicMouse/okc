@@ -3,7 +3,6 @@ const std = @import("std");
 const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
 const Lexer = @import("Lexer.zig");
-const LlvmTyps = @import("LlvmTyps.zig");
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
 
@@ -49,10 +48,7 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     defer ast.deinit();
     const ast_info = parse_result[1];
 
-    var llvm_typs = LlvmTyps.init(gpa);
-    defer llvm_typs.deinit();
-
-    var checker = try Checker.init(gpa, &llvm_typs, ast_info);
+    var checker = try Checker.init(gpa, &ast.typs, ast_info);
     const info = try checker.run(ast);
 
     try std.Io.Dir.cwd().createDirPath(io, build_dir_path);
@@ -61,7 +57,7 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var gen = try Codegen.init(
         io,
         gpa,
-        &llvm_typs,
+        &ast.typs,
         &write_buf,
         out_ll_path,
         info,
