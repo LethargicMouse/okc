@@ -22,6 +22,7 @@ const ControlFlow = enum(u2) {
 const Field = struct {
     location: Location,
     typ: Typ,
+    used: bool = false,
 };
 
 const Struct = struct {
@@ -177,8 +178,15 @@ fn checkItems(checker: *Checker) void {
         switch (item.kind) {
             .fun => {},
             .vari => unreachable,
-            .struc => {},
+            .struc => |struc| checker.checkStructUsage(struc),
         }
+    }
+}
+
+fn checkStructUsage(checker: *Checker, struc: Struct) void {
+    var iter = struc.fields.valueIterator();
+    while (iter.next()) |field| {
+        checker.checkUsage(field.used, field.location);
     }
 }
 
@@ -280,6 +288,7 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
         try res.fields.put(field.name, .{
             .location = field.location,
             .typ = typ,
+            .used = field.name[0] == '_',
         });
     }
     try checker.items.put(struc.name, .{
@@ -970,10 +979,11 @@ fn checkField(checker: *Checker, field: Ast.Field, location: Location) !ExprInfo
         checker.failNotStruct(field.expr.location, info.typ);
         return err;
     };
-    const fiel = struc.fields.get(field.name) orelse {
+    const fiel = struc.fields.getPtr(field.name) orelse {
         checker.failNoField(location, field.name, name.name);
         return err;
     };
+    fiel.used = true;
     var resolver = checker.typs.makeResolver(checker.gpa);
     defer resolver.map.deinit();
     for (struc.generics, name.generics) |generic, typ| {

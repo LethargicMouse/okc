@@ -1,12 +1,12 @@
 struct termios {
-  iflag: u32,
+  _iflag: u32,
   oflag: u32,
-  cflag: u32,
+  _cflag: u32,
   lflag: u32,
-  line: u8,
+  _line: u8,
   cc: [32]u8,
-  ispeed: u32,
-  ospeed: u32,
+  _ispeed: u32,
+  _ospeed: u32,
 }
 
 extern fn tcgetattr(fd: i32, config: &mut termios) void;
