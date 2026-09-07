@@ -836,46 +836,19 @@ fn checkTypedStruc(
         checker.failNotStruct(location, .{ .name = name });
         return err;
     };
-    var resolver = checker.typs.makeResolver(checker.gpa);
-    defer resolver.map.deinit();
-    for (decl.generics, 0..) |generic, i| {
-        if (name.generics.len != 0) {
-            try resolver.map.put(generic, name.generics[i]);
-        } else {
-            const lazy = try checker.typs.makeLazy();
-            try resolver.map.put(generic, .{ .lazy = lazy });
-        }
-    }
-    for (fields) |field| {
-        const f_decl = decl.fields.get(field.name) orelse {
-            checker.failNoField(field.location, field.name, name.name);
-            continue;
-        };
-        const decl_typ = try resolver.resolve(f_decl.typ);
-        const info = try checker.checkExpr(field.expr, .{ .typ = decl_typ });
-        try checker.unify(field.expr.location, decl_typ, info.typ);
-    }
-    var iter = decl.fields.keyIterator();
-    while (iter.next()) |field_decl| {
-        var unused = true;
-        for (fields) |field| {
-            if (std.mem.eql(u8, field_decl.*, field.name)) {
-                unused = false;
-                break;
-            }
-        }
-        if (unused) {
-            checker.failNotInit(location, field_decl.*);
-        }
-    }
     var generics = name.generics;
     if (generics.len == 0) {
-        const new_generics = try checker.typs.arena.allocator().alloc(Typ, decl.generics.len);
-        for (new_generics, decl.generics) |*target, generic| {
-            target.* = resolver.map.get(generic).?;
-        }
-        generics = new_generics;
+        generics = try checker.makeGenerics(decl.generics.len);
     }
+    var resolver = checker.typs.makeResolver(checker.gpa);
+    defer resolver.map.deinit();
+    for (decl.generics, generics) |generic, typ| {
+        try resolver.map.put(generic, typ);
+    }
+    for (fields) |field| {
+        try checker.checkNewField(field, name.name, decl.fields, &resolver);
+    }
+    checker.checkFieldsInitialised(decl.fields, fields, location);
     const typ = Typ{ .name = .{
         .name = name.name,
         .generics = generics,
@@ -887,6 +860,51 @@ fn checkTypedStruc(
         .typ = typ,
         .mutable = false,
     };
+}
+
+fn makeGenerics(checker: *Checker, len: usize) ![]const Typ {
+    const res = try checker.typs.arena.allocator().alloc(Typ, len);
+    for (res) |*target| {
+        target.* = .{ .lazy = try checker.typs.makeLazy() };
+    }
+    return res;
+}
+
+fn checkFieldsInitialised(
+    checker: *Checker,
+    decl_fields: std.StringHashMap(Field),
+    fields: []const Ast.NewField,
+    location: Location,
+) void {
+    var iter = decl_fields.keyIterator();
+    while (iter.next()) |name| {
+        var unused = true;
+        for (fields) |field| {
+            if (std.mem.eql(u8, name.*, field.name)) {
+                unused = false;
+                break;
+            }
+        }
+        if (unused) {
+            checker.failNotInit(location, name.*);
+        }
+    }
+}
+
+fn checkNewField(
+    checker: *Checker,
+    field: Ast.NewField,
+    struc_name: []const u8,
+    decl_fields: std.StringHashMap(Field),
+    resolver: *Typs.Resolver,
+) !void {
+    const f_decl = decl_fields.get(field.name) orelse {
+        checker.failNoField(field.location, field.name, struc_name);
+        return;
+    };
+    const decl_typ = try resolver.resolve(f_decl.typ);
+    const info = try checker.checkExpr(field.expr, .{ .typ = decl_typ });
+    try checker.unify(field.expr.location, decl_typ, info.typ);
 }
 
 fn failNotInit(checker: *Checker, location: Location, name: []const u8) void {

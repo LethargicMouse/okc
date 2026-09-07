@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Ast = @import("Ast.zig");
 
-const Resolver = struct {
+pub const Resolver = struct {
     typs: *Typs,
     map: std.StringHashMap(Typ),
 
