@@ -7,6 +7,7 @@ const Typs = @import("Typs.zig");
 const Typ = Typs.Typ;
 
 const Error = error{OutOfMemory};
+
 const ExprInfo = struct {
     typ: Typ,
     mutable: bool,
@@ -41,7 +42,6 @@ const Header = struct {
     generics: []const []const u8,
     params: []const Typ,
     ret_typ: Typ,
-    is_extern: bool,
 };
 
 const Item = struct {
@@ -138,6 +138,18 @@ fn convertTypRec(checker: Checker, typ: Typ) !Ast.Typ {
                 .generics = generics,
             } };
         },
+        .fun => |fun| {
+            const params = try checker.ast_typs.arena.allocator().alloc(Ast.Typ, fun.params.len);
+            for (params, fun.params) |*target, param| {
+                target.* = try checker.convertTypRec(param);
+            }
+            const ret_typ = try checker.convertTypRec(fun.ret_typ.*);
+            const ptr = try checker.ast_typs.box(ret_typ);
+            return .{ .fun = .{
+                .params = params,
+                .ret_typ = ptr,
+            } };
+        },
         .slice => |slice| {
             const new = try checker.convertTypRec(slice.typ.*);
             const ptr = try checker.ast_typs.box(new);
@@ -198,9 +210,9 @@ fn checkUsage(checker: *Checker, used: bool, location: Location) void {
 
 fn regItem(checker: *Checker, item: Ast.Item) !void {
     switch (item) {
-        .ext_fun => |ext_fun| try checker.regHeader(ext_fun.header, true),
+        .ext_fun => |ext_fun| try checker.regHeader(ext_fun.header),
         .struc => |struc| try checker.regStruct(struc),
-        .fun => |fun| try checker.regHeader(fun.header, false),
+        .fun => |fun| try checker.regHeader(fun.header),
     }
 }
 
@@ -236,7 +248,7 @@ fn checkMain(checker: *Checker, location: Location) void {
     item.used = true;
 }
 
-fn regHeader(checker: *Checker, header: Ast.Header, is_extern: bool) !void {
+fn regHeader(checker: *Checker, header: Ast.Header) !void {
     if (checker.items.get(header.name)) |prev| {
         checker.failAlreadyDeclared(header.location, header.name, prev.location);
         return;
@@ -252,7 +264,6 @@ fn regHeader(checker: *Checker, header: Ast.Header, is_extern: bool) !void {
             .generics = header.generics,
             .params = params,
             .ret_typ = ret_typ,
-            .is_extern = is_extern,
         } },
     });
 }
@@ -495,7 +506,7 @@ fn checkDeref(checker: *Checker, expr: Ast.Expr, location: Location) !ExprInfo {
             };
         },
         .err => return err,
-        .prime, .name, .any, .array, .slice => {
+        .prime, .name, .any, .array, .slice, .fun => {
             checker.fail(location, "cannot dereference type `{f}`", .{info.typ});
             return err;
         },
@@ -528,7 +539,7 @@ fn checkElem(checker: *Checker, elem: Ast.Elem, location: Location) !ExprInfo {
             .mutable = slice.mutable,
         },
         .err => return err,
-        .prime, .name, .ptr, .any => {
+        .prime, .name, .ptr, .any, .fun => {
             checker.fail(location, "type `{f}` does not support indexing", .{info.typ});
             return err;
         },
@@ -592,6 +603,19 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
             }
             for (aname.generics, b.name.generics) |ag, bg| {
                 if (!try canUnify(ag, bg, active)) {
+                    return false;
+                }
+            }
+            return true;
+        },
+        .fun => |fun| {
+            if (fun.ret_typ != b.fun.ret_typ and
+                !try canUnify(fun.ret_typ.*, b.fun.ret_typ.*, active))
+            {
+                return false;
+            }
+            for (fun.params, b.fun.params) |ap, bp| {
+                if (!try canUnify(ap, bp, active)) {
                     return false;
                 }
             }
@@ -734,12 +758,12 @@ fn checkInferStruc(
         .slice => |slice| return checker.checkSliceStruc(
             slice,
             struc.fields,
-            struc.struc_id,
+            struc.typ_id,
             location,
         ),
         .err => return err,
         .lazy => unreachable,
-        .prime, .ptr, .any, .array => {
+        .prime, .ptr, .any, .array, .fun => {
             checker.failCannotInfer(.any, location);
             for (struc.fields) |field| {
                 _ = try checker.checkExpr(field.expr, .any);
@@ -750,7 +774,7 @@ fn checkInferStruc(
     return checker.checkTypedStruc(
         name,
         struc.fields,
-        struc.struc_id,
+        struc.typ_id,
         location,
     );
 }
@@ -759,7 +783,7 @@ fn checkSliceStruc(
     checker: *Checker,
     slice: Typ.Slice,
     fields: []const Ast.NewField,
-    struc_id: usize,
+    typ_id: usize,
     location: Location,
 ) !ExprInfo {
     var was_ptr: ?*const Typ = null;
@@ -796,7 +820,7 @@ fn checkSliceStruc(
         .mutable = slice.mutable,
     } };
     if (try checker.convertTyp(typ, location)) |llvm_typ| {
-        checker.info.strucs[struc_id] = llvm_typ;
+        checker.info.typs[typ_id] = llvm_typ;
     }
     return .{
         .typ = typ,
@@ -812,7 +836,7 @@ fn checkTypedStruc(
     checker: *Checker,
     name: Typ.Name,
     fields: []const Ast.NewField,
-    struc_id: usize,
+    typ_id: usize,
     location: Location,
 ) !ExprInfo {
     const err = ExprInfo{
@@ -872,7 +896,7 @@ fn checkTypedStruc(
         .generics = generics,
     } };
     if (try checker.convertTyp(typ, location)) |llvm_typ| {
-        checker.info.strucs[struc_id] = llvm_typ;
+        checker.info.typs[typ_id] = llvm_typ;
     }
     return .{
         .typ = typ,
@@ -888,7 +912,7 @@ fn checkStruc(checker: *Checker, struc: Ast.StructExpr, location: Location) !Exp
     return checker.checkTypedStruc(
         .{ .name = struc.name },
         struc.fields,
-        struc.struc_id,
+        struc.typ_id,
         location,
     );
 }
@@ -1041,7 +1065,7 @@ fn checkBinary(checker: *Checker, binary: Ast.Binary, hint: Typ) !ExprInfo {
     };
 }
 
-fn checkVar(checker: *Checker, location: Location, name: []const u8) ExprInfo {
+fn checkVar(checker: *Checker, location: Location, name: []const u8) !ExprInfo {
     const err = ExprInfo{
         .typ = .err,
         .mutable = true,
@@ -1050,22 +1074,29 @@ fn checkVar(checker: *Checker, location: Location, name: []const u8) ExprInfo {
         checker.failNotDeclared(location, name);
         return err;
     };
-    const vari = switch (item.kind) {
-        .fun => {
-            checker.fail(location, "function pointers currently not supported", .{});
-            return err;
+    switch (item.kind) {
+        .fun => |header| {
+            item.used = true;
+            return .{
+                .typ = .{ .fun = .{
+                    .params = header.params,
+                    .ret_typ = try checker.typs.box(header.ret_typ),
+                } },
+                .mutable = false,
+            };
         },
         .struc => {
             checker.fail(location, "it is a type", .{});
             return err;
         },
-        .vari => |*vari| vari,
-    };
-    item.used = true;
-    return .{
-        .typ = vari.typ,
-        .mutable = vari.mutable,
-    };
+        .vari => |*vari| {
+            item.used = true;
+            return .{
+                .typ = vari.typ,
+                .mutable = vari.mutable,
+            };
+        },
+    }
 }
 
 fn failNotDeclared(checker: *Checker, location: Location, name: []const u8) void {
@@ -1085,15 +1116,28 @@ fn checkCall(checker: *Checker, call: Ast.Call, location: Location, hint: Typ) !
         return err;
     };
     const header = switch (item.kind) {
-        .vari => {
-            checker.fail(location, "function pointers currently not supported", .{});
-            return err;
+        .vari => |vari| switch (vari.typ) {
+            .fun => |fun| Header{
+                .generics = &.{},
+                .params = fun.params,
+                .ret_typ = fun.ret_typ.*,
+            },
+            else => {
+                checker.fail(location, "value of type `{}` is not a function", .{vari.typ});
+                for (call.args) |arg| {
+                    _ = try checker.checkExpr(arg, .any);
+                }
+                return err;
+            },
         },
         .struc => {
             checker.fail(location, "expected function, found type", .{});
+            for (call.args) |arg| {
+                _ = try checker.checkExpr(arg, .any);
+            }
             return err;
         },
-        .fun => |*header| header,
+        .fun => |header| header,
     };
     item.used = true;
     var resolver = checker.typs.makeResolver(checker.gpa);
@@ -1116,11 +1160,7 @@ fn checkCall(checker: *Checker, call: Ast.Call, location: Location, hint: Typ) !
             target.* = llvm_typ;
         }
     }
-    if (header.is_extern) {
-        checker.info.calls[call.call_id].generics = &.{};
-    } else {
-        checker.info.calls[call.call_id].generics = generics;
-    }
+    checker.info.calls[call.call_id].generics = generics;
     if (try checker.convertTyp(ret_typ, location)) |llvm_typ| {
         checker.info.calls[call.call_id].ret_typ = llvm_typ;
     }
@@ -1178,6 +1218,18 @@ pub fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
             return .{ .slice = .{
                 .typ = ptr,
                 .mutable = inner.mutable,
+            } };
+        },
+        .fun => |fun| {
+            const params = try checker.typs.arena.allocator().alloc(Typ, fun.params.len);
+            for (params, fun.params) |*target, param| {
+                target.* = try checker.checkTyp(param);
+            }
+            const ret_typ = try checker.checkTyp(fun.ret_typ.*);
+            const ptr = try checker.typs.box(ret_typ);
+            return .{ .fun = .{
+                .params = params,
+                .ret_typ = ptr,
             } };
         },
         .prime => |prime| return .{ .prime = prime },

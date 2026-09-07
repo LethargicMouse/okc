@@ -28,7 +28,7 @@ const LlvmTyp = struct {
                 });
             },
             .slice => try writer.writeAll("%\"[]\""),
-            .ptr => try writer.writeAll("ptr"),
+            .ptr, .fun => try writer.writeAll("ptr"),
             .name => try writer.print("%\"{f}\"", .{typ.inner}),
         }
     }
@@ -59,6 +59,7 @@ const Val = union(enum) {
     int: u64,
     str: usize,
     tmp: u32,
+    fun: []const u8,
     undef,
 
     pub fn format(val: Val, writer: *std.Io.Writer) std.Io.Writer.Error!void {
@@ -66,6 +67,7 @@ const Val = union(enum) {
             .int => |int| try writer.print("{d}", .{int}),
             .str => |str| try writer.print("@.s{}", .{str}),
             .tmp => |tmp| try writer.print("%{}", .{tmp}),
+            .fun => |name| try writer.print("@\"{s}\"", .{name}),
             .undef => try writer.writeAll("poison"),
         }
     }
@@ -160,7 +162,7 @@ fn genAst(gen: *Codegen, ast: Ast) !void {
 }
 
 fn genFunNamed(gen: *Codegen, name: Typ.Name) !void {
-    const fun = gen.funs.get(name.name) orelse return;
+    const fun = gen.funs.get(name.name).?;
     for (fun.header.generics, name.generics) |generic, typ| {
         try gen.resolver.map.put(generic, typ);
     }
@@ -193,7 +195,7 @@ fn regStruct(gen: *Codegen, struc: Ast.Struct) !void {
 }
 
 fn genSliceDecl(gen: *Codegen) !void {
-    try gen.print("%\"[]\" = type {{ ptr, i64 }}", .{});
+    try gen.print("\n%\"[]\" = type {{ ptr, i64 }}", .{});
 }
 
 fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
@@ -469,15 +471,22 @@ fn storeInto(gen: *Codegen, tmp: u32, typ_val: TypVal) !void {
 }
 
 fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
-    try gen.fun_queue.append(gen.gpa, .{
+    var name = Typ.Name{
         .name = call.name,
-        .generics = gen.info.calls[call.call_id].generics,
-    });
-    var arg_typ_vals = try std.ArrayList(TypVal).initCapacity(gen.gpa, call.args.len);
-    defer arg_typ_vals.deinit(gen.gpa);
-    for (call.args) |arg| {
-        const typ_val = try gen.genExpr(arg);
-        try arg_typ_vals.append(gen.gpa, typ_val);
+        .generics = &.{},
+    };
+    if (gen.funs.contains(call.name)) {
+        name.generics = gen.info.calls[call.call_id].generics;
+        try gen.fun_queue.append(gen.gpa, .{
+            .name = call.name,
+            .generics = gen.info.calls[call.call_id].generics,
+        });
+    }
+    const mtmp = if (gen.vars.get(name.name)) |vari| try gen.load(vari) else null;
+    var arg_typ_vals = try gen.gpa.alloc(TypVal, call.args.len);
+    defer gen.gpa.free(arg_typ_vals);
+    for (arg_typ_vals, call.args) |*target, arg| {
+        target.* = try gen.genExpr(arg);
     }
     const ret_typ = gen.info.calls[call.call_id].ret_typ;
     const ret_tmp = gen.newTmp();
@@ -486,13 +495,16 @@ fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
     } else {
         try gen.print("\n  ", .{});
     }
-    try gen.print("call {f} @\"{f}\"(", .{ LlvmTyp{ .inner = ret_typ }, Typ.Name{
-        .name = call.name,
-        .generics = gen.info.calls[call.call_id].generics,
-    } });
+    try gen.print("call {f} ", .{LlvmTyp{ .inner = ret_typ }});
+    if (mtmp) |tmp| {
+        try gen.print("%{}", .{tmp});
+    } else {
+        try gen.print("@\"{f}\"", .{name});
+    }
+    try gen.print("(", .{});
     if (call.args.len != 0) {
-        try gen.print("{f}", .{arg_typ_vals.items[0]});
-        for (arg_typ_vals.items[1..]) |val| {
+        try gen.print("{f}", .{arg_typ_vals[0]});
+        for (arg_typ_vals[1..]) |val| {
             try gen.print(", {f}", .{val});
         }
     }
@@ -753,7 +765,7 @@ fn genStr(gen: *Codegen, str: usize) !TypVal {
 }
 
 fn genStructExpr(gen: *Codegen, struc: Ast.InferStruct) !TypVal {
-    const typ = gen.info.strucs[struc.struc_id];
+    const typ = gen.info.typs[struc.typ_id];
     var val: Val = .undef;
     for (struc.fields, 0..) |field, i| {
         const typ_val = try gen.genExpr(field.expr);
@@ -776,7 +788,7 @@ fn genStructExpr(gen: *Codegen, struc: Ast.InferStruct) !TypVal {
 fn genNamedStructExpr(gen: *Codegen, struc: Ast.StructExpr) !TypVal {
     return gen.genStructExpr(.{
         .fields = struc.fields,
-        .struc_id = struc.struc_id,
+        .typ_id = struc.typ_id,
     });
 }
 
@@ -816,7 +828,23 @@ fn genBinOp(gen: *Codegen, kind: Ast.Binary.Kind) !void {
 }
 
 fn genVar(gen: *Codegen, name: []const u8) !TypVal {
-    const ref = gen.vars.get(name).?;
+    const ref = gen.vars.get(name) orelse {
+        if (gen.funs.contains(name)) {
+            try gen.fun_queue.append(gen.gpa, .{ .name = name, .generics = &.{} });
+        }
+        const header = gen.funs.get(name).?.header;
+        const params = try gen.typs.arena.allocator().alloc(Typ, header.params.len);
+        for (params, header.params) |*target, param| {
+            target.* = param.typ;
+        }
+        return .{
+            .typ = .{ .fun = .{
+                .params = params,
+                .ret_typ = try gen.typs.box(header.ret_typ),
+            } },
+            .val = .{ .fun = name },
+        };
+    };
     return gen.loadTypVal(ref);
 }
 

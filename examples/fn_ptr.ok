@@ -1,0 +1,15 @@
+extern fn puts(s: &u8) void;
+
+fn main() i32 {
+  let fun = print_hello;
+  exec(fun);
+  return 0;
+}
+
+fn print_hello() void {
+  puts("hello".ptr);
+}
+
+fn exec(fun: fn() void) void {
+  fun();
+}

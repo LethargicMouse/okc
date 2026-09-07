@@ -76,7 +76,6 @@ strs: std.ArrayList([]const u8) = .empty,
 cursor: usize = 0,
 err_cursor: usize = 0,
 next_typ_id: usize = 0,
-next_struc_id: usize = 0,
 next_call_id: usize = 0,
 
 pub fn init(gpa: std.mem.Allocator, tokens: []const Lexer.Token) Parser {
@@ -106,7 +105,6 @@ pub fn run(parser: *Parser) !struct { Ast, Ast.Info } {
     };
     const ast_info = Ast.Info{
         .typ_ids = parser.next_typ_id,
-        .struc_ids = parser.next_struc_id,
         .call_ids = parser.next_call_id,
     };
     return .{ ast, ast_info };
@@ -250,6 +248,7 @@ fn parseParamLoud(parser: *Parser) !Ast.Param {
 
 fn parseTypLoud(parser: *Parser) Error!Ast.Typ {
     return parser.parseEither(Ast.Typ, .{
+        parseFunTyp,
         parseGenericTyp,
         parseVerbalTyp,
         parseMutPtrTyp,
@@ -260,6 +259,19 @@ fn parseTypLoud(parser: *Parser) Error!Ast.Typ {
         try parser.fail("<type>");
         return err;
     };
+}
+
+fn parseFunTyp(parser: *Parser) !Ast.Typ {
+    try parser.expect(.fun);
+    try parser.expectLoud(.parl);
+    const params = try parser.parseSep(Ast.Typ, parseTypLoud);
+    try parser.expect(.parr);
+    const ret_typ = try parser.parseTypLoud();
+    const ptr = try parser.typs.box(ret_typ);
+    return .{ .fun = .{
+        .params = params,
+        .ret_typ = ptr,
+    } };
 }
 
 fn parseSliceTyp(parser: *Parser) !Ast.Typ {
@@ -799,12 +811,11 @@ fn parseInferStructExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     try parser.expect(.dot);
     const fields = try parser.parseStructExprBody();
-    const struc_id = parser.newStrucId();
     return .{
         .location = location,
         .kind = .{ .infer_struc = .{
             .fields = fields,
-            .struc_id = struc_id,
+            .typ_id = parser.newTypId(),
         } },
     };
 }
@@ -823,13 +834,12 @@ fn parseStructExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     const name = try parser.parseName();
     const fields = try parser.parseStructExprBody();
-    const struc_id = parser.newStrucId();
     return .{
         .location = location,
         .kind = .{ .struc = .{
             .name = name,
             .fields = fields,
-            .struc_id = struc_id,
+            .typ_id = parser.newTypId(),
         } },
     };
 }

@@ -140,12 +140,12 @@ pub const Expr = struct {
 pub const StructExpr = struct {
     name: []const u8,
     fields: []const NewField,
-    struc_id: usize,
+    typ_id: usize,
 };
 
 pub const InferStruct = struct {
     fields: []const NewField,
-    struc_id: usize,
+    typ_id: usize,
 };
 
 pub const NewField = struct {
@@ -236,7 +236,6 @@ pub const FieldDecl = struct {
 
 pub const Info = struct {
     typ_ids: usize,
-    struc_ids: usize,
     call_ids: usize,
 };
 

@@ -22,6 +22,18 @@ pub const Resolver = struct {
                     .generics = generics,
                 } };
             },
+            .fun => |fun| {
+                const params = try resolver.typs.arena.allocator().alloc(Typ, fun.params.len);
+                for (params, fun.params) |*target, param| {
+                    target.* = try resolver.resolve(param);
+                }
+                const ret_typ = try resolver.resolve(fun.ret_typ.*);
+                const ptr = try resolver.typs.box(ret_typ);
+                return .{ .fun = .{
+                    .params = params,
+                    .ret_typ = ptr,
+                } };
+            },
             .slice => |slice| {
                 const new = try resolver.resolve(slice.typ.*);
                 const ptr = try resolver.typs.box(new);
@@ -99,11 +111,17 @@ pub const Typ = union(enum) {
         mutable: bool,
     };
 
+    pub const Fun = struct {
+        params: []const Typ,
+        ret_typ: *const Typ,
+    };
+
     prime: Prime,
     name: Name,
     slice: Slice,
     ptr: Ptr,
     array: Array,
+    fun: Fun,
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) !void {
         switch (typ) {
@@ -115,6 +133,16 @@ pub const Typ = union(enum) {
                     try writer.writeAll("mut ");
                 }
                 try slice.typ.format(writer);
+            },
+            .fun => |fun| {
+                try writer.writeAll("fn(");
+                if (fun.params.len != 0) {
+                    try fun.params[0].format(writer);
+                    for (fun.params[1..]) |param| {
+                        try writer.print(", {f}", .{param});
+                    }
+                }
+                try writer.print(") {f}", .{fun.ret_typ});
             },
             .ptr => |ptr| {
                 try writer.writeAll("&");
@@ -148,6 +176,17 @@ pub const Typ = union(enum) {
                     return false;
                 }
                 for (aname.generics, b.name.generics) |ag, bg| {
+                    if (!ag.eql(bg)) {
+                        return false;
+                    }
+                }
+                return true;
+            },
+            .fun => |afun| {
+                if (afun.ret_typ != b.fun.ret_typ) {
+                    return false;
+                }
+                for (afun.params, b.fun.params) |ag, bg| {
                     if (!ag.eql(bg)) {
                         return false;
                     }
@@ -188,6 +227,13 @@ pub const Typ = union(enum) {
             },
             .prime => |prime| {
                 hasher.update(&.{ 4, @intFromEnum(prime) });
+            },
+            .fun => |fun| {
+                hasher.update(&.{5});
+                for (fun.params) |param| {
+                    param.hashIn(hasher);
+                }
+                hasher.update(std.mem.asBytes(&fun.ret_typ));
             },
         }
     }

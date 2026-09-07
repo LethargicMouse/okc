@@ -54,14 +54,7 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     try std.Io.Dir.cwd().createDirPath(io, build_dir_path);
 
     var write_buf: [256]u8 = undefined;
-    var gen = try Codegen.init(
-        io,
-        gpa,
-        &ast.typs,
-        &write_buf,
-        out_ll_path,
-        info,
-    );
+    var gen = try Codegen.init(io, gpa, &ast.typs, &write_buf, out_ll_path, info);
     try gen.run(ast);
 
     const code = try runCmd(io, &.{ "clang", "-o", out_path, out_ll_path });
@@ -210,4 +203,8 @@ test "generic_fun.ok" {
 
 test "mut_slice.ok" {
     try testFile("mut_slice", "6 7\n");
+}
+
+test "fn_ptr.ok" {
+    try testFile("fn_ptr", "hello\n");
 }

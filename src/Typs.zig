@@ -21,6 +21,18 @@ const Resolver = struct {
                     .generics = generics,
                 } };
             },
+            .fun => |fun| {
+                const params = try resolver.typs.arena.allocator().alloc(Typ, fun.params.len);
+                for (params, fun.params) |*target, param| {
+                    target.* = try resolver.resolve(param);
+                }
+                const ret_typ = try resolver.resolve(fun.ret_typ.*);
+                const ptr = try resolver.typs.box(ret_typ);
+                return .{ .fun = .{
+                    .params = params,
+                    .ret_typ = ptr,
+                } };
+            },
             .slice => |slice| {
                 const new = try resolver.resolve(slice.typ.*);
                 const ptr = try resolver.typs.box(new);
@@ -76,6 +88,17 @@ pub const Typ = union(enum) {
                     }
                     return true;
                 },
+                .fun => |fun| {
+                    if (fun.ret_typ != b.fun.ret_typ) {
+                        return false;
+                    }
+                    for (fun.params, b.fun.params) |ap, bp| {
+                        if (!ctx.eql(ap, bp)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                },
                 .slice => |aslice| return aslice.typ == b.slice.typ and
                     aslice.mutable == b.slice.mutable,
                 // a == b <=> &a == &b due to memo
@@ -118,8 +141,14 @@ pub const Typ = union(enum) {
         mutable: bool,
     };
 
+    pub const Fun = struct {
+        params: []const Typ,
+        ret_typ: *const Typ,
+    };
+
     prime: Ast.Typ.Prime,
     name: Name,
+    fun: Fun,
     ptr: Ptr,
     slice: Slice,
     array: Array,
@@ -142,11 +171,15 @@ pub const Typ = union(enum) {
                     gen.hashIn(hasher);
                 }
             },
-            // a == b <=> &a == &b due to memo
+            .fun => |fun| {
+                for (fun.params) |param| {
+                    param.hashIn(hasher);
+                }
+                fun.ret_typ.hashIn(hasher);
+            },
             .ptr => |inner| hasher.update(std.mem.asBytes(&inner)),
             .array => |array| {
                 hasher.update(array.len);
-                // a == b <=> &a == &b due to memo
                 hasher.update(std.mem.asBytes(&array.typ));
             },
             // pointers in lazy types are not memoized
@@ -171,6 +204,16 @@ pub const Typ = union(enum) {
                     }
                     try writer.writeByte('>');
                 }
+            },
+            .fun => |fun| {
+                try writer.writeAll("fn(");
+                if (fun.params.len != 0) {
+                    try fun.params[0].format(writer);
+                    for (fun.params[1..]) |param| {
+                        try writer.print(", {f}", .{param});
+                    }
+                }
+                try writer.print(") {f}", .{fun.ret_typ});
             },
             .ptr => |ptr| if (ptr.mutable) {
                 try writer.print("&mut {f}", .{ptr.typ});
