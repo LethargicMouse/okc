@@ -957,52 +957,21 @@ fn checkField(
     hint_mutable: bool,
 ) !ExprInfo {
     var info = try checker.checkExpr(field.expr, .{ .mutable = hint_mutable });
-    const norm = info.typ.normalise();
     const err = ExprInfo{
         .typ = .err,
         .mutable = true,
     };
-    if (norm == .err) {
-        return err;
+    const norm = info.typ.normalise();
+    if (norm == .slice) {
+        return checker.checkSliceField(
+            norm.slice,
+            info.mutable,
+            field.name,
+            field.typ_id,
+            location,
+        );
     }
-    var name: Typ.Name = undefined;
-    switch (norm) {
-        .name => |n| name = n,
-        // auto-deref
-        .ptr => |ptr| if (ptr.typ.* == .name) {
-            name = ptr.typ.name;
-            info.mutable = ptr.mutable;
-        } else {
-            checker.failNotStruct(field.expr.location, info.typ);
-            return err;
-        },
-        .slice => |inner| {
-            if (std.mem.eql(u8, field.name, "ptr")) {
-                const typ = Typ{ .ptr = .{
-                    .typ = inner.typ,
-                    .mutable = inner.mutable,
-                } };
-                if (try checker.convertTyp(typ, location)) |llvm_typ| {
-                    checker.info.typs[field.typ_id] = llvm_typ;
-                }
-                return .{
-                    .typ = typ,
-                    .mutable = info.mutable,
-                };
-            }
-            if (std.mem.eql(u8, field.name, "len")) {
-                checker.info.typs[field.typ_id] = .{ .prime = .u64 };
-                return .{
-                    .typ = .{ .prime = .u64 },
-                    .mutable = info.mutable,
-                };
-            }
-        },
-        else => {
-            checker.failNotStruct(field.expr.location, info.typ);
-            return err;
-        },
-    }
+    const name = checker.getTypName(norm, &info.mutable, field.expr.location) orelse return err;
     const item = checker.items.get(name.name) orelse {
         checker.failNotStruct(field.expr.location, info.typ);
         return err;
@@ -1029,6 +998,60 @@ fn checkField(
         .typ = typ,
         .mutable = info.mutable,
     };
+}
+
+fn checkSliceField(
+    checker: *Checker,
+    slice: Typ.Slice,
+    mutable: bool,
+    name: []const u8,
+    typ_id: usize,
+    location: Location,
+) !ExprInfo {
+    if (std.mem.eql(u8, name, "ptr")) {
+        const typ = Typ{ .ptr = .{
+            .typ = slice.typ,
+            .mutable = slice.mutable,
+        } };
+        if (try checker.convertTyp(typ, location)) |llvm_typ| {
+            checker.info.typs[typ_id] = llvm_typ;
+        }
+        return .{
+            .typ = typ,
+            .mutable = mutable,
+        };
+    }
+    if (std.mem.eql(u8, name, "len")) {
+        checker.info.typs[typ_id] = .{ .prime = .u64 };
+        return .{
+            .typ = .{ .prime = .u64 },
+            .mutable = mutable,
+        };
+    }
+    return .{
+        .typ = .err,
+        .mutable = true,
+    };
+}
+
+fn getTypName(checker: *Checker, norm: Typ, mutable: *bool, location: Location) ?Typ.Name {
+    switch (norm) {
+        .err => return null,
+        .name => |name| return name,
+        // auto-deref
+        .ptr => |ptr| if (ptr.typ.* == .name) {
+            mutable.* = ptr.mutable;
+            return ptr.typ.name;
+        } else {
+            checker.failNotStruct(location, norm);
+            return null;
+        },
+        .slice, .array, .any, .lazy => unreachable,
+        .fun, .prime => {
+            checker.failNotStruct(location, norm);
+            return null;
+        },
+    }
 }
 
 fn failNoField(
