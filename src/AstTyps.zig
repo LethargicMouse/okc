@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Location = @import("Location.zig");
 const Ast = @import("Ast.zig");
 const HashContext = @import("hash_context.zig").HashContext;
 
@@ -72,6 +73,7 @@ pub const Typ = union(enum) {
     pub const Name = struct {
         name: []const u8,
         generics: []const Typ = &.{},
+        location: Location = .fake,
 
         pub fn format(name: Name, writer: *std.Io.Writer) !void {
             try writer.print("{s}", .{name.name});
@@ -155,11 +157,14 @@ pub const Typ = union(enum) {
         }
     }
 
-    pub fn fromName(name: []const u8) Typ {
+    pub fn fromName(name: []const u8, location: Location) Typ {
         if (std.meta.stringToEnum(Prime, name)) |prime| {
             return .{ .prime = prime };
         }
-        return .{ .name = .{ .name = name } };
+        return .{ .name = .{
+            .name = name,
+            .location = location,
+        } };
     }
 
     pub fn isVoid(typ: Typ) bool {

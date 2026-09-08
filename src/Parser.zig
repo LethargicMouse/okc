@@ -290,6 +290,7 @@ fn parseSliceTyp(parser: *Parser) !Ast.Typ {
 }
 
 fn parseGenericTyp(parser: *Parser) !Ast.Typ {
+    const location = parser.getLocation();
     const name = try parser.parseName();
     try parser.expect(.les);
     const generics = try parser.parseSep(Ast.Typ, parseTypLoud);
@@ -297,6 +298,7 @@ fn parseGenericTyp(parser: *Parser) !Ast.Typ {
     return .{ .name = .{
         .name = name,
         .generics = generics,
+        .location = location,
     } };
 }
 
@@ -343,8 +345,9 @@ fn parsePtrTyp(parser: *Parser) !Ast.Typ {
 }
 
 fn parseVerbalTyp(parser: *Parser) !Ast.Typ {
+    const location = parser.getLocation();
     const name = try parser.parseName();
-    return Ast.Typ.fromName(name);
+    return Ast.Typ.fromName(name, location);
 }
 
 fn parseMany(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) ![]const typ {

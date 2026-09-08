@@ -80,6 +80,7 @@ info: Info,
 ret_typ: Typ = undefined,
 errors_cnt: u16 = 0,
 loops_nested: u16 = 0,
+current_generics: []const []const u8 = &.{},
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -254,6 +255,7 @@ fn checkMain(checker: *Checker, location: Location) void {
 }
 
 fn regHeader(checker: *Checker, header: Ast.Header) !void {
+    checker.current_generics = header.generics;
     if (checker.items.get(header.name)) |prev| {
         checker.failAlreadyDeclared(header.location, header.name, prev.location);
         return;
@@ -295,6 +297,7 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
         .generics = struc.generics,
         .fields = .init(checker.gpa),
     };
+    checker.current_generics = struc.generics;
     for (struc.fields) |field| {
         if (res.fields.get(field.name)) |prev| {
             checker.failAlreadyDeclared(field.location, field.name, prev.location);
@@ -1232,12 +1235,25 @@ fn fail(checker: *Checker, location: Location, comptime msg: []const u8, args: a
 }
 
 pub fn checkTypDecl(checker: *Checker, name: Ast.Typ.Name) void {
-    const item = checker.items.getPtr(name.name) orelse return;
+    const item = checker.items.getPtr(name.name) orelse {
+        checker.fail(name.location, "item `{s}` is not declared", .{name.name});
+        return;
+    };
     switch (item.kind) {
-        .fun, .vari => return,
-        .struc => {},
+        .fun, .vari => {
+            checker.fail(name.location, "`{s}` is not a type", .{name.name});
+        },
+        .struc => |struc| {
+            item.used = true;
+            if (struc.generics.len != name.generics.len) {
+                checker.fail(
+                    name.location,
+                    "expected {} generics\n        found {}",
+                    .{ struc.generics.len, name.generics.len },
+                );
+            }
+        },
     }
-    item.used = true;
 }
 
 pub fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
@@ -1264,7 +1280,16 @@ pub fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
         },
         .prime => |prime| return .{ .prime = prime },
         .name => |name| {
-            checker.checkTypDecl(name);
+            var check_decl = true;
+            for (checker.current_generics) |generic| {
+                if (std.mem.eql(u8, generic, name.name)) {
+                    check_decl = false;
+                    break;
+                }
+            }
+            if (check_decl) {
+                checker.checkTypDecl(name);
+            }
             const generics = try checker.typs.arena.allocator().alloc(Typ, name.generics.len);
             for (generics, name.generics) |*target, generic| {
                 target.* = try checker.checkTyp(generic);

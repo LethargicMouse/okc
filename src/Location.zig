@@ -48,3 +48,10 @@ pub fn combine(a: Location, b: Location) Location {
         .end = b.end,
     };
 }
+
+pub const fake = Location{
+    .lines = &.{},
+    .name = "<unknown>",
+    .start = .start,
+    .end = .start,
+};
