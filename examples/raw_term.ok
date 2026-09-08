@@ -17,7 +17,7 @@ extern fn write(fd: i32, ptr: &u8, len: u64) void;
 fn main() i32 {
   let mut config: termios = undefined;
   let stdin: i32 = 0;
-  tcgetattr(stdin, &mut config);
+  tcgetattr(stdin, &config);
   let old_config = config;
   let echo: u32 = 8;
   let icanon: u32 = 2;
@@ -33,7 +33,7 @@ fn main() i32 {
   put_str("\x1b[2J    six seven");
   while (true) {
     let mut input: u8 = 0;
-    read(stdin, &mut input, 1);
+    read(stdin, &input, 1);
     if (input == 'q') {
       break;
     }

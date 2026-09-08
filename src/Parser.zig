@@ -779,17 +779,10 @@ fn parseUnaryExpr(parser: *Parser) !Ast.Expr {
 
 fn parseUnaryOp(parser: *Parser) !Ast.Unary.Kind {
     return parser.parseEither(Ast.Unary.Kind, &.{
-        parseMutPtr,
         parsePtr,
         parseNotB,
         parseDeref,
     });
-}
-
-fn parseMutPtr(parser: *Parser) !Ast.Unary.Kind {
-    try parser.expect(.amp);
-    try parser.expect(.mut);
-    return .mut_ptr;
 }
 
 fn parseDeref(parser: *Parser) !Ast.Unary.Kind {

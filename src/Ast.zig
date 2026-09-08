@@ -103,7 +103,6 @@ pub const Elem = struct {
 
 pub const Unary = struct {
     pub const Kind = enum {
-        mut_ptr,
         ptr,
         deref,
         notb,

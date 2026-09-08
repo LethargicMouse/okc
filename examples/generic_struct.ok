@@ -24,7 +24,7 @@ fn main() i32 {
     buffer: undefined,
     len: 100,
   };
-  put_i32(&mut array, 42, 67);
+  put_i32(&array, 42, 67);
   printf("%d\n".ptr, get_i32(array, 42));
   return 0;
 }

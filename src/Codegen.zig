@@ -549,7 +549,6 @@ fn genUnary(gen: *Codegen, unary: Ast.Unary) !TypVal {
         .deref => return gen.genDeref(unary.expr),
         .notb => return gen.genNotb(unary.expr),
         .ptr => return gen.genPtr(unary.expr),
-        .mut_ptr => return gen.genPtr(unary.expr),
     }
 }
 
@@ -705,7 +704,7 @@ fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Ref {
 fn genUnaryRef(gen: *Codegen, unary: Ast.Unary) !Ref {
     switch (unary.kind) {
         .deref => return gen.genDerefRef(unary.expr),
-        .mut_ptr, .notb, .ptr => {
+        .notb, .ptr => {
             const typ_val = try gen.genUnary(unary);
             const vari = try gen.toStack(typ_val);
             return vari;

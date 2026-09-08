@@ -469,12 +469,11 @@ fn checkAssign(checker: *Checker, assign: Ast.Assign) !ControlFlow {
     return .cont;
 }
 
-fn checkUnary(checker: *Checker, unary: Ast.Unary, location: Location) !ExprInfo {
+fn checkUnary(checker: *Checker, unary: Ast.Unary, location: Location, hint: Typ) !ExprInfo {
     switch (unary.kind) {
         .deref => return checker.checkDeref(unary.expr, location),
         .notb => return checker.checkNotb(unary.expr),
-        .ptr => return checker.checkPtr(unary.expr),
-        .mut_ptr => return checker.checkMutPtr(unary.expr),
+        .ptr => return checker.checkPtr(unary.expr, hint),
     }
 }
 
@@ -656,7 +655,7 @@ fn checkDeclare(
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr, hint: ExprHint) Error!ExprInfo {
     switch (expr.kind) {
-        .unary => |unary| return checker.checkUnary(unary.*, expr.location),
+        .unary => |unary| return checker.checkUnary(unary.*, expr.location, hint.typ),
         .infer_struc => |struc| return checker.checkInferStruc(struc, expr.location, hint.typ),
         .int => |int| return checker.checkInt(expr.location, int, hint.typ),
         .str => return checker.checkStr(),
@@ -701,28 +700,14 @@ fn checkNotb(checker: *Checker, expr: Ast.Expr) !ExprInfo {
     };
 }
 
-fn checkPtr(checker: *Checker, expr: Ast.Expr) !ExprInfo {
-    const info = try checker.checkExpr(expr, .{});
+fn checkPtr(checker: *Checker, expr: Ast.Expr, hint: Typ) !ExprInfo {
+    const mutable = if (hint == .ptr) hint.ptr.mutable else false;
+    const info = try checker.checkExpr(expr, .{ .mutable = mutable });
     const ptr = try checker.typs.box(info.typ);
     return .{
         .typ = .{ .ptr = .{
             .typ = ptr,
-            .mutable = false,
-        } },
-        .mutable = false,
-    };
-}
-
-fn checkMutPtr(checker: *Checker, expr: Ast.Expr) !ExprInfo {
-    const info = try checker.checkExpr(expr, .{ .mutable = true });
-    if (!info.mutable) {
-        checker.failNotMut(expr.location);
-    }
-    const typ = try checker.typs.box(info.typ);
-    return .{
-        .typ = .{ .ptr = .{
-            .typ = typ,
-            .mutable = true,
+            .mutable = info.mutable,
         } },
         .mutable = false,
     };
