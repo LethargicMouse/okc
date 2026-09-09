@@ -747,6 +747,7 @@ fn getLocation(parser: Parser) Location {
 fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
         parseParExpr,
+        parseArrayExpr,
         parseUnaryExpr,
         parseInferStructExpr,
         parseStructExpr,
@@ -762,6 +763,21 @@ fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
             try parser.fail("<expr>");
         }
         return err;
+    };
+}
+
+fn parseArrayExpr(parser: *Parser) !Ast.Expr {
+    const start = parser.getLocation();
+    try parser.expect(.bral);
+    const exprs = try parser.parseSep(Ast.Expr, parseExprLoud);
+    try parser.expect(.brar);
+    const end = parser.getLocation();
+    return .{
+        .location = start.combine(end),
+        .kind = .{ .array = .{
+            .exprs = exprs,
+            .typ_id = parser.newTypId(),
+        } },
     };
 }
 
@@ -923,11 +939,6 @@ fn newTypId(parser: *Parser) usize {
     return parser.next_typ_id - 1;
 }
 
-fn newStrucId(parser: *Parser) usize {
-    parser.next_struc_id += 1;
-    return parser.next_struc_id - 1;
-}
-
 fn parseCharExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     const char = try parser.parseChar();
@@ -939,11 +950,11 @@ fn parseCharExpr(parser: *Parser) !Ast.Expr {
 
 fn parseIntExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
-    const str = try parser.parseInt();
+    const val = try parser.parseInt();
     return .{
         .location = location,
         .kind = .{ .int = .{
-            .str = str,
+            .val = val,
             .typ_id = parser.newTypId(),
         } },
     };
@@ -967,7 +978,7 @@ fn parseIntLoud(parser: *Parser) ![]const u8 {
     };
 }
 
-fn parseInt(parser: *Parser) ![]const u8 {
+fn parseInt(parser: *Parser) !u64 {
     return parser.parseLexeme(.int);
 }
 

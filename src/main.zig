@@ -208,3 +208,7 @@ test "mut_slice.ok" {
 test "fn_ptr.ok" {
     try testFile("fn_ptr", "hello\n");
 }
+
+test "array_to_slice.ok" {
+    try testFile("array_to_slice", "6 7");
+}

@@ -581,6 +581,11 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
         }
         return res;
     }
+    if (a == .slice and b == .ptr and b.ptr.typ.* == .array) {
+        return a.slice.mutable == b.ptr.mutable and
+            (a.slice.typ == b.ptr.typ.array.typ or
+                try canUnify(a.slice.typ.*, b.ptr.typ.array.typ.*, active));
+    }
     if (@intFromEnum(a) != @intFromEnum(b)) {
         return false;
     }
@@ -616,10 +621,9 @@ fn canUnify(a: Typ, b: Typ, active: bool) !bool {
             try canUnify(aptr.typ.*, b.ptr.typ.*, active)) and
             !aptr.mutable or b.ptr.mutable,
         .array => |arr| {
-            if (std.mem.eql(u8, arr.len, b.array.len)) {
-                return arr.typ == b.array.typ or try canUnify(arr.typ.*, b.array.typ.*, active);
-            }
-            return false;
+            return arr.len == b.array.len and
+                (arr.typ == b.array.typ or
+                    try canUnify(arr.typ.*, b.array.typ.*, active));
         },
         .lazy, .any, .err => unreachable,
     }
@@ -658,6 +662,7 @@ fn checkDeclare(
 
 fn checkExpr(checker: *Checker, expr: Ast.Expr, hint: ExprHint) Error!ExprInfo {
     switch (expr.kind) {
+        .array => |array| return checker.checkArray(array, expr.location, hint.typ),
         .unary => |unary| return checker.checkUnary(unary.*, expr.location, hint.typ),
         .infer_struc => |struc| return checker.checkInferStruc(struc, expr.location, hint.typ),
         .int => |int| return checker.checkInt(expr.location, int, hint.typ),
@@ -678,6 +683,39 @@ fn checkExpr(checker: *Checker, expr: Ast.Expr, hint: ExprHint) Error!ExprInfo {
         .struc => |struc| return checker.checkStruc(struc, expr.location),
         .elem => |elem| return checker.checkElem(elem.*, expr.location),
     }
+}
+
+fn checkArray(checker: *Checker, array: Ast.Array, location: Location, hint: Typ) !ExprInfo {
+    const inner_hint = if (hint == .array) hint.array.typ.* else .any;
+    if (array.exprs.len == 0) {
+        const typ = Typ{ .array = .{
+            .typ = try checker.typs.box(inner_hint),
+            .len = 0,
+        } };
+        if (try checker.convertTyp(typ, location)) |llvm_typ| {
+            checker.info.typs[array.typ_id] = llvm_typ;
+        }
+        return .{
+            .typ = typ,
+            .mutable = false,
+        };
+    }
+    const info = try checker.checkExpr(array.exprs[0], .{ .typ = inner_hint });
+    for (array.exprs[1..]) |expr| {
+        const next_info = try checker.checkExpr(expr, .{ .typ = info.typ });
+        try checker.unify(expr.location, info.typ, next_info.typ);
+    }
+    const typ = Typ{ .array = .{
+        .typ = try checker.typs.box(info.typ),
+        .len = array.exprs.len,
+    } };
+    if (try checker.convertTyp(typ, location)) |llvm_typ| {
+        checker.info.typs[array.typ_id] = llvm_typ;
+    }
+    return .{
+        .typ = typ,
+        .mutable = false,
+    };
 }
 
 fn checkStr(checker: *Checker) !ExprInfo {
@@ -919,16 +957,7 @@ fn checkUndef(checker: *Checker, undef: Ast.Undef, location: Location, typ: Typ)
 }
 
 fn checkInt(checker: *Checker, location: Location, int: Ast.Int, hint: Typ) !ExprInfo {
-    _ = std.fmt.parseInt(u64, int.str, 10) catch {
-        checker.fail(location, "integer is too large", .{});
-    };
-    const typ = if (hint.isNumber()) hint else {
-        checker.failCannotInfer(.any, location);
-        return .{
-            .typ = .err,
-            .mutable = false,
-        };
-    };
+    const typ = if (hint.isNumber()) hint else .any;
     if (try checker.convertTyp(typ, location)) |llvm_typ| {
         checker.info.typs[int.typ_id] = llvm_typ;
     }

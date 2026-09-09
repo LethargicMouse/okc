@@ -66,7 +66,7 @@ pub const Resolver = struct {
 
 pub const Typ = union(enum) {
     pub const Array = struct {
-        len: []const u8,
+        len: u64,
         typ: *const Typ,
     };
 
@@ -153,7 +153,7 @@ pub const Typ = union(enum) {
                 }
                 try ptr.typ.format(writer);
             },
-            .array => |array| try writer.print("[{s}]{f}", .{ array.len, array.typ }),
+            .array => |array| try writer.print("[{}]{f}", .{ array.len, array.typ }),
         }
     }
 
@@ -204,37 +204,24 @@ pub const Typ = union(enum) {
             .ptr => |aptr| return aptr.typ == b.ptr.typ and
                 aptr.mutable == b.ptr.mutable,
             .array => |arr| return arr.typ == b.array.typ and
-                std.mem.eql(u8, arr.len, b.array.len),
+                arr.len == b.array.len,
         }
     }
 
     pub fn hashIn(typ: Typ, hasher: *std.hash.Wyhash) void {
+        hasher.update(&.{@intFromEnum(typ)});
         switch (typ) {
             .name => |name| {
-                hasher.update(&.{0});
                 hasher.update(name.name);
                 for (name.generics) |generic| {
                     generic.hashIn(hasher);
                 }
             },
-            .ptr => |ptr| {
-                hasher.update(&.{1});
-                hasher.update(std.mem.asBytes(&ptr));
-            },
-            .array => |array| {
-                hasher.update(&.{2});
-                hasher.update(array.len);
-                hasher.update(std.mem.asBytes(&array.typ));
-            },
-            .slice => |slice| {
-                hasher.update(&.{3});
-                hasher.update(std.mem.asBytes(&slice));
-            },
-            .prime => |prime| {
-                hasher.update(&.{ 4, @intFromEnum(prime) });
-            },
+            .ptr => |ptr| hasher.update(std.mem.asBytes(&ptr)),
+            .array => |array| hasher.update(std.mem.asBytes(&array)),
+            .slice => |slice| hasher.update(std.mem.asBytes(&slice)),
+            .prime => |prime| hasher.update(&.{@intFromEnum(prime)}),
             .fun => |fun| {
-                hasher.update(&.{5});
                 for (fun.params) |param| {
                     param.hashIn(hasher);
                 }

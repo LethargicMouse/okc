@@ -112,12 +112,18 @@ pub const Unary = struct {
 };
 
 pub const Int = struct {
-    str: []const u8,
+    val: u64,
+    typ_id: usize,
+};
+
+pub const Array = struct {
+    exprs: []const Expr,
     typ_id: usize,
 };
 
 pub const Expr = struct {
     pub const Kind = union(enum) {
+        array: Array,
         unary: *const Unary,
         infer_struc: InferStruct,
         int: Int,

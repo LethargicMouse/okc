@@ -101,13 +101,10 @@ pub const Typ = union(enum) {
                 },
                 .slice => |aslice| return aslice.typ == b.slice.typ and
                     aslice.mutable == b.slice.mutable,
-                // a == b <=> &a == &b due to memo
                 .ptr => |aptr| return aptr.typ == b.ptr.typ and
                     aptr.mutable == b.ptr.mutable,
-                // a == b <=> &a == &b due to memo
                 .array => |arr| {
-                    if (std.mem.eql(u8, arr.len, b.array.len)) {
-                        // a == b <=> &a == &b due to memo
+                    if (arr.len == b.array.len) {
                         return arr.typ == b.array.typ;
                     }
                     return false;
@@ -122,7 +119,7 @@ pub const Typ = union(enum) {
     };
 
     pub const Array = struct {
-        len: []const u8,
+        len: u64,
         typ: *const Typ,
     };
 
@@ -178,10 +175,7 @@ pub const Typ = union(enum) {
                 fun.ret_typ.hashIn(hasher);
             },
             .ptr => |inner| hasher.update(std.mem.asBytes(&inner)),
-            .array => |array| {
-                hasher.update(array.len);
-                hasher.update(std.mem.asBytes(&array.typ));
-            },
+            .array => |array| hasher.update(std.mem.asBytes(&array)),
             // pointers in lazy types are not memoized
             // but we need to discriminate lazy types by pointers
             // as they are unique type variables
@@ -221,7 +215,7 @@ pub const Typ = union(enum) {
                 try writer.print("&{f}", .{ptr.typ});
             },
             .array => |array| try writer.print(
-                "[{s}]{f}",
+                "[{}]{f}",
                 .{ array.len, array.typ },
             ),
             .slice => |inner| {

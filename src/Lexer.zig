@@ -8,9 +8,10 @@ pub const Token = struct { lexeme: Lexeme, location: Location };
 
 pub const Lexeme = union(enum) {
     name: []const u8,
-    int: []const u8,
+    int: u64,
     str: []const u8,
     char: u8,
+    int_too_big,
     unclosed_char,
     invalid_char,
     moreq,
@@ -56,6 +57,7 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .int_too_big => "<int too big>",
             .unclosed_char => "<unclosed char>",
             .invalid_char => "<invalid char>",
             .moreq => "`>=`",
@@ -233,7 +235,10 @@ fn lexInt(lexer: *Lexer) ?Token {
     if (res.len == 0) {
         return null;
     }
-    return lexer.makeToken(.{ .int = res }, res.len);
+    const int = std.fmt.parseInt(u64, res, 10) catch {
+        return lexer.makeToken(.int_too_big, res.len);
+    };
+    return lexer.makeToken(.{ .int = int }, res.len);
 }
 
 fn lexVerbal(lexer: *Lexer) ?Token {

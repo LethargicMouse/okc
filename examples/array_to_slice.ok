@@ -1,0 +1,11 @@
+extern fn write(fd: i32, s: &u8, len: u64) void;
+
+fn main() i32 {
+  let array = ['6', ' ', '7']; // array: [3]u8
+  put_str(&array); // &[3]u8 -> []u8
+  return 0;
+}
+
+fn put_str(str: []u8) void {
+  write(1, str.ptr, str.len);
+}
