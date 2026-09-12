@@ -212,3 +212,7 @@ test "fn_ptr.ok" {
 test "array_to_slice.ok" {
     try testFile("array_to_slice", "6 7");
 }
+
+test "constant.ok" {
+    try testFile("constant", "six seven\n");
+}
