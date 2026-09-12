@@ -59,7 +59,7 @@ const Val = union(enum) {
     int: u64,
     str: usize,
     tmp: u32,
-    fun: []const u8,
+    global: []const u8,
     undef,
 
     pub fn format(val: Val, writer: *std.Io.Writer) std.Io.Writer.Error!void {
@@ -67,7 +67,7 @@ const Val = union(enum) {
             .int => |int| try writer.print("{d}", .{int}),
             .str => |str| try writer.print("@.s{}", .{str}),
             .tmp => |tmp| try writer.print("%{}", .{tmp}),
-            .fun => |name| try writer.print("@\"{s}\"", .{name}),
+            .global => |name| try writer.print("@\"{s}\"", .{name}),
             .undef => try writer.writeAll("poison"),
         }
     }
@@ -170,9 +170,10 @@ fn genFunNamed(gen: *Codegen, name: Typ.Name) !void {
 }
 
 fn regItem(gen: *Codegen, item: Ast.Item) !void {
-    switch (item) {
+    switch (item.kind) {
         // yeah why do I care reg gen its the same thing
         .ext_fun => |ext_fun| try gen.genExtFun(ext_fun),
+        .constant => std.debug.panic("todo regConstant", .{}),
         .fun => |fun| try gen.funs.put(fun.header.name, fun),
         .struc => |struc| try gen.regStruct(struc),
     }
@@ -885,7 +886,7 @@ fn genVar(gen: *Codegen, name: []const u8) !TypVal {
                 .params = params,
                 .ret_typ = try gen.typs.box(header.ret_typ),
             } },
-            .val = .{ .fun = name },
+            .val = .{ .global = name },
         };
     };
     return gen.loadTypVal(ref);

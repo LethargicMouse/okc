@@ -215,18 +215,48 @@ fn checkUsage(checker: *Checker, used: bool, location: Location) void {
 }
 
 fn regItem(checker: *Checker, item: Ast.Item) !void {
-    switch (item) {
-        .ext_fun => |ext_fun| try checker.regHeader(ext_fun.header),
-        .struc => |struc| try checker.regStruct(struc),
-        .fun => |fun| try checker.regHeader(fun.header),
+    switch (item.kind) {
+        .ext_fun => |ext_fun| try checker.regHeader(ext_fun.header, item.location),
+        .struc => |struc| try checker.regStruct(struc, item.location),
+        .fun => |fun| try checker.regHeader(fun.header, item.location),
+        .constant => |declare| try checker.regConst(declare, item.location),
+    }
+}
+
+fn regConst(checker: *Checker, declare: Ast.Declare, location: Location) !void {
+    const hint_typ = if (declare.typ) |typ| try checker.checkTyp(typ) else .any;
+    const typ = try checker.checkConstExpr(declare.expr, .{ .typ = hint_typ });
+    if (declare.typ) |typ_decl| {
+        const decl_typ = try checker.checkTyp(typ_decl);
+        try checker.unify(location, decl_typ, typ);
+    }
+    if (checker.items.get(declare.name)) |prev| {
+        checker.failAlreadyDeclared(location, declare.name, prev.location);
+        return;
+    }
+    try checker.items.put(declare.name, .{ .location = location, .kind = .{ .vari = .{
+        .mutable = false,
+        .typ = typ,
+        .can_be_mutable = true,
+    } } });
+}
+
+fn checkConstExpr(checker: *Checker, expr: Ast.Expr, hint: ExprHint) !Typ {
+    switch (expr.kind) {
+        else => {
+            checker.fail(expr.location, "cannot evaluate at compile time", .{});
+            const info = try checker.checkExpr(expr, hint);
+            return info.typ;
+        },
     }
 }
 
 fn checkItem(checker: *Checker, item: Ast.Item) !void {
-    switch (item) {
+    switch (item.kind) {
         .ext_fun => {},
         .struc => {},
-        .fun => |fun| try checker.checkFun(fun),
+        .constant => {},
+        .fun => |fun| try checker.checkFun(fun, item.location),
     }
 }
 
@@ -254,10 +284,10 @@ fn checkMain(checker: *Checker, location: Location) void {
     item.used = true;
 }
 
-fn regHeader(checker: *Checker, header: Ast.Header) !void {
+fn regHeader(checker: *Checker, header: Ast.Header, location: Location) !void {
     checker.current_generics = header.generics;
     if (checker.items.get(header.name)) |prev| {
-        checker.failAlreadyDeclared(header.location, header.name, prev.location);
+        checker.failAlreadyDeclared(location, header.name, prev.location);
         return;
     }
     const params = try checker.typs.arena.allocator().alloc(Typ, header.params.len);
@@ -266,7 +296,7 @@ fn regHeader(checker: *Checker, header: Ast.Header) !void {
     }
     const ret_typ = try checker.checkTyp(header.ret_typ);
     try checker.items.put(header.name, .{
-        .location = header.location,
+        .location = location,
         .kind = .{ .fun = .{
             .generics = header.generics,
             .params = params,
@@ -288,9 +318,9 @@ fn failAlreadyDeclared(
     );
 }
 
-fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
+fn regStruct(checker: *Checker, struc: Ast.Struct, location: Location) !void {
     if (checker.items.get(struc.name)) |prev| {
-        checker.failAlreadyDeclared(struc.location, struc.name, prev.location);
+        checker.failAlreadyDeclared(location, struc.name, prev.location);
         return;
     }
     var res = Struct{
@@ -311,12 +341,12 @@ fn regStruct(checker: *Checker, struc: Ast.Struct) !void {
         });
     }
     try checker.items.put(struc.name, .{
+        .location = location,
         .kind = .{ .struc = res },
-        .location = struc.location,
     });
 }
 
-fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
+fn checkFun(checker: *Checker, fun: Ast.Fun, location: Location) !void {
     checker.ret_typ = checker.items.get(fun.header.name).?.kind.fun.ret_typ;
     const rbp = checker.vars_stack.items.len;
     for (fun.header.params) |param| {
@@ -336,7 +366,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun) !void {
     }
     const cf = try checker.checkBlock(fun.body);
     if (cf != .ret and !fun.header.ret_typ.isVoid()) {
-        checker.fail(fun.header.location, "function may not return", .{});
+        checker.fail(location, "function may not return", .{});
     }
     checker.freeVars(rbp);
     _ = checker.fun_arena.reset(.retain_capacity);

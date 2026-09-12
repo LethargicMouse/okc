@@ -73,6 +73,7 @@ tokens: []const Lexer.Token,
 typs: Ast.Typs,
 err_msgs: ErrMsgs = .empty,
 strs: std.ArrayList([]const u8) = .empty,
+tmp_location: Location = .fake,
 cursor: usize = 0,
 err_cursor: usize = 0,
 next_typ_id: usize = 0,
@@ -137,22 +138,31 @@ fn parseItemLoud(parser: *Parser) !Ast.Item {
 
 fn parseExtFunItem(parser: *Parser) !Ast.Item {
     const ext_fun = try parser.parseExtFun();
-    return .{ .ext_fun = ext_fun };
+    return .{
+        .location = parser.tmp_location,
+        .kind = .{ .ext_fun = ext_fun },
+    };
 }
 
 fn parseFunItem(parser: *Parser) !Ast.Item {
     const fun = try parser.parseFun();
-    return .{ .fun = fun };
+    return .{
+        .location = parser.tmp_location,
+        .kind = .{ .fun = fun },
+    };
 }
 
 fn parseStructItem(parser: *Parser) !Ast.Item {
     const struc = try parser.parseStruct();
-    return .{ .struc = struc };
+    return .{
+        .location = parser.tmp_location,
+        .kind = .{ .struc = struc },
+    };
 }
 
 fn parseStruct(parser: *Parser) !Ast.Struct {
     try parser.expect(.struc);
-    const location = parser.getLocation();
+    parser.tmp_location = parser.getLocation();
     const name = try parser.parseNameLoud();
     const generics = try parser.parseMaybe([]const []const u8, parseGenerics) orelse &.{};
     try parser.expectLoud(.curl);
@@ -162,7 +172,6 @@ fn parseStruct(parser: *Parser) !Ast.Struct {
         .name = name,
         .generics = generics,
         .fields = fields,
-        .location = location,
     };
 }
 
@@ -201,7 +210,7 @@ fn parseHeaderLoud(parser: *Parser) !Ast.Header {
 
 fn parseHeader(parser: *Parser) !Ast.Header {
     try parser.expect(.fun);
-    const location = parser.getLocation();
+    parser.tmp_location = parser.getLocation();
     const name = try parser.parseNameLoud();
     const generics = try parser.parseMaybe([]const []const u8, parseGenerics) orelse &.{};
     try parser.expectLoud(.parl);
@@ -213,7 +222,6 @@ fn parseHeader(parser: *Parser) !Ast.Header {
         .generics = generics,
         .params = params,
         .ret_typ = ret_typ,
-        .location = location,
     };
 }
 
@@ -375,7 +383,9 @@ fn parseMaybe(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) !?typ {
 
 fn parseFun(parser: *Parser) !Ast.Fun {
     const header = try parser.parseHeader();
+    const location = parser.tmp_location;
     const block = try parser.parseBlockLoud();
+    parser.tmp_location = location;
     return .{
         .header = header,
         .body = block,

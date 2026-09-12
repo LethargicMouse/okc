@@ -16,7 +16,6 @@ pub const Header = struct {
     generics: []const []const u8,
     params: []const Param,
     ret_typ: Typ,
-    location: Location,
 };
 
 pub const Param = struct {
@@ -230,7 +229,6 @@ pub const Struct = struct {
     name: []const u8,
     generics: []const []const u8,
     fields: []const FieldDecl,
-    location: Location,
 };
 
 pub const FieldDecl = struct {
@@ -244,10 +242,16 @@ pub const Info = struct {
     call_ids: usize,
 };
 
-pub const Item = union(enum) {
-    ext_fun: ExtFun,
-    struc: Struct,
-    fun: Fun,
+pub const Item = struct {
+    pub const Kind = union(enum) {
+        ext_fun: ExtFun,
+        struc: Struct,
+        fun: Fun,
+        constant: Declare,
+    };
+
+    kind: Kind,
+    location: Location,
 };
 
 const Ast = @This();
