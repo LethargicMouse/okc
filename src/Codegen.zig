@@ -104,7 +104,6 @@ vars: std.StringHashMap(Ref),
 structs: std.StringHashMap(Struct),
 funs: std.StringHashMap(Ast.Fun),
 loop_ends: std.ArrayList(u32) = .empty,
-struct_queue: std.ArrayList(Typ.Name) = .empty,
 fun_queue: std.ArrayList(Typ.Name) = .empty,
 generated_structs: std.HashMap(
     Typ,
@@ -302,20 +301,15 @@ fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
     var buffer = gen.buffer.?;
     defer buffer.deinit(gen.gpa);
     gen.buffer = null;
-    try gen.flushStructQueue();
     try gen.print("{s}", .{buffer.items});
     gen.vars.clearRetainingCapacity();
     gen.resolver.map.clearRetainingCapacity();
 }
 
-fn flushStructQueue(gen: *Codegen) !void {
-    for (gen.struct_queue.items) |name| {
-        try gen.genStruct(name);
-    }
-    gen.struct_queue.clearRetainingCapacity();
-}
-
 fn genStruct(gen: *Codegen, name: Typ.Name) !void {
+    const buffer = gen.buffer.?;
+    gen.buffer = null;
+    defer gen.buffer = buffer;
     const was = try gen.generated_structs.getOrPut(.{ .name = name });
     if (was.found_existing) {
         return;
@@ -462,7 +456,7 @@ fn genDeclare(gen: *Codegen, declare: Ast.Declare) !void {
 
 fn toStack(gen: *Codegen, typ_val: TypVal) !Ref {
     if (typ_val.typ == .name) {
-        try gen.struct_queue.append(gen.gpa, typ_val.typ.name);
+        try gen.genStruct(typ_val.typ.name);
     }
     const tmp = gen.newTmp();
     try gen.print("\n  %{} = alloca {f}", .{ tmp, LlvmTyp{ .inner = typ_val.typ } });
@@ -817,7 +811,7 @@ fn genStructExpr(gen: *Codegen, struc: Ast.InferStruct) !TypVal {
         try gen.genIV(&res, typ_val, index);
     }
     if (res.typ == .name) {
-        try gen.struct_queue.append(gen.gpa, res.typ.name);
+        try gen.genStruct(res.typ.name);
     }
     return res;
 }
@@ -913,7 +907,6 @@ fn deinit(gen: *Codegen) void {
     }
     gen.structs.deinit();
     gen.loop_ends.deinit(gen.gpa);
-    gen.struct_queue.deinit(gen.gpa);
     gen.fun_queue.deinit(gen.gpa);
     gen.generated_structs.deinit();
     gen.funs.deinit();
