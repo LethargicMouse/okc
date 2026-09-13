@@ -474,10 +474,10 @@ fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
     };
     var params: []const Ast.Param = &.{};
     if (gen.funs.get(call.name)) |fun| {
-        name.generics = call.info.generics;
+        name.generics = call.generics;
         try gen.fun_queue.append(gen.gpa, .{
             .name = call.name,
-            .generics = call.info.generics,
+            .generics = call.generics,
         });
         params = fun.header.params;
     }
@@ -511,14 +511,13 @@ fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
             }
         }
     }
-    const ret_typ = call.info.ret_typ;
     const ret_tmp = gen.newTmp();
-    if (ret_typ != .prime or ret_typ.prime != .void) {
+    if (call.ret_typ != .prime or call.ret_typ.prime != .void) {
         try gen.print("\n  %{} = ", .{ret_tmp});
     } else {
         try gen.print("\n  ", .{});
     }
-    try gen.print("call {f} ", .{LlvmTyp{ .inner = ret_typ }});
+    try gen.print("call {f} ", .{LlvmTyp{ .inner = call.ret_typ }});
     if (mtmp) |tmp| {
         try gen.print("%{}", .{tmp});
     } else {
@@ -532,7 +531,7 @@ fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
         }
     }
     try gen.print(")", .{});
-    return .{ .val = .{ .tmp = ret_tmp }, .typ = ret_typ };
+    return .{ .val = .{ .tmp = ret_tmp }, .typ = call.ret_typ };
 }
 
 fn newTmp(gen: *Codegen) u32 {
@@ -570,7 +569,7 @@ fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
 
 fn genArray(gen: *Codegen, array: Ast.Array) !TypVal {
     var res = TypVal{
-        .typ = array.typ.*,
+        .typ = array.typ,
         .val = .undef,
     };
     for (array.exprs, 0..) |expr, i| {
@@ -760,7 +759,7 @@ fn load(gen: *Codegen, vari: Ref) !u32 {
 
 fn genInt(int: Ast.Int) TypVal {
     return .{
-        .typ = int.typ.*,
+        .typ = int.typ,
         .val = .{ .int = int.val },
     };
 }
@@ -800,7 +799,7 @@ fn genStr(gen: *Codegen, str: usize) !TypVal {
 
 fn genStructExpr(gen: *Codegen, struc: Ast.InferStruct) !TypVal {
     var res = TypVal{
-        .typ = struc.typ.*,
+        .typ = struc.typ,
         .val = .undef,
     };
     for (struc.fields) |field| {

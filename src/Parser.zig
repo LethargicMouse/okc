@@ -219,19 +219,19 @@ fn parseHeader(parser: *Parser) !Ast.Header {
     };
 }
 
-fn parseSep(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) ![]const typ {
-    var vec = std.ArrayList(typ).empty;
+fn parseSep(parser: *Parser, T: type, parse: fn (*Parser) Error!T) ![]T {
+    var vec = std.ArrayList(T).empty;
     defer vec.deinit(parser.gpa);
-    if (try parser.parseMaybe(typ, parse)) |first| {
+    if (try parser.parseMaybe(T, parse)) |first| {
         try vec.append(parser.gpa, first);
         while (true) {
             parser.expectLoud(.comma) catch break;
-            if (try parser.parseMaybe(typ, parse)) |item| {
+            if (try parser.parseMaybe(T, parse)) |item| {
                 try vec.append(parser.gpa, item);
             } else break;
         }
     }
-    const slice = try parser.typs.arena.allocator().alloc(typ, vec.items.len);
+    const slice = try parser.typs.arena.allocator().alloc(T, vec.items.len);
     @memcpy(slice, vec.items);
     return slice;
 }
@@ -352,18 +352,18 @@ fn parseVerbalTyp(parser: *Parser) !Ast.Typ {
     return Ast.Typ.fromName(name, location);
 }
 
-fn parseMany(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) ![]const typ {
-    var vec = std.ArrayList(typ).empty;
+fn parseMany(parser: *Parser, T: type, parse: fn (*Parser) Error!T) ![]T {
+    var vec = std.ArrayList(T).empty;
     defer vec.deinit(parser.gpa);
-    while (try parser.parseMaybe(typ, parse)) |item| {
+    while (try parser.parseMaybe(T, parse)) |item| {
         try vec.append(parser.gpa, item);
     }
-    const slice = try parser.typs.arena.allocator().alloc(typ, vec.items.len);
+    const slice = try parser.typs.arena.allocator().alloc(T, vec.items.len);
     @memcpy(slice, vec.items);
     return slice;
 }
 
-fn parseMaybe(parser: *Parser, typ: type, parse: fn (*Parser) Error!typ) !?typ {
+fn parseMaybe(parser: *Parser, T: type, parse: fn (*Parser) Error!T) !?T {
     const cursor_before = parser.cursor;
     const res = parse(parser) catch |err| switch (err) {
         error.ParseFailed => {
@@ -386,7 +386,7 @@ fn parseFun(parser: *Parser) !Ast.Fun {
     };
 }
 
-fn parseBlockLoud(parser: *Parser) Error![]const Ast.Statement {
+fn parseBlockLoud(parser: *Parser) Error![]Ast.Statement {
     try parser.expectLoud(.curl);
     const statements = try parser.parseMany(Ast.Statement, parseStatementLoud);
     try parser.expect(.curr);
@@ -478,7 +478,7 @@ fn parseIfStatement(parser: *Parser) !Ast.Statement {
     try parser.expect(.iff);
     const branch = try parser.parseBranch();
     const else_ifs = try parser.parseMany(Ast.Branch, parseElseIf);
-    const else_branch = try parser.parseMaybe([]const Ast.Statement, parseElseLoud) orelse &.{};
+    const else_branch = try parser.parseMaybe([]Ast.Statement, parseElseLoud) orelse @constCast(&.{});
     return .{
         .location = location,
         .kind = .{ .iff = .{
@@ -507,7 +507,7 @@ fn parseBranch(parser: *Parser) !Ast.Branch {
     };
 }
 
-fn parseElseLoud(parser: *Parser) ![]const Ast.Statement {
+fn parseElseLoud(parser: *Parser) ![]Ast.Statement {
     try parser.expectLoud(.els);
     const statements = try parser.parseBlockLoud();
     return statements;
@@ -603,7 +603,6 @@ fn parseCall(parser: *Parser) !Ast.Call {
     return .{
         .name = name,
         .args = args,
-        .info = try parser.typs.arena.allocator().create(Ast.Call.Info),
     };
 }
 
@@ -773,10 +772,7 @@ fn parseArrayExpr(parser: *Parser) !Ast.Expr {
     const end = parser.getLocation();
     return .{
         .location = start.combine(end),
-        .kind = .{ .array = .{
-            .exprs = exprs,
-            .typ = try parser.typs.arena.allocator().create(Ast.Typ),
-        } },
+        .kind = .{ .array = .{ .exprs = exprs } },
     };
 }
 
@@ -824,10 +820,7 @@ fn parseInferStructExpr(parser: *Parser) !Ast.Expr {
     const fields = try parser.parseStructExprBody();
     return .{
         .location = location,
-        .kind = .{ .infer_struc = .{
-            .fields = fields,
-            .typ = try parser.typs.arena.allocator().create(Ast.Typ),
-        } },
+        .kind = .{ .infer_struc = .{ .fields = fields } },
     };
 }
 
@@ -850,12 +843,11 @@ fn parseStructExpr(parser: *Parser) !Ast.Expr {
         .kind = .{ .struc = .{
             .name = name,
             .fields = fields,
-            .typ = try parser.typs.arena.allocator().create(Ast.Typ),
         } },
     };
 }
 
-fn parseStructExprBody(parser: *Parser) ![]const Ast.NewField {
+fn parseStructExprBody(parser: *Parser) ![]Ast.NewField {
     try parser.expect(.curl);
     const fields = try parser.parseSep(Ast.NewField, parseNewFieldLoud);
     try parser.expect(.curr);
@@ -946,10 +938,7 @@ fn parseIntExpr(parser: *Parser) !Ast.Expr {
     const val = try parser.parseInt();
     return .{
         .location = location,
-        .kind = .{ .int = .{
-            .val = val,
-            .typ = try parser.typs.arena.allocator().create(Ast.Typ),
-        } },
+        .kind = .{ .int = .{ .val = val } },
     };
 }
 

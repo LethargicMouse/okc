@@ -24,11 +24,9 @@ pub const Param = struct {
     location: Location,
 };
 
-const Block = []const Statement;
-
 pub const Fun = struct {
     header: Header,
-    body: Block,
+    body: []Statement,
 };
 
 pub const OpAssign = struct {
@@ -69,13 +67,13 @@ pub const While = struct {
 
 pub const If = struct {
     branch: Branch,
-    else_ifs: []const Branch,
-    else_branch: []const Statement,
+    else_ifs: []Branch,
+    else_branch: []Statement,
 };
 
 pub const Branch = struct {
     condition: Expr,
-    body: []const Statement,
+    body: []Statement,
 };
 
 pub const Assign = struct {
@@ -90,13 +88,10 @@ pub const Declare = struct {
 };
 
 pub const Call = struct {
-    pub const Info = struct {
-        generics: []const Typ,
-        ret_typ: Typ,
-    };
     name: []const u8,
-    args: []const Expr,
-    info: *Info,
+    args: []Expr,
+    generics: []Typ = undefined,
+    ret_typ: Typ = undefined,
 };
 
 pub const Elem = struct {
@@ -116,18 +111,18 @@ pub const Unary = struct {
 
 pub const Int = struct {
     val: u64,
-    typ: *Typ,
+    typ: Typ = undefined,
 };
 
 pub const Array = struct {
-    exprs: []const Expr,
-    typ: *Typ,
+    exprs: []Expr,
+    typ: Typ = undefined,
 };
 
 pub const Expr = struct {
     pub const Kind = union(enum) {
         array: Array,
-        unary: *const Unary,
+        unary: *Unary,
         infer_struc: InferStruct,
         int: Int,
         str: usize,
@@ -136,10 +131,10 @@ pub const Expr = struct {
         undef: Undef,
         bool: bool,
         call: Call,
-        binary: *const Binary,
-        field: *const Field,
+        binary: *Binary,
+        field: *Field,
         struc: StructExpr,
-        elem: *const Elem,
+        elem: *Elem,
     };
     location: Location,
     kind: Kind,
@@ -147,13 +142,13 @@ pub const Expr = struct {
 
 pub const StructExpr = struct {
     name: []const u8,
-    fields: []const NewField,
-    typ: *Typ,
+    fields: []NewField,
+    typ: Typ = undefined,
 };
 
 pub const InferStruct = struct {
-    fields: []const NewField,
-    typ: *Typ,
+    fields: []NewField,
+    typ: Typ = undefined,
 };
 
 pub const NewField = struct {
@@ -257,7 +252,7 @@ pub const Item = struct {
 const Ast = @This();
 
 typs: Typs,
-items: []const Item,
+items: []Item,
 strs: []const []const u8,
 location: Location,
 
