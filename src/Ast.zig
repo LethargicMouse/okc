@@ -125,7 +125,7 @@ pub const Expr = struct {
         unary: *Unary,
         infer_struc: InferStruct,
         int: Int,
-        str: usize,
+        str: []const u8,
         vari: []const u8,
         char: u8,
         undef: Undef,
@@ -253,7 +253,6 @@ const Ast = @This();
 
 typs: Typs,
 items: []Item,
-strs: []const []const u8,
 location: Location,
 
 pub fn deinit(ast: *Ast) void {

@@ -72,7 +72,6 @@ gpa: std.mem.Allocator,
 tokens: []const Lexer.Token,
 typs: Ast.Typs,
 err_msgs: ErrMsgs = .empty,
-strs: std.ArrayList([]const u8) = .empty,
 tmp_location: Location = .fake,
 cursor: usize = 0,
 err_cursor: usize = 0,
@@ -109,12 +108,9 @@ fn parseAst(parser: *Parser) !Ast {
     const items = try parser.parseMany(Ast.Item, parseItemLoud);
     const location = parser.getLocation();
     try parser.expectLoud(.eof);
-    const strs = try parser.typs.arena.allocator().alloc([]const u8, parser.strs.items.len);
-    @memcpy(strs, parser.strs.items);
     return .{
         .typs = parser.typs,
         .items = items,
-        .strs = strs,
         .location = location,
     };
 }
@@ -896,11 +892,9 @@ fn parseCallExpr(parser: *Parser) !Ast.Expr {
 fn parseStrExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     const str = try parser.parseStr();
-    const index = parser.strs.items.len;
-    try parser.strs.append(parser.gpa, str);
     return .{
         .location = location,
-        .kind = .{ .str = index },
+        .kind = .{ .str = str },
     };
 }
 
@@ -987,7 +981,6 @@ fn parseLexeme(
 fn deinit(parser: *Parser) void {
     parser.gpa.free(parser.tokens);
     parser.err_msgs.deinit(parser.gpa);
-    parser.strs.deinit(parser.gpa);
     parser.* = undefined;
 }
 

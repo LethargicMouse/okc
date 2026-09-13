@@ -4,6 +4,11 @@ const Ast = @import("Ast.zig");
 const Typ = Ast.Typ;
 const HashContext = @import("hash_context.zig").HashContext;
 
+const StrInfo = struct {
+    len: usize,
+    tmp: u32,
+};
+
 const LlvmTyp = struct {
     inner: Typ,
 
@@ -98,7 +103,6 @@ typs: *Ast.Typs,
 vars: std.StringHashMap(Ref),
 structs: std.StringHashMap(Struct),
 funs: std.StringHashMap(Ast.Fun),
-str_lens: std.ArrayList(usize) = .empty,
 loop_ends: std.ArrayList(u32) = .empty,
 struct_queue: std.ArrayList(Typ.Name) = .empty,
 fun_queue: std.ArrayList(Typ.Name) = .empty,
@@ -142,10 +146,6 @@ pub fn run(gen: *Codegen, ast: Ast) !void {
 fn genAst(gen: *Codegen, ast: Ast) !void {
     try gen.print("target triple = \"x86_64-pc-linux-gnu\"", .{});
     try gen.genSliceDecl();
-    for (ast.strs, 0..) |str, i| {
-        const len = try gen.genStrDecl(i, str);
-        try gen.str_lens.append(gen.gpa, len);
-    }
     for (ast.items) |item| {
         try gen.regItem(item);
     }
@@ -206,15 +206,22 @@ fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
     try gen.print(")", .{});
 }
 
-fn genStrDecl(gen: *Codegen, index: usize, str: []const u8) !usize {
+fn genStrDecl(gen: *Codegen, str: []const u8) !StrInfo {
+    const buffer = gen.buffer.?;
+    gen.buffer = null;
+    defer gen.buffer = buffer;
     const unescaped = try unescape(gen.gpa, str);
     defer gen.gpa.free(unescaped.repr);
+    const tmp = gen.newTmp();
     try gen.print("\n@.s{} = private unnamed_addr constant [{} x i8] c\"{s}\\00\", align 1", .{
-        index,
+        tmp,
         unescaped.len + 1,
         unescaped.repr,
     });
-    return unescaped.len;
+    return .{
+        .len = unescaped.len,
+        .tmp = tmp,
+    };
 }
 
 fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
@@ -778,15 +785,15 @@ fn genBool(boo: bool) TypVal {
     };
 }
 
-fn genStr(gen: *Codegen, str: usize) !TypVal {
-    const len = gen.str_lens.items[str];
+fn genStr(gen: *Codegen, str: []const u8) !TypVal {
+    const info = try gen.genStrDecl(str);
     const tmp1 = gen.newTmp();
     const tmp = gen.newTmp();
     try gen.print(
         \\
         \\  %{} = insertvalue %"[]" poison, ptr @.s{}, 0
         \\  %{} = insertvalue %"[]" %{}, i64 {}, 1
-    , .{ tmp1, str, tmp, tmp1, len });
+    , .{ tmp1, info.tmp, tmp, tmp1, info.len });
 
     return .{
         .typ = .{ .slice = .{
@@ -900,7 +907,6 @@ const Error = error{ WriteFailed, OutOfMemory };
 fn deinit(gen: *Codegen) void {
     gen.vars.deinit();
     gen.file.close(gen.io);
-    gen.str_lens.deinit(gen.gpa);
     var structs = gen.structs.valueIterator();
     while (structs.next()) |struc| {
         struc.fields.deinit();
