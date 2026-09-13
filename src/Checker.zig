@@ -74,6 +74,7 @@ typs: Typs,
 ast_typs: *Ast.Typs,
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
+ast_items: std.StringHashMap(Ast.Item),
 items: std.StringHashMap(Item),
 ret_typ: Typ = undefined,
 errors_cnt: u16 = 0,
@@ -89,21 +90,24 @@ pub fn init(
         .ast_typs = ast_typs,
         .fun_arena = .init(gpa),
         .typs = .init(gpa),
+        .ast_items = .init(gpa),
         .items = .init(gpa),
     };
 }
 
-pub fn run(checker: *Checker, ast: Ast) !void {
+pub fn run(checker: *Checker, ast: Ast) !std.StringHashMap(Ast.Item) {
     defer checker.deinit();
     try checker.checkAst(ast);
     if (checker.errors_cnt != 0) {
         std.log.err("check failed with {} errors", .{checker.errors_cnt});
         return error.Handled;
     }
+    return checker.ast_items;
 }
 
 fn checkAst(checker: *Checker, ast: Ast) !void {
     for (ast.items) |*item| {
+        try checker.ast_items.put(item.getName(), item.*);
         try checker.regItem(item);
     }
     for (ast.items) |item| {

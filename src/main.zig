@@ -47,13 +47,13 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     defer ast.deinit();
 
     var checker = try Checker.init(gpa, &ast.typs);
-    try checker.run(ast);
+    const items = try checker.run(ast);
 
     try std.Io.Dir.cwd().createDirPath(io, build_dir_path);
 
     var write_buf: [256]u8 = undefined;
-    var gen = try Codegen.init(io, gpa, &ast.typs, &write_buf, out_ll_path);
-    try gen.run(ast);
+    var gen = try Codegen.init(io, gpa, &ast.typs, items, &write_buf, out_ll_path);
+    try gen.run();
 
     const code = try runCmd(io, &.{ "clang", "-o", out_path, out_ll_path });
     // `Checker` should prevent incorrect IR

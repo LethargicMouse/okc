@@ -247,6 +247,23 @@ pub const Item = struct {
 
     kind: Kind,
     location: Location,
+
+    pub fn getName(item: Item) []const u8 {
+        return switch (item.kind) {
+            .ext_fun => |ext_fun| ext_fun.header.name,
+            .struc => |struc| struc.name,
+            .fun => |fun| fun.header.name,
+            .constant => |declare| declare.name,
+        };
+    }
+
+    pub fn getHeader(item: Item) ?Header {
+        return switch (item.kind) {
+            .ext_fun => |ext_fun| ext_fun.header,
+            .fun => |fun| fun.header,
+            .constant, .struc => null,
+        };
+    }
 };
 
 const Ast = @This();
