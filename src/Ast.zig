@@ -90,9 +90,13 @@ pub const Declare = struct {
 };
 
 pub const Call = struct {
+    pub const Info = struct {
+        generics: []const Typ,
+        ret_typ: Typ,
+    };
     name: []const u8,
     args: []const Expr,
-    call_id: usize,
+    info: *Info,
 };
 
 pub const Elem = struct {
@@ -112,12 +116,12 @@ pub const Unary = struct {
 
 pub const Int = struct {
     val: u64,
-    typ_id: usize,
+    typ: *Typ,
 };
 
 pub const Array = struct {
     exprs: []const Expr,
-    typ_id: usize,
+    typ: *Typ,
 };
 
 pub const Expr = struct {
@@ -144,12 +148,12 @@ pub const Expr = struct {
 pub const StructExpr = struct {
     name: []const u8,
     fields: []const NewField,
-    typ_id: usize,
+    typ: *Typ,
 };
 
 pub const InferStruct = struct {
     fields: []const NewField,
-    typ_id: usize,
+    typ: *Typ,
 };
 
 pub const NewField = struct {
@@ -158,14 +162,15 @@ pub const NewField = struct {
     location: Location,
 };
 
+// lol
 pub const Undef = struct {
-    typ_id: usize,
+    typ: *Typ,
 };
 
 pub const Field = struct {
     expr: Expr,
     name: []const u8,
-    typ_id: usize,
+    typ: *Typ,
 };
 
 pub const Binary = struct {
@@ -235,11 +240,6 @@ pub const FieldDecl = struct {
     name: []const u8,
     typ: Typ,
     location: Location,
-};
-
-pub const Info = struct {
-    typ_ids: usize,
-    call_ids: usize,
 };
 
 pub const Item = struct {

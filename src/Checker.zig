@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const Ast = @import("Ast.zig");
-const Info = @import("Info.zig");
 const Location = @import("Location.zig");
 const Typs = @import("Typs.zig");
 const Typ = Typs.Typ;
@@ -76,7 +75,6 @@ ast_typs: *Ast.Typs,
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
 items: std.StringHashMap(Item),
-info: Info,
 ret_typ: Typ = undefined,
 errors_cnt: u16 = 0,
 loops_nested: u16 = 0,
@@ -85,26 +83,23 @@ current_generics: []const []const u8 = &.{},
 pub fn init(
     gpa: std.mem.Allocator,
     ast_typs: *Ast.Typs,
-    ast_info: Ast.Info,
 ) !Checker {
     return .{
         .gpa = gpa,
         .ast_typs = ast_typs,
         .fun_arena = .init(gpa),
         .typs = .init(gpa),
-        .info = try .init(ast_typs, ast_info),
         .items = .init(gpa),
     };
 }
 
-pub fn run(checker: *Checker, ast: Ast) !Info {
+pub fn run(checker: *Checker, ast: Ast) !void {
     defer checker.deinit();
     try checker.checkAst(ast);
-    if (checker.errors_cnt == 0) {
-        return checker.info;
+    if (checker.errors_cnt != 0) {
+        std.log.err("check failed with {} errors", .{checker.errors_cnt});
+        return error.Handled;
     }
-    std.log.err("check failed with {} errors", .{checker.errors_cnt});
-    return error.Handled;
 }
 
 fn checkAst(checker: *Checker, ast: Ast) !void {
@@ -722,8 +717,8 @@ fn checkArray(checker: *Checker, array: Ast.Array, location: Location, hint: Typ
             .typ = try checker.typs.box(inner_hint),
             .len = 0,
         } };
-        if (try checker.convertTyp(typ, location)) |llvm_typ| {
-            checker.info.typs[array.typ_id] = llvm_typ;
+        if (try checker.convertTyp(typ, location)) |ast_typ| {
+            array.typ.* = ast_typ;
         }
         return .{
             .typ = typ,
@@ -739,8 +734,8 @@ fn checkArray(checker: *Checker, array: Ast.Array, location: Location, hint: Typ
         .typ = try checker.typs.box(info.typ),
         .len = array.exprs.len,
     } };
-    if (try checker.convertTyp(typ, location)) |llvm_typ| {
-        checker.info.typs[array.typ_id] = llvm_typ;
+    if (try checker.convertTyp(typ, location)) |ast_typ| {
+        array.typ.* = ast_typ;
     }
     return .{
         .typ = typ,
@@ -799,7 +794,7 @@ fn checkInferStruc(
         .slice => |slice| return checker.checkSliceStruc(
             slice,
             struc.fields,
-            struc.typ_id,
+            struc.typ,
             location,
         ),
         .err => return err,
@@ -815,7 +810,7 @@ fn checkInferStruc(
     return checker.checkTypedStruc(
         name,
         struc.fields,
-        struc.typ_id,
+        struc.typ,
         location,
     );
 }
@@ -824,7 +819,7 @@ fn checkSliceStruc(
     checker: *Checker,
     slice: Typ.Slice,
     fields: []const Ast.NewField,
-    typ_id: usize,
+    typ_target: *Ast.Typ,
     location: Location,
 ) !ExprInfo {
     var was_ptr: ?*const Typ = null;
@@ -860,8 +855,8 @@ fn checkSliceStruc(
         .typ = was_ptr.?,
         .mutable = slice.mutable,
     } };
-    if (try checker.convertTyp(typ, location)) |llvm_typ| {
-        checker.info.typs[typ_id] = llvm_typ;
+    if (try checker.convertTyp(typ, location)) |ast_typ| {
+        typ_target.* = ast_typ;
     }
     return .{
         .typ = typ,
@@ -877,7 +872,7 @@ fn checkTypedStruc(
     checker: *Checker,
     name: Typ.Name,
     fields: []const Ast.NewField,
-    typ_id: usize,
+    typ_target: *Ast.Typ,
     location: Location,
 ) !ExprInfo {
     const err = ExprInfo{
@@ -909,8 +904,8 @@ fn checkTypedStruc(
         .name = name.name,
         .generics = generics,
     } };
-    if (try checker.convertTyp(typ, location)) |llvm_typ| {
-        checker.info.typs[typ_id] = llvm_typ;
+    if (try checker.convertTyp(typ, location)) |ast_typ| {
+        typ_target.* = ast_typ;
     }
     return .{
         .typ = typ,
@@ -971,14 +966,14 @@ fn checkStruc(checker: *Checker, struc: Ast.StructExpr, location: Location) !Exp
     return checker.checkTypedStruc(
         .{ .name = struc.name },
         struc.fields,
-        struc.typ_id,
+        struc.typ,
         location,
     );
 }
 
 fn checkUndef(checker: *Checker, undef: Ast.Undef, location: Location, typ: Typ) !ExprInfo {
-    if (try checker.convertTyp(typ, location)) |llvm_typ| {
-        checker.info.typs[undef.typ_id] = llvm_typ;
+    if (try checker.convertTyp(typ, location)) |ast_typ| {
+        undef.typ.* = ast_typ;
     }
     return .{
         .typ = typ,
@@ -988,8 +983,8 @@ fn checkUndef(checker: *Checker, undef: Ast.Undef, location: Location, typ: Typ)
 
 fn checkInt(checker: *Checker, location: Location, int: Ast.Int, hint: Typ) !ExprInfo {
     const typ = if (hint.isNumber()) hint else .any;
-    if (try checker.convertTyp(typ, location)) |llvm_typ| {
-        checker.info.typs[int.typ_id] = llvm_typ;
+    if (try checker.convertTyp(typ, location)) |ast_typ| {
+        int.typ.* = ast_typ;
     }
     return .{
         .typ = typ,
@@ -1014,7 +1009,7 @@ fn checkField(
             norm.slice,
             info.mutable,
             field.name,
-            field.typ_id,
+            field.typ,
             location,
         );
     }
@@ -1038,8 +1033,8 @@ fn checkField(
         try resolver.map.put(generic, typ);
     }
     const typ = try resolver.resolve(fiel.typ);
-    if (try checker.convertTyp(typ, location)) |llvm_typ| {
-        checker.info.typs[field.typ_id] = llvm_typ;
+    if (try checker.convertTyp(typ, location)) |ast_typ| {
+        field.typ.* = ast_typ;
     }
     return .{
         .typ = typ,
@@ -1052,7 +1047,7 @@ fn checkSliceField(
     slice: Typ.Slice,
     mutable: bool,
     name: []const u8,
-    typ_id: usize,
+    typ_target: *Ast.Typ,
     location: Location,
 ) !ExprInfo {
     if (std.mem.eql(u8, name, "ptr")) {
@@ -1060,8 +1055,8 @@ fn checkSliceField(
             .typ = slice.typ,
             .mutable = slice.mutable,
         } };
-        if (try checker.convertTyp(typ, location)) |llvm_typ| {
-            checker.info.typs[typ_id] = llvm_typ;
+        if (try checker.convertTyp(typ, location)) |ast_typ| {
+            typ_target.* = ast_typ;
         }
         return .{
             .typ = typ,
@@ -1069,7 +1064,7 @@ fn checkSliceField(
         };
     }
     if (std.mem.eql(u8, name, "len")) {
-        checker.info.typs[typ_id] = .{ .prime = .u64 };
+        typ_target.* = .{ .prime = .u64 };
         return .{
             .typ = .{ .prime = .u64 },
             .mutable = mutable,
@@ -1252,9 +1247,9 @@ fn checkCall(checker: *Checker, call: Ast.Call, location: Location, hint: Typ) !
             target.* = llvm_typ;
         }
     }
-    checker.info.calls[call.call_id].generics = generics;
-    if (try checker.convertTyp(ret_typ, location)) |llvm_typ| {
-        checker.info.calls[call.call_id].ret_typ = llvm_typ;
+    call.info.generics = generics;
+    if (try checker.convertTyp(ret_typ, location)) |ast_typ| {
+        call.info.ret_typ = ast_typ;
     }
     return .{
         .typ = ret_typ,

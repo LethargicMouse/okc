@@ -43,18 +43,16 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     const tokens = try lexer.lex(gpa);
 
     var parser = Parser.init(gpa, tokens);
-    const parse_result = try parser.run();
-    var ast = parse_result[0];
+    var ast = try parser.run();
     defer ast.deinit();
-    const ast_info = parse_result[1];
 
-    var checker = try Checker.init(gpa, &ast.typs, ast_info);
-    const info = try checker.run(ast);
+    var checker = try Checker.init(gpa, &ast.typs);
+    try checker.run(ast);
 
     try std.Io.Dir.cwd().createDirPath(io, build_dir_path);
 
     var write_buf: [256]u8 = undefined;
-    var gen = try Codegen.init(io, gpa, &ast.typs, &write_buf, out_ll_path, info);
+    var gen = try Codegen.init(io, gpa, &ast.typs, &write_buf, out_ll_path);
     try gen.run(ast);
 
     const code = try runCmd(io, &.{ "clang", "-o", out_path, out_ll_path });

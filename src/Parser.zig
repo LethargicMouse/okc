@@ -76,8 +76,6 @@ strs: std.ArrayList([]const u8) = .empty,
 tmp_location: Location = .fake,
 cursor: usize = 0,
 err_cursor: usize = 0,
-next_typ_id: usize = 0,
-next_call_id: usize = 0,
 
 pub fn init(gpa: std.mem.Allocator, tokens: []const Lexer.Token) Parser {
     return .{
@@ -87,7 +85,7 @@ pub fn init(gpa: std.mem.Allocator, tokens: []const Lexer.Token) Parser {
     };
 }
 
-pub fn run(parser: *Parser) !struct { Ast, Ast.Info } {
+pub fn run(parser: *Parser) !Ast {
     defer parser.deinit();
     errdefer parser.typs.deinit();
     const ast = try parser.parseMaybe(Ast, parseAst) orelse {
@@ -104,11 +102,7 @@ pub fn run(parser: *Parser) !struct { Ast, Ast.Info } {
         }
         return error.Handled;
     };
-    const ast_info = Ast.Info{
-        .typ_ids = parser.next_typ_id,
-        .call_ids = parser.next_call_id,
-    };
-    return .{ ast, ast_info };
+    return ast;
 }
 
 fn parseAst(parser: *Parser) !Ast {
@@ -609,13 +603,8 @@ fn parseCall(parser: *Parser) !Ast.Call {
     return .{
         .name = name,
         .args = args,
-        .call_id = parser.newCallId(),
+        .info = try parser.typs.arena.allocator().create(Ast.Call.Info),
     };
-}
-
-fn newCallId(parser: *Parser) usize {
-    parser.next_call_id += 1;
-    return parser.next_call_id - 1;
 }
 
 fn parseRetStatement(parser: *Parser) !Ast.Statement {
@@ -699,7 +688,7 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
                 field.* = .{
                     .expr = res,
                     .name = field_postfix.name,
-                    .typ_id = parser.newTypId(),
+                    .typ = try parser.typs.arena.allocator().create(Ast.Typ),
                 };
                 res = .{
                     .location = res.location.combine(field_postfix.location),
@@ -786,7 +775,7 @@ fn parseArrayExpr(parser: *Parser) !Ast.Expr {
         .location = start.combine(end),
         .kind = .{ .array = .{
             .exprs = exprs,
-            .typ_id = parser.newTypId(),
+            .typ = try parser.typs.arena.allocator().create(Ast.Typ),
         } },
     };
 }
@@ -837,7 +826,7 @@ fn parseInferStructExpr(parser: *Parser) !Ast.Expr {
         .location = location,
         .kind = .{ .infer_struc = .{
             .fields = fields,
-            .typ_id = parser.newTypId(),
+            .typ = try parser.typs.arena.allocator().create(Ast.Typ),
         } },
     };
 }
@@ -861,7 +850,7 @@ fn parseStructExpr(parser: *Parser) !Ast.Expr {
         .kind = .{ .struc = .{
             .name = name,
             .fields = fields,
-            .typ_id = parser.newTypId(),
+            .typ = try parser.typs.arena.allocator().create(Ast.Typ),
         } },
     };
 }
@@ -926,11 +915,10 @@ fn parseStrExpr(parser: *Parser) !Ast.Expr {
 fn parseUndefinedExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     try parser.expect(.undef);
-    const typ_id = parser.newTypId();
     return .{
         .location = location,
         .kind = .{ .undef = .{
-            .typ_id = typ_id,
+            .typ = try parser.typs.arena.allocator().create(Ast.Typ),
         } },
     };
 }
@@ -942,11 +930,6 @@ fn parseTrueExpr(parser: *Parser) !Ast.Expr {
         .location = location,
         .kind = .{ .bool = true },
     };
-}
-
-fn newTypId(parser: *Parser) usize {
-    parser.next_typ_id += 1;
-    return parser.next_typ_id - 1;
 }
 
 fn parseCharExpr(parser: *Parser) !Ast.Expr {
@@ -965,7 +948,7 @@ fn parseIntExpr(parser: *Parser) !Ast.Expr {
         .location = location,
         .kind = .{ .int = .{
             .val = val,
-            .typ_id = parser.newTypId(),
+            .typ = try parser.typs.arena.allocator().create(Ast.Typ),
         } },
     };
 }
