@@ -719,7 +719,7 @@ fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) Error!ExprInfo 
             .typ = .{ .prime = .bool },
             .mutable = false,
         },
-        .undef => |undef| return checker.checkUndef(undef, expr.location, hint.typ),
+        .undef => |*undef| return checker.checkUndef(undef, expr.location, hint.typ),
         .call => |*call| return checker.checkCall(call, expr.location, hint.typ),
         .binary => |binary| return checker.checkBinary(binary, hint.typ),
         .field => |field| return checker.checkField(field, expr.location, hint.mutable),
@@ -991,9 +991,9 @@ fn checkNamedStructExpr(checker: *Checker, struc: *Ast.NamedStructExpr, location
     );
 }
 
-fn checkUndef(checker: *Checker, undef: Ast.Undef, location: Location, typ: Typ) !ExprInfo {
+fn checkUndef(checker: *Checker, undef: *Ast.Undef, location: Location, typ: Typ) !ExprInfo {
     if (try checker.convertTyp(typ, location)) |ast_typ| {
-        undef.typ.* = ast_typ;
+        undef.typ = ast_typ;
     }
     return .{
         .typ = typ,
@@ -1029,7 +1029,7 @@ fn checkField(
             norm.slice,
             info.mutable,
             field.name,
-            field.typ,
+            &field.typ,
             location,
         );
     }
@@ -1054,7 +1054,7 @@ fn checkField(
     }
     const typ = try resolver.resolve(fiel.typ);
     if (try checker.convertTyp(typ, location)) |ast_typ| {
-        field.typ.* = ast_typ;
+        field.typ = ast_typ;
     }
     return .{
         .typ = typ,

@@ -631,8 +631,7 @@ fn genPtr(gen: *Codegen, expr: Ast.Expr) !TypVal {
 }
 
 fn genUndef(undef: Ast.Undef) !TypVal {
-    const typ = undef.typ.*;
-    return .{ .typ = typ, .val = .undef };
+    return .{ .typ = undef.typ, .val = .undef };
 }
 
 fn genFieldRef(gen: *Codegen, field: Ast.Field) !Ref {
@@ -647,7 +646,7 @@ fn genFieldRef(gen: *Codegen, field: Ast.Field) !Ref {
     const index = gen.getFieldIndex(vari.inner_typ, field.name);
     const tmp = try gen.genGEP(vari, .int(index));
     return .{
-        .inner_typ = field.typ.*,
+        .inner_typ = field.typ,
         .val = .{ .tmp = tmp },
     };
 }

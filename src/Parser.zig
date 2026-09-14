@@ -694,7 +694,6 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
                 field.* = .{
                     .expr = res,
                     .name = field_postfix.name,
-                    .typ = try parser.typs.arena.allocator().create(Ast.Typ),
                 };
                 res = .{
                     .location = res.location.combine(field_postfix.location),
@@ -914,9 +913,7 @@ fn parseUndefinedExpr(parser: *Parser) !Ast.Expr {
     try parser.expect(.undef);
     return .{
         .location = location,
-        .kind = .{ .undef = .{
-            .typ = try parser.typs.arena.allocator().create(Ast.Typ),
-        } },
+        .kind = .{ .undef = .{} },
     };
 }
 

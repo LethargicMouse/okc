@@ -165,13 +165,13 @@ pub const NewField = struct {
 
 // lol
 pub const Undef = struct {
-    typ: *Typ,
+    typ: Typ = undefined,
 };
 
 pub const Field = struct {
     expr: Expr,
     name: []const u8,
-    typ: *Typ,
+    typ: Typ = undefined,
 };
 
 pub const Binary = struct {
