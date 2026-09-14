@@ -119,34 +119,40 @@ pub const Array = struct {
     typ: Typ = undefined,
 };
 
+pub const GlobalVar = struct {
+    name: []const u8,
+    typ: Typ,
+};
+
 pub const Expr = struct {
     pub const Kind = union(enum) {
         array: Array,
         unary: *Unary,
-        infer_struc: InferStruct,
+        struc: StructExpr,
         int: Int,
         str: []const u8,
         vari: []const u8,
+        fn_ptr: []const u8,
         char: u8,
         undef: Undef,
         bool: bool,
         call: Call,
         binary: *Binary,
         field: *Field,
-        struc: StructExpr,
+        named_struc: NamedStructExpr,
         elem: *Elem,
     };
     location: Location,
     kind: Kind,
 };
 
-pub const StructExpr = struct {
+pub const NamedStructExpr = struct {
     name: []const u8,
     fields: []NewField,
     typ: Typ = undefined,
 };
 
-pub const InferStruct = struct {
+pub const StructExpr = struct {
     fields: []NewField,
     typ: Typ = undefined,
 };

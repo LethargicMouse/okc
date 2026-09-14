@@ -1,16 +1,20 @@
 extern fn printf(fmt: &u8, a: &u8, b: &u8) void;
 
 fn main() i32 {
-  printf("%s %s\n", my_pair.first.ptr, my_pair.second.ptr);
+  printf(
+    "%s %s\n".ptr, 
+    my_pair.first.ptr, 
+    my_pair.second.ptr,
+  );
   return 0;
 }
 
-struct pair<a, b> {
+struct Pair<a, b> {
   first: a,
   second: b,
 }
 
-let my_pair = pair {
+let my_pair = Pair {
   first: "six",
   second: "seven",
 };

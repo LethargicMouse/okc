@@ -107,7 +107,7 @@ pub fn run(parser: *Parser) !Ast {
 fn parseAst(parser: *Parser) !Ast {
     const items = try parser.parseMany(Ast.Item, parseItemLoud);
     const location = parser.getLocation();
-    try parser.expectLoud(.eof);
+    try parser.expect(.eof);
     return .{
         .typs = parser.typs,
         .items = items,
@@ -120,9 +120,20 @@ fn parseItemLoud(parser: *Parser) !Ast.Item {
         parseFunItem,
         parseStructItem,
         parseExtFunItem,
+        parseConstantItem,
     }) catch |err| {
         try parser.fail("<item>");
         return err;
+    };
+}
+
+fn parseConstantItem(parser: *Parser) !Ast.Item {
+    try parser.expect(.let);
+    const location = parser.getLocation();
+    const declare = try parser.parseDeclareLoud();
+    return .{
+        .location = location,
+        .kind = .{ .constant = declare },
     };
 }
 
@@ -816,7 +827,7 @@ fn parseInferStructExpr(parser: *Parser) !Ast.Expr {
     const fields = try parser.parseStructExprBody();
     return .{
         .location = location,
-        .kind = .{ .infer_struc = .{ .fields = fields } },
+        .kind = .{ .struc = .{ .fields = fields } },
     };
 }
 
@@ -836,7 +847,7 @@ fn parseStructExpr(parser: *Parser) !Ast.Expr {
     const fields = try parser.parseStructExprBody();
     return .{
         .location = location,
-        .kind = .{ .struc = .{
+        .kind = .{ .named_struc = .{
             .name = name,
             .fields = fields,
         } },

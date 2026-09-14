@@ -74,7 +74,7 @@ typs: Typs,
 ast_typs: *Ast.Typs,
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
-ast_items: std.StringHashMap(Ast.Item),
+ast_items: std.StringHashMap(*const Ast.Item),
 items: std.StringHashMap(Item),
 ret_typ: Typ = undefined,
 errors_cnt: u16 = 0,
@@ -95,7 +95,7 @@ pub fn init(
     };
 }
 
-pub fn run(checker: *Checker, ast: Ast) !std.StringHashMap(Ast.Item) {
+pub fn run(checker: *Checker, ast: Ast) !std.StringHashMap(*const Ast.Item) {
     defer checker.deinit();
     try checker.checkAst(ast);
     if (checker.errors_cnt != 0) {
@@ -107,7 +107,7 @@ pub fn run(checker: *Checker, ast: Ast) !std.StringHashMap(Ast.Item) {
 
 fn checkAst(checker: *Checker, ast: Ast) !void {
     for (ast.items) |*item| {
-        try checker.ast_items.put(item.getName(), item.*);
+        try checker.ast_items.put(item.getName(), item);
         try checker.regItem(item);
     }
     for (ast.items) |item| {
@@ -191,25 +191,28 @@ fn convertTypRec(checker: Checker, typ: Typ) !Ast.Typ {
 fn checkItems(checker: *Checker) void {
     var iter = checker.items.valueIterator();
     while (iter.next()) |item| {
-        checker.checkUsage(item.used, item.location);
+        checker.checkItemUsage(item.*);
+    }
+}
+
+fn checkItemUsage(checker: *Checker, item: Item) void {
+    if (item.used) {
         switch (item.kind) {
             .fun => {},
-            .vari => unreachable,
+            .vari => |vari| checker.checkVarUsage(vari, item.location),
             .struc => |struc| checker.checkStructUsage(struc),
         }
+    } else {
+        checker.failUnused(item.location);
     }
 }
 
 fn checkStructUsage(checker: *Checker, struc: Struct) void {
     var iter = struc.fields.valueIterator();
     while (iter.next()) |field| {
-        checker.checkUsage(field.used, field.location);
-    }
-}
-
-fn checkUsage(checker: *Checker, used: bool, location: Location) void {
-    if (!used) {
-        checker.failUnused(location);
+        if (!field.used) {
+            checker.failUnused(field.location);
+        }
     }
 }
 
@@ -241,12 +244,25 @@ fn regConst(checker: *Checker, declare: *Ast.Declare, location: Location) !void 
 }
 
 fn checkConstExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) !Typ {
+    const info = try checker.checkExpr(expr, hint);
+    checker.checkComptime(expr.*);
+    return info.typ;
+}
+
+fn checkComptime(checker: *Checker, expr: Ast.Expr) void {
     switch (expr.kind) {
-        else => {
-            checker.fail(expr.location, "cannot evaluate at compile time", .{});
-            const info = try checker.checkExpr(expr, hint);
-            return info.typ;
+        .str => {},
+        .named_struc => |struc| {
+            for (struc.fields) |field| {
+                checker.checkComptime(field.expr);
+            }
         },
+        .struc => |struc| {
+            for (struc.fields) |field| {
+                checker.checkComptime(field.expr);
+            }
+        },
+        else => checker.fail(expr.location, "cannot evaluate at compile time", .{}),
     }
 }
 
@@ -259,10 +275,8 @@ fn checkItem(checker: *Checker, item: Ast.Item) !void {
     }
 }
 
-fn checkVarUsage(checker: *Checker, vari: Var, used: bool, location: Location) void {
-    if (!used) {
-        checker.failUnused(location);
-    } else if (vari.mutable and !vari.mutated) {
+fn checkVarUsage(checker: *Checker, vari: Var, location: Location) void {
+    if (vari.mutable and !vari.mutated) {
         checker.fail(location, "variable is never mutated", .{});
         std.log.info("remove `mut` before name\n", .{});
     }
@@ -392,7 +406,7 @@ fn checkBlock(checker: *Checker, block: []Ast.Statement) !ControlFlow {
 fn freeVars(checker: *Checker, rbp: usize) void {
     for (checker.vars_stack.items[rbp..]) |name| {
         const item = checker.items.fetchRemove(name).?.value;
-        checker.checkVarUsage(item.kind.vari, item.used, item.location);
+        checker.checkItemUsage(item);
     }
     checker.vars_stack.shrinkRetainingCapacity(rbp);
 }
@@ -693,10 +707,10 @@ fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) Error!ExprInfo 
     switch (expr.kind) {
         .array => |*array| return checker.checkArray(array, expr.location, hint.typ),
         .unary => |unary| return checker.checkUnary(unary, expr.location, hint.typ),
-        .infer_struc => |*struc| return checker.checkInferStruc(struc, expr.location, hint.typ),
+        .struc => |*struc| return checker.checkStructExpr(struc, expr.location, hint.typ),
         .int => |*int| return checker.checkInt(expr.location, int, hint.typ),
         .str => return checker.checkStr(),
-        .vari => |name| return checker.checkVar(expr.location, name, hint.mutable),
+        .vari => return checker.checkVar(expr, hint.mutable),
         .char => return .{
             .typ = .{ .prime = .u8 },
             .mutable = false,
@@ -709,8 +723,9 @@ fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) Error!ExprInfo 
         .call => |*call| return checker.checkCall(call, expr.location, hint.typ),
         .binary => |binary| return checker.checkBinary(binary, hint.typ),
         .field => |field| return checker.checkField(field, expr.location, hint.mutable),
-        .struc => |*struc| return checker.checkStruc(struc, expr.location),
+        .named_struc => |*struc| return checker.checkNamedStructExpr(struc, expr.location),
         .elem => |elem| return checker.checkElem(elem, expr.location),
+        .fn_ptr => unreachable,
     }
 }
 
@@ -783,9 +798,9 @@ fn checkPtr(checker: *Checker, expr: *Ast.Expr, hint: Typ) !ExprInfo {
     };
 }
 
-fn checkInferStruc(
+fn checkStructExpr(
     checker: *Checker,
-    struc: *Ast.InferStruct,
+    struc: *Ast.StructExpr,
     location: Location,
     hint: Typ,
 ) Error!ExprInfo {
@@ -883,10 +898,11 @@ fn checkTypedStruc(
         .typ = .err,
         .mutable = false,
     };
-    const item = checker.items.get(name.name) orelse {
+    const item = checker.items.getPtr(name.name) orelse {
         checker.failNotDeclared(location, name.name);
         return err;
     };
+    item.used = true;
     const decl = if (item.kind == .struc) item.kind.struc else {
         checker.failNotStruct(location, .{ .name = name });
         return err;
@@ -966,7 +982,7 @@ fn failNotInit(checker: *Checker, location: Location, name: []const u8) void {
     checker.fail(location, "field `{s}` is not initialized", .{name});
 }
 
-fn checkStruc(checker: *Checker, struc: *Ast.StructExpr, location: Location) !ExprInfo {
+fn checkNamedStructExpr(checker: *Checker, struc: *Ast.NamedStructExpr, location: Location) !ExprInfo {
     return checker.checkTypedStruc(
         .{ .name = struc.name },
         struc.fields,
@@ -1144,21 +1160,22 @@ fn checkBinary(checker: *Checker, binary: *Ast.Binary, hint: Typ) !ExprInfo {
 
 fn checkVar(
     checker: *Checker,
-    location: Location,
-    name: []const u8,
+    expr: *Ast.Expr,
     hint_mutable: bool,
 ) !ExprInfo {
     const err = ExprInfo{
         .typ = .err,
         .mutable = true,
     };
+    const name = expr.kind.vari;
     const item = checker.items.getPtr(name) orelse {
-        checker.failNotDeclared(location, name);
+        checker.failNotDeclared(expr.location, name);
         return err;
     };
     switch (item.kind) {
         .fun => |header| {
             item.used = true;
+            expr.kind = .{ .fn_ptr = name };
             return .{
                 .typ = .{ .fun = .{
                     .params = header.params,
@@ -1168,7 +1185,7 @@ fn checkVar(
             };
         },
         .struc => {
-            checker.fail(location, "it is a type", .{});
+            checker.fail(expr.location, "it is a type", .{});
             return err;
         },
         .vari => |*vari| {
