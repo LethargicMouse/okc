@@ -214,3 +214,7 @@ test "array_to_slice.ok" {
 test "constant.ok" {
     try testFile("constant", "six seven\n");
 }
+
+test "default_field.ok" {
+    try testFile("default_field", "six seven\n");
+}
