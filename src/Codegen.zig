@@ -4,8 +4,14 @@ const Ast = @import("Ast.zig");
 const Typ = Ast.Typ;
 const HashContext = @import("hash_context.zig").HashContext;
 
+const DefaultField = struct {
+    index: usize,
+    expr: Ast.Expr,
+};
+
 const StructInfo = struct {
     indices: std.StringHashMap(usize),
+    default_fields: []const DefaultField,
 };
 
 const StrInfo = struct {
@@ -305,9 +311,8 @@ fn genStruct(gen: *Codegen, name: Typ.Name) !void {
     const buffer = gen.buffer.?;
     gen.buffer = null;
     defer gen.buffer = buffer;
-    var info: StructInfo = .{
-        .indices = .init(gen.gpa),
-    };
+    var indices = std.StringHashMap(usize).init(gen.gpa);
+    var default_fields_vec = std.ArrayList(DefaultField).empty;
     try gen.print("\n%\"{f}\" = type {{", .{name});
     const struc = gen.items.get(name.name).?.kind.struc;
     var resolver = gen.typs.makeResolver(gen.gpa);
@@ -315,18 +320,28 @@ fn genStruct(gen: *Codegen, name: Typ.Name) !void {
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic, typ);
     }
+    for (struc.fields, 0..) |field, i| {
+        try indices.put(field.name, i);
+        if (field.default) |expr| {
+            try default_fields_vec.append(gen.gpa, .{
+                .expr = expr,
+                .index = i,
+            });
+        }
+    }
     if (struc.fields.len != 0) {
         const first = try resolver.resolve(struc.fields[0].typ);
         try gen.print("\n  {f}", .{LlvmTyp{ .inner = first }});
-        try info.indices.put(struc.fields[0].name, 0);
-        for (struc.fields[1..], 1..) |field, i| {
-            try info.indices.put(field.name, i);
+        for (struc.fields[1..]) |field| {
             const typ = try resolver.resolve(field.typ);
             try gen.print(",\n  {f}", .{LlvmTyp{ .inner = typ }});
         }
     }
     try gen.print("\n}}", .{});
-    try gen.structs.put(.{ .name = name }, info);
+    try gen.structs.put(.{ .name = name }, .{
+        .indices = indices,
+        .default_fields = try default_fields_vec.toOwnedSlice(gen.gpa),
+    });
 }
 
 fn genParam(gen: *Codegen, typ: Typ) !TypVal {
@@ -797,6 +812,12 @@ fn genStructExpr(gen: *Codegen, struc: Ast.StructExpr) !TypVal {
         .typ = struc.typ,
         .val = .undef,
     };
+    if (struc.typ == .name) {
+        for (gen.structs.get(struc.typ).?.default_fields) |field| {
+            const typ_val = try gen.genExpr(field.expr);
+            try gen.genIV(&res, typ_val, field.index);
+        }
+    }
     for (struc.fields) |field| {
         const typ_val = try gen.genExpr(field.expr);
         const index = gen.getFieldIndex(struc.typ, field.name);
@@ -910,6 +931,11 @@ fn genConstStruc(gen: *Codegen, struc: Ast.StructExpr) !Typ {
     if (struc.fields.len != 0) {
         const fields = try gen.gpa.alloc(Ast.Expr, struc.fields.len);
         defer gen.gpa.free(fields);
+        if (struc.typ == .name) {
+            for (gen.structs.get(struc.typ).?.default_fields) |field| {
+                fields[field.index] = field.expr;
+            }
+        }
         for (struc.fields) |field| {
             const index = gen.getFieldIndex(struc.typ, field.name);
             fields[index] = field.expr;
@@ -926,7 +952,7 @@ fn genConstStruc(gen: *Codegen, struc: Ast.StructExpr) !Typ {
 
 fn getFieldIndex(gen: *Codegen, typ: Typ, name: []const u8) usize {
     return if (typ == .name)
-        gen.structs.get(.{ .name = typ.name }).?.indices.get(name).?
+        gen.structs.get(typ).?.indices.get(name).?
     else if (std.mem.eql(u8, name, "ptr")) 0 else 1; // slice
 }
 
@@ -988,6 +1014,7 @@ fn deinitStructs(gen: *Codegen) void {
     var iter = gen.structs.valueIterator();
     while (iter.next()) |info| {
         info.indices.deinit();
+        gen.gpa.free(info.default_fields);
     }
     gen.structs.deinit();
 }

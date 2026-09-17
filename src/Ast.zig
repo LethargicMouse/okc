@@ -234,12 +234,13 @@ pub const Binary = struct {
 pub const Struct = struct {
     name: []const u8,
     generics: []const []const u8,
-    fields: []const FieldDecl,
+    fields: []FieldDecl,
 };
 
 pub const FieldDecl = struct {
     name: []const u8,
     typ: Typ,
+    default: ?Expr,
     location: Location,
 };
 

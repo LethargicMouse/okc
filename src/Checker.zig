@@ -27,6 +27,7 @@ const ControlFlow = enum(u2) {
 const Field = struct {
     location: Location,
     typ: Typ,
+    defaulted: bool,
     used: bool = false,
 };
 
@@ -341,15 +342,22 @@ fn regStruct(checker: *Checker, struc: Ast.Struct, location: Location) !void {
         .fields = .init(checker.gpa),
     };
     checker.current_generics = struc.generics;
-    for (struc.fields) |field| {
+    for (struc.fields) |*field| {
         if (res.fields.get(field.name)) |prev| {
             checker.failAlreadyDeclared(field.location, field.name, prev.location);
             continue;
         }
         const typ = try checker.checkTyp(field.typ);
+        var defaulted = false;
+        if (field.default) |*expr| {
+            const expr_typ = try checker.checkConstExpr(expr, .{ .typ = typ });
+            try checker.unify(expr.location, typ, expr_typ);
+            defaulted = true;
+        }
         try res.fields.put(field.name, .{
             .location = field.location,
             .typ = typ,
+            .defaulted = defaulted,
             .used = field.name[0] == '_',
         });
     }
@@ -947,17 +955,20 @@ fn checkFieldsInitialised(
     fields: []const Ast.NewField,
     location: Location,
 ) void {
-    var iter = decl_fields.keyIterator();
-    while (iter.next()) |name| {
+    var iter = decl_fields.iterator();
+    while (iter.next()) |entry| {
+        if (entry.value_ptr.defaulted) {
+            continue;
+        }
         var unused = true;
         for (fields) |field| {
-            if (std.mem.eql(u8, name.*, field.name)) {
+            if (std.mem.eql(u8, entry.key_ptr.*, field.name)) {
                 unused = false;
                 break;
             }
         }
         if (unused) {
-            checker.failNotInit(location, name.*);
+            checker.failNotInit(location, entry.key_ptr.*);
         }
     }
 }

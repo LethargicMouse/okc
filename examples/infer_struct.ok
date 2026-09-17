@@ -13,7 +13,7 @@ fn main() i32 {
 
 fn get_pair() Pair {
   return .{
-    first: '6',
-    second: '7',
+    first = '6',
+    second = '7',
   };
 }

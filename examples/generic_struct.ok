@@ -21,8 +21,8 @@ fn put_i32(array: &mut Array<i32>, index: u64, val: i32) void {
 
 fn main() i32 {
   let mut array: Array<i32> = .{
-    buffer: undefined,
-    len: 100,
+    buffer = undefined,
+    len = 100,
   };
   put_i32(&array, 42, 67);
   printf("%d\n".ptr, get_i32(array, 42));

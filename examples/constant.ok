@@ -15,6 +15,6 @@ struct Pair<a, b> {
 }
 
 let my_pair = Pair {
-  first: "six",
-  second: "seven",
+  first = "six",
+  second = "seven",
 };

@@ -184,11 +184,16 @@ fn parseGenerics(parser: *Parser) ![]const []const u8 {
 }
 
 fn parseFieldDeclLoud(parser: *Parser) !Ast.FieldDecl {
-    const param = try parser.parseParamLoud();
+    const location = parser.getLocation();
+    const name = try parser.parseNameLoud();
+    try parser.expectLoud(.colon);
+    const typ = try parser.parseTypLoud();
+    const default = try parser.parseMaybe(Ast.Expr, parseAssignPostfix);
     return .{
-        .name = param.name,
-        .typ = param.typ,
-        .location = param.location,
+        .name = name,
+        .typ = typ,
+        .location = location,
+        .default = default,
     };
 }
 
@@ -521,9 +526,13 @@ fn parseElseLoud(parser: *Parser) ![]Ast.Statement {
 }
 
 fn parseAssignStatementPostfix(parser: *Parser) !ExprStatementPostfix {
-    try parser.expect(.equ);
-    const expr = try parser.parseExprLoud();
+    const expr = try parser.parseAssignPostfix();
     return .{ .assign = expr };
+}
+
+fn parseAssignPostfix(parser: *Parser) !Ast.Expr {
+    try parser.expect(.equ);
+    return parser.parseExprLoud();
 }
 
 fn parseDeclareStatement(parser: *Parser) !Ast.Statement {
@@ -863,7 +872,7 @@ fn parseStructExprBody(parser: *Parser) ![]Ast.NewField {
 fn parseNewFieldLoud(parser: *Parser) !Ast.NewField {
     const location = parser.getLocation();
     const name = try parser.parseNameLoud();
-    try parser.expectLoud(.colon);
+    try parser.expectLoud(.equ);
     const expr = try parser.parseExprLoud();
     return .{
         .name = name,
