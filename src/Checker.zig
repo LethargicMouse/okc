@@ -2,8 +2,9 @@ const std = @import("std");
 
 const Ast = @import("Ast.zig");
 const Location = @import("Location.zig");
-const Typ = @import("typ.zig").Typ;
 const Memo = @import("memo.zig").Memo;
+const Resolver = @import("resolver.zig").Resolver(Typ);
+const Typ = @import("typ.zig").Typ;
 
 const Error = error{OutOfMemory};
 
@@ -941,7 +942,7 @@ fn checkTypedStruc(
     if (generics.len == 0) {
         generics = try checker.makeGenerics(decl.generics.len);
     }
-    var resolver = Typ.Resolver.init(checker.gpa, &checker.typ_memo);
+    var resolver = Resolver.init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (decl.generics, generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
@@ -1002,13 +1003,13 @@ fn checkNewField(
     field: *Ast.NewField,
     struc_name: []const u8,
     decl_fields: std.StringHashMap(Field),
-    resolver: *Typ.Resolver,
+    resolver: *Resolver,
 ) !void {
     const f_decl = decl_fields.get(field.name) orelse {
         checker.failNoField(field.location, field.name, struc_name);
         return;
     };
-    const decl_typ = try resolver.resolve(f_decl.typ);
+    const decl_typ = try f_decl.typ.resolve(resolver);
     const info = try checker.checkExpr(&field.expr, .{ .typ = decl_typ });
     try checker.unify(field.expr.location, decl_typ, info.typ);
 }
@@ -1082,12 +1083,12 @@ fn checkField(
         return err;
     };
     fiel.used = true;
-    var resolver = Typ.Resolver.init(checker.gpa, &checker.typ_memo);
+    var resolver = Resolver.init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
     }
-    const typ = try resolver.resolve(fiel.typ);
+    const typ = try fiel.typ.resolve(&resolver);
     if (try checker.convertTyp(typ, location)) |ast_typ| {
         field.typ = ast_typ;
     }
@@ -1283,18 +1284,18 @@ fn checkCall(checker: *Checker, call: *Ast.Call, location: Location, hint: Typ) 
         .fun => |header| header,
     };
     item.used = true;
-    var resolver = Typ.Resolver.init(checker.gpa, &checker.typ_memo);
+    var resolver = Resolver.init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (header.generics) |generic| {
         const ptr = try checker.fun_arena.allocator().create(Typ);
         ptr.* = .any;
         try resolver.map.put(generic.name, .{ .lazy = ptr });
     }
-    const ret_typ = try resolver.resolve(header.ret_typ);
+    const ret_typ = try header.ret_typ.resolve(&resolver);
     // to propagate hint to generics
     _ = try canUnify(ret_typ, hint, true);
     for (call.args, header.params) |*arg, param| {
-        const param_typ = try resolver.resolve(param);
+        const param_typ = try param.resolve(&resolver);
         const info = try checker.checkExpr(arg, .{ .typ = param_typ.normalise() });
         try checker.unify(arg.location, param_typ, info.typ);
     }
