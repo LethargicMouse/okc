@@ -1,70 +1,18 @@
 const std = @import("std");
 
-const Location = @import("Location.zig");
 const Ast = @import("Ast.zig");
 const HashContext = @import("hash_context.zig").HashContext;
-
-pub const Resolver = struct {
-    typs: *AstTyps,
-    map: std.StringHashMap(Typ),
-
-    pub fn resolve(resolver: *Resolver, typ: Typ) !Typ {
-        switch (typ) {
-            .name => |name| {
-                if (resolver.map.get(name.name)) |resolved| {
-                    return resolved;
-                }
-                const generics = try resolver.typs.arena.allocator().alloc(Typ, name.generics.len);
-                for (generics, name.generics) |*target, generic| {
-                    target.* = try resolver.resolve(generic);
-                }
-                return .{ .name = .{
-                    .name = name.name,
-                    .generics = generics,
-                } };
-            },
-            .fun => |fun| {
-                const params = try resolver.typs.arena.allocator().alloc(Typ, fun.params.len);
-                for (params, fun.params) |*target, param| {
-                    target.* = try resolver.resolve(param);
-                }
-                const ret_typ = try resolver.resolve(fun.ret_typ.*);
-                const ptr = try resolver.typs.box(ret_typ);
-                return .{ .fun = .{
-                    .params = params,
-                    .ret_typ = ptr,
-                } };
-            },
-            .slice => |slice| {
-                const new = try resolver.resolve(slice.typ.*);
-                const ptr = try resolver.typs.box(new);
-                return .{ .slice = .{
-                    .typ = ptr,
-                    .mutable = slice.mutable,
-                } };
-            },
-            .ptr => |ptr| {
-                const new = try resolver.resolve(ptr.typ.*);
-                const new_ptr = try resolver.typs.box(new);
-                return .{ .ptr = .{
-                    .typ = new_ptr,
-                    .mutable = ptr.mutable,
-                } };
-            },
-            .array => |array| {
-                const new = try resolver.resolve(array.typ.*);
-                const new_ptr = try resolver.typs.box(new);
-                return .{ .array = .{
-                    .len = array.len,
-                    .typ = new_ptr,
-                } };
-            },
-            .prime => return typ,
-        }
-    }
-};
+const Location = @import("Location.zig");
+const Memo = @import("memo.zig").Memo;
 
 pub const Typ = union(enum) {
+    prime: Prime,
+    name: Name,
+    slice: Slice,
+    ptr: Ptr,
+    array: Array,
+    fun: Fun,
+
     pub const Array = struct {
         len: u64,
         typ: *const Typ,
@@ -118,12 +66,72 @@ pub const Typ = union(enum) {
         ret_typ: *const Typ,
     };
 
-    prime: Prime,
-    name: Name,
-    slice: Slice,
-    ptr: Ptr,
-    array: Array,
-    fun: Fun,
+    pub const Resolver = struct {
+        memo: *Memo(Typ),
+        map: std.StringHashMap(Typ),
+
+        pub fn init(gpa: std.mem.Allocator, memo: *Memo(Typ)) Resolver {
+            return .{
+                .memo = memo,
+                .map = .init(gpa),
+            };
+        }
+
+        pub fn resolve(resolver: *Resolver, typ: Typ) !Typ {
+            switch (typ) {
+                .name => |name| {
+                    if (resolver.map.get(name.name)) |resolved| {
+                        return resolved;
+                    }
+                    const generics = try resolver.memo.arena.allocator().alloc(Typ, name.generics.len);
+                    for (generics, name.generics) |*target, generic| {
+                        target.* = try resolver.resolve(generic);
+                    }
+                    return .{ .name = .{
+                        .name = name.name,
+                        .generics = generics,
+                    } };
+                },
+                .fun => |fun| {
+                    const params = try resolver.memo.arena.allocator().alloc(Typ, fun.params.len);
+                    for (params, fun.params) |*target, param| {
+                        target.* = try resolver.resolve(param);
+                    }
+                    const ret_typ = try resolver.resolve(fun.ret_typ.*);
+                    const ptr = try resolver.memo.box(ret_typ);
+                    return .{ .fun = .{
+                        .params = params,
+                        .ret_typ = ptr,
+                    } };
+                },
+                .slice => |slice| {
+                    const new = try resolver.resolve(slice.typ.*);
+                    const ptr = try resolver.memo.box(new);
+                    return .{ .slice = .{
+                        .typ = ptr,
+                        .mutable = slice.mutable,
+                    } };
+                },
+                .ptr => |ptr| {
+                    const new = try resolver.resolve(ptr.typ.*);
+                    const new_ptr = try resolver.memo.box(new);
+                    return .{ .ptr = .{
+                        .typ = new_ptr,
+                        .mutable = ptr.mutable,
+                    } };
+                },
+                .array => |array| {
+                    const new = try resolver.resolve(array.typ.*);
+                    const new_ptr = try resolver.memo.box(new);
+                    return .{ .array = .{
+                        .len = array.len,
+                        .typ = new_ptr,
+                    } };
+                },
+                .prime => return typ,
+            }
+        }
+    };
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) !void {
         switch (typ) {
@@ -230,46 +238,3 @@ pub const Typ = union(enum) {
         }
     }
 };
-
-const Memo = std.HashMap(
-    Typ,
-    *const Typ,
-    HashContext(Typ),
-    std.hash_map.default_max_load_percentage,
-);
-
-const AstTyps = @This();
-
-arena: std.heap.ArenaAllocator,
-memo: Memo,
-
-pub fn init(gpa: std.mem.Allocator) AstTyps {
-    const arena = std.heap.ArenaAllocator.init(gpa);
-    const memo = Memo.init(arena.child_allocator);
-    return .{
-        .arena = arena,
-        .memo = memo,
-    };
-}
-
-pub fn box(typs: *AstTyps, typ: Typ) !*const Typ {
-    if (typs.memo.get(typ)) |res| {
-        return res;
-    }
-    const res = try typs.arena.allocator().create(Typ);
-    res.* = typ;
-    try typs.memo.put(typ, res);
-    return res;
-}
-
-pub fn deinit(typs: *AstTyps) void {
-    typs.arena.deinit();
-    typs.memo.deinit();
-}
-
-pub fn makeResolver(typs: *AstTyps, gpa: std.mem.Allocator) Resolver {
-    return .{
-        .typs = typs,
-        .map = .init(gpa),
-    };
-}

@@ -3,6 +3,7 @@ const std = @import("std");
 const Ast = @import("Ast.zig");
 const Typ = Ast.Typ;
 const HashContext = @import("hash_context.zig").HashContext;
+const Memo = @import("memo.zig").Memo;
 
 const DefaultField = struct {
     index: usize,
@@ -99,7 +100,7 @@ gpa: std.mem.Allocator,
 file: std.Io.File,
 writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
-typs: *Ast.Typs,
+typ_memo: *Memo(Ast.Typ),
 items: std.StringHashMap(*const Ast.Item),
 structs: std.HashMap(
     Typ,
@@ -117,13 +118,13 @@ generated: std.HashMap(
     HashContext(Typ),
     std.hash_map.default_max_load_percentage,
 ),
-resolver: Ast.Typs.Resolver,
+resolver: Ast.Typ.Resolver,
 next_tmp: u32 = 0,
 
 pub fn init(
     io: std.Io,
     gpa: std.mem.Allocator,
-    ast_typs: *Ast.Typs,
+    typ_memo: *Memo(Typ),
     items: std.StringHashMap(*const Ast.Item),
     write_buf: []u8,
     path: []const u8,
@@ -132,10 +133,10 @@ pub fn init(
     return .{
         .io = io,
         .gpa = gpa,
-        .typs = ast_typs,
+        .typ_memo = typ_memo,
         .file = file,
         .items = items,
-        .resolver = ast_typs.makeResolver(gpa),
+        .resolver = .init(gpa, typ_memo),
         .writer = file.writer(io, write_buf),
         .vars = .init(gpa),
         .structs = .init(gpa),
@@ -315,7 +316,7 @@ fn genStruct(gen: *Codegen, name: Typ.Name) !void {
     var default_fields_vec = std.ArrayList(DefaultField).empty;
     try gen.print("\n%\"{f}\" = type {{", .{name});
     const struc = gen.items.get(name.name).?.kind.struc;
-    var resolver = gen.typs.makeResolver(gen.gpa);
+    var resolver = Typ.Resolver.init(gen.gpa, gen.typ_memo);
     defer resolver.map.deinit();
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic, typ);
@@ -635,7 +636,7 @@ fn genNotb(gen: *Codegen, expr: Ast.Expr) !TypVal {
 
 fn genPtr(gen: *Codegen, expr: Ast.Expr) !TypVal {
     const vari = try gen.genExprRef(expr);
-    const typ = try gen.typs.box(vari.inner_typ);
+    const typ = try gen.typ_memo.box(vari.inner_typ);
     return .{
         .typ = .{ .ptr = .{
             .typ = typ,
@@ -797,7 +798,7 @@ fn genStr(gen: *Codegen, str: []const u8) !TypVal {
 
     return .{
         .typ = .{ .slice = .{
-            .typ = try gen.typs.box(.{ .prime = .u8 }),
+            .typ = try gen.typ_memo.box(.{ .prime = .u8 }),
             .mutable = false,
         } },
         .val = .{ .tmp = tmp },
@@ -960,7 +961,7 @@ fn genConstStr(gen: *Codegen, str: []const u8) !Typ {
     const info = try gen.genStrDecl(str);
     try gen.print("%\"[]\" {{ ptr @.s{d}, i64 {d} }}", .{ info.tmp, info.len });
     return .{ .slice = .{
-        .typ = try gen.typs.box(.{ .prime = .u8 }),
+        .typ = try gen.typ_memo.box(.{ .prime = .u8 }),
         .mutable = false,
     } };
 }
@@ -974,14 +975,14 @@ fn genFnPtr(gen: *Codegen, name: []const u8) !TypVal {
     const item = gen.items.get(name).?;
     try gen.fun_queue.append(gen.gpa, .{ .name = name, .generics = &.{} });
     const header = item.getHeader().?;
-    const params = try gen.typs.arena.allocator().alloc(Typ, header.params.len);
+    const params = try gen.typ_memo.arena.allocator().alloc(Typ, header.params.len);
     for (params, header.params) |*target, param| {
         target.* = param.typ;
     }
     return .{
         .typ = .{ .fun = .{
             .params = params,
-            .ret_typ = try gen.typs.box(header.ret_typ),
+            .ret_typ = try gen.typ_memo.box(header.ret_typ),
         } },
         .val = .{ .global = name },
     };

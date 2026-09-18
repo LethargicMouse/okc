@@ -1,8 +1,10 @@
 const std = @import("std");
 
+const Ast = @import("Ast.zig");
 const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
 const Lexer = @import("Lexer.zig");
+const Memo = @import("memo.zig").Memo;
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
 
@@ -18,8 +20,12 @@ fn run(init: std.process.Init) !u8 {
     var args = try init.minimal.args.iterateAllocator(init.gpa);
     // skip exec name
     _ = args.skip();
+    var gpa = std.heap.DebugAllocator(.{
+        .stack_trace_frames = 20,
+    }).init;
+    defer _ = gpa.deinit();
     if (args.next()) |path| {
-        return runFile(init.io, init.gpa, path);
+        return runFile(init.io, gpa.allocator(), path);
     } else {
         std.log.err("no source path given", .{});
         return error.Handled;
@@ -42,17 +48,25 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var lexer = try Lexer.init(gpa, source);
     const tokens = try lexer.lex(gpa);
 
-    var parser = Parser.init(gpa, tokens);
-    var ast = try parser.run();
-    defer ast.deinit();
+    var ast_arena = std.heap.ArenaAllocator.init(gpa);
+    defer ast_arena.deinit();
 
-    var checker = try Checker.init(gpa, &ast.typs);
+    var ast_typ_memo = Memo(Ast.Typ).init(&ast_arena);
+    defer ast_typ_memo.deinit();
+
+    var parser = Parser.init(gpa, &ast_arena, &ast_typ_memo, tokens);
+    const ast = try parser.run();
+
+    var checker_arena = std.heap.ArenaAllocator.init(gpa);
+    defer checker_arena.deinit();
+
+    var checker = try Checker.init(gpa, &checker_arena, &ast_typ_memo);
     const items = try checker.run(ast);
 
     try std.Io.Dir.cwd().createDirPath(io, build_dir_path);
 
     var write_buf: [256]u8 = undefined;
-    var gen = try Codegen.init(io, gpa, &ast.typs, items, &write_buf, out_ll_path);
+    var gen = try Codegen.init(io, gpa, &ast_typ_memo, items, &write_buf, out_ll_path);
     try gen.run();
 
     const code = try runCmd(io, &.{ "clang", "-o", out_path, out_ll_path });

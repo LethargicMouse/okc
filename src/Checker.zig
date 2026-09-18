@@ -2,8 +2,8 @@ const std = @import("std");
 
 const Ast = @import("Ast.zig");
 const Location = @import("Location.zig");
-const Typs = @import("Typs.zig");
-const Typ = Typs.Typ;
+const Typ = @import("typ.zig").Typ;
+const Memo = @import("memo.zig").Memo;
 
 const Error = error{OutOfMemory};
 
@@ -71,8 +71,9 @@ const Item = struct {
 const Checker = @This();
 
 gpa: std.mem.Allocator,
-typs: Typs,
-ast_typs: *Ast.Typs,
+arena: *std.heap.ArenaAllocator,
+typ_memo: Memo(Typ),
+ast_typ_memo: *Memo(Ast.Typ),
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
 ast_items: std.StringHashMap(*const Ast.Item),
@@ -84,13 +85,15 @@ current_generics: []const []const u8 = &.{},
 
 pub fn init(
     gpa: std.mem.Allocator,
-    ast_typs: *Ast.Typs,
+    arena: *std.heap.ArenaAllocator,
+    ast_typ_memo: *Memo(Ast.Typ),
 ) !Checker {
     return .{
         .gpa = gpa,
-        .ast_typs = ast_typs,
+        .arena = arena,
+        .ast_typ_memo = ast_typ_memo,
         .fun_arena = .init(gpa),
-        .typs = .init(gpa),
+        .typ_memo = .init(arena),
         .ast_items = .init(gpa),
         .items = .init(gpa),
     };
@@ -135,7 +138,7 @@ fn convertTypRec(checker: Checker, typ: Typ) !Ast.Typ {
     switch (typ) {
         .name => |name| {
             const generics =
-                try checker.ast_typs.arena.allocator().alloc(Ast.Typ, name.generics.len);
+                try checker.ast_typ_memo.arena.allocator().alloc(Ast.Typ, name.generics.len);
             for (generics, name.generics) |*target, generic| {
                 target.* = try checker.convertTypRec(generic);
             }
@@ -145,12 +148,12 @@ fn convertTypRec(checker: Checker, typ: Typ) !Ast.Typ {
             } };
         },
         .fun => |fun| {
-            const params = try checker.ast_typs.arena.allocator().alloc(Ast.Typ, fun.params.len);
+            const params = try checker.ast_typ_memo.arena.allocator().alloc(Ast.Typ, fun.params.len);
             for (params, fun.params) |*target, param| {
                 target.* = try checker.convertTypRec(param);
             }
             const ret_typ = try checker.convertTypRec(fun.ret_typ.*);
-            const ptr = try checker.ast_typs.box(ret_typ);
+            const ptr = try checker.ast_typ_memo.box(ret_typ);
             return .{ .fun = .{
                 .params = params,
                 .ret_typ = ptr,
@@ -158,7 +161,7 @@ fn convertTypRec(checker: Checker, typ: Typ) !Ast.Typ {
         },
         .slice => |slice| {
             const new = try checker.convertTypRec(slice.typ.*);
-            const ptr = try checker.ast_typs.box(new);
+            const ptr = try checker.ast_typ_memo.box(new);
             return .{ .slice = .{
                 .typ = ptr,
                 .mutable = slice.mutable,
@@ -167,7 +170,7 @@ fn convertTypRec(checker: Checker, typ: Typ) !Ast.Typ {
         .prime => |prime| return .{ .prime = prime },
         .ptr => |ptr| {
             const inner = try checker.convertTypRec(ptr.typ.*);
-            const new = try checker.ast_typs.box(inner);
+            const new = try checker.ast_typ_memo.box(inner);
             return .{ .ptr = .{
                 .typ = new,
                 .mutable = ptr.mutable,
@@ -175,7 +178,7 @@ fn convertTypRec(checker: Checker, typ: Typ) !Ast.Typ {
         },
         .array => |array| {
             const inner = try checker.convertTypRec(array.typ.*);
-            const new = try checker.ast_typs.box(inner);
+            const new = try checker.ast_typ_memo.box(inner);
             return .{ .array = .{
                 .len = array.len,
                 .typ = new,
@@ -304,7 +307,7 @@ fn regHeader(checker: *Checker, header: Ast.Header, location: Location) !void {
         checker.failAlreadyDeclared(location, header.name, prev.location);
         return;
     }
-    const params = try checker.typs.arena.allocator().alloc(Typ, header.params.len);
+    const params = try checker.arena.allocator().alloc(Typ, header.params.len);
     for (header.params, 0..) |param, i| {
         params[i] = try checker.checkTyp(param.typ);
     }
@@ -741,7 +744,7 @@ fn checkArray(checker: *Checker, array: *Ast.Array, location: Location, hint: Ty
     const inner_hint = if (hint == .array) hint.array.typ.* else .any;
     if (array.exprs.len == 0) {
         const typ = Typ{ .array = .{
-            .typ = try checker.typs.box(inner_hint),
+            .typ = try checker.typ_memo.box(inner_hint),
             .len = 0,
         } };
         if (try checker.convertTyp(typ, location)) |ast_typ| {
@@ -758,7 +761,7 @@ fn checkArray(checker: *Checker, array: *Ast.Array, location: Location, hint: Ty
         try checker.unify(expr.location, info.typ, next_info.typ);
     }
     const typ = Typ{ .array = .{
-        .typ = try checker.typs.box(info.typ),
+        .typ = try checker.typ_memo.box(info.typ),
         .len = array.exprs.len,
     } };
     if (try checker.convertTyp(typ, location)) |ast_typ| {
@@ -771,7 +774,7 @@ fn checkArray(checker: *Checker, array: *Ast.Array, location: Location, hint: Ty
 }
 
 fn checkStr(checker: *Checker) !ExprInfo {
-    const ptr = try checker.typs.box(.{ .prime = .u8 });
+    const ptr = try checker.typ_memo.box(.{ .prime = .u8 });
     return .{
         .typ = .{ .slice = .{
             .typ = ptr,
@@ -796,7 +799,7 @@ fn checkNotb(checker: *Checker, expr: *Ast.Expr) !ExprInfo {
 fn checkPtr(checker: *Checker, expr: *Ast.Expr, hint: Typ) !ExprInfo {
     const mutable = if (hint == .ptr) hint.ptr.mutable else false;
     const info = try checker.checkExpr(expr, .{ .mutable = mutable });
-    const ptr = try checker.typs.box(info.typ);
+    const ptr = try checker.typ_memo.box(info.typ);
     return .{
         .typ = .{ .ptr = .{
             .typ = ptr,
@@ -862,7 +865,7 @@ fn checkSliceStruc(
             } };
             const info = try checker.checkExpr(&field.expr, .{ .typ = expected });
             try checker.unify(field.expr.location, expected, info.typ);
-            was_ptr = if (info.typ == .ptr) info.typ.ptr.typ else try checker.typs.box(.err);
+            was_ptr = if (info.typ == .ptr) info.typ.ptr.typ else try checker.typ_memo.box(.err);
         } else if (std.mem.eql(u8, field.name, "len")) {
             if (was_len) {
                 checker.failNewFieldSecond(field.location, field.name);
@@ -919,7 +922,7 @@ fn checkTypedStruc(
     if (generics.len == 0) {
         generics = try checker.makeGenerics(decl.generics.len);
     }
-    var resolver = checker.typs.makeResolver(checker.gpa);
+    var resolver = Typ.Resolver.init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (decl.generics, generics) |generic, typ| {
         try resolver.map.put(generic, typ);
@@ -942,9 +945,11 @@ fn checkTypedStruc(
 }
 
 fn makeGenerics(checker: *Checker, len: usize) ![]const Typ {
-    const res = try checker.typs.arena.allocator().alloc(Typ, len);
+    const res = try checker.arena.allocator().alloc(Typ, len);
     for (res) |*target| {
-        target.* = .{ .lazy = try checker.typs.makeLazy() };
+        const lazy = try checker.fun_arena.allocator().create(Typ);
+        lazy.* = .any;
+        target.* = .{ .lazy = lazy };
     }
     return res;
 }
@@ -978,7 +983,7 @@ fn checkNewField(
     field: *Ast.NewField,
     struc_name: []const u8,
     decl_fields: std.StringHashMap(Field),
-    resolver: *Typs.Resolver,
+    resolver: *Typ.Resolver,
 ) !void {
     const f_decl = decl_fields.get(field.name) orelse {
         checker.failNoField(field.location, field.name, struc_name);
@@ -1058,7 +1063,7 @@ fn checkField(
         return err;
     };
     fiel.used = true;
-    var resolver = checker.typs.makeResolver(checker.gpa);
+    var resolver = Typ.Resolver.init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic, typ);
@@ -1190,7 +1195,7 @@ fn checkVar(
             return .{
                 .typ = .{ .fun = .{
                     .params = header.params,
-                    .ret_typ = try checker.typs.box(header.ret_typ),
+                    .ret_typ = try checker.typ_memo.box(header.ret_typ),
                 } },
                 .mutable = false,
             };
@@ -1259,10 +1264,11 @@ fn checkCall(checker: *Checker, call: *Ast.Call, location: Location, hint: Typ) 
         .fun => |header| header,
     };
     item.used = true;
-    var resolver = checker.typs.makeResolver(checker.gpa);
+    var resolver = Typ.Resolver.init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (header.generics) |generic| {
-        const ptr = try checker.typs.makeLazy();
+        const ptr = try checker.fun_arena.allocator().create(Typ);
+        ptr.* = .any;
         try resolver.map.put(generic, .{ .lazy = ptr });
     }
     const ret_typ = try resolver.resolve(header.ret_typ);
@@ -1273,7 +1279,7 @@ fn checkCall(checker: *Checker, call: *Ast.Call, location: Location, hint: Typ) 
         const info = try checker.checkExpr(arg, .{ .typ = param_typ.normalise() });
         try checker.unify(arg.location, param_typ, info.typ);
     }
-    call.generics = try checker.ast_typs.arena.allocator().alloc(Ast.Typ, header.generics.len);
+    call.generics = try checker.ast_typ_memo.arena.allocator().alloc(Ast.Typ, header.generics.len);
     for (call.generics, header.generics) |*target, generic| {
         if (try checker.convertTyp(resolver.map.get(generic).?, null)) |llvm_typ| {
             target.* = llvm_typ;
@@ -1308,7 +1314,7 @@ fn deinit(checker: *Checker) void {
         }
     }
     checker.items.deinit();
-    checker.typs.deinit();
+    checker.typ_memo.deinit();
     checker.fun_arena.deinit();
     checker.vars_stack.deinit(checker.gpa);
     checker.* = undefined;
@@ -1345,19 +1351,19 @@ pub fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
     switch (typ) {
         .slice => |inner| {
             const new = try checker.checkTyp(inner.typ.*);
-            const ptr = try checker.typs.box(new);
+            const ptr = try checker.typ_memo.box(new);
             return .{ .slice = .{
                 .typ = ptr,
                 .mutable = inner.mutable,
             } };
         },
         .fun => |fun| {
-            const params = try checker.typs.arena.allocator().alloc(Typ, fun.params.len);
+            const params = try checker.arena.allocator().alloc(Typ, fun.params.len);
             for (params, fun.params) |*target, param| {
                 target.* = try checker.checkTyp(param);
             }
             const ret_typ = try checker.checkTyp(fun.ret_typ.*);
-            const ptr = try checker.typs.box(ret_typ);
+            const ptr = try checker.typ_memo.box(ret_typ);
             return .{ .fun = .{
                 .params = params,
                 .ret_typ = ptr,
@@ -1375,7 +1381,7 @@ pub fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
             if (check_decl) {
                 checker.checkTypDecl(name);
             }
-            const generics = try checker.typs.arena.allocator().alloc(Typ, name.generics.len);
+            const generics = try checker.arena.allocator().alloc(Typ, name.generics.len);
             for (generics, name.generics) |*target, generic| {
                 target.* = try checker.checkTyp(generic);
             }
@@ -1386,7 +1392,7 @@ pub fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
         },
         .ptr => |inner| {
             const inner_typ = try checker.checkTyp(inner.typ.*);
-            const ptr = try checker.typs.box(inner_typ);
+            const ptr = try checker.typ_memo.box(inner_typ);
             return .{ .ptr = .{
                 .typ = ptr,
                 .mutable = inner.mutable,
@@ -1394,7 +1400,7 @@ pub fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
         },
         .array => |array| {
             const inner_typ = try checker.checkTyp(array.typ.*);
-            const ptr = try checker.typs.box(inner_typ);
+            const ptr = try checker.typ_memo.box(inner_typ);
             return .{ .array = .{
                 .len = array.len,
                 .typ = ptr,

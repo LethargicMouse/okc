@@ -1,11 +1,9 @@
 const std = @import("std");
-
 const builtin = @import("builtin");
-const Lexeme = @import("Lexer.zig").Lexeme;
-pub const Typs = @import("AstTyps.zig");
-pub const Typ = Typs.Typ;
 
+const Lexeme = @import("Lexer.zig").Lexeme;
 const Location = @import("Location.zig");
+pub const Typ = @import("ast_typ.zig").Typ;
 
 pub const ExtFun = struct {
     header: Header,
@@ -275,11 +273,5 @@ pub const Item = struct {
 
 const Ast = @This();
 
-typs: Typs,
 items: []Item,
 location: Location,
-
-pub fn deinit(ast: *Ast) void {
-    ast.typs.deinit();
-    ast.* = undefined;
-}
