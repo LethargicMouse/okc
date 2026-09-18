@@ -124,6 +124,7 @@ pub const GlobalVar = struct {
 
 pub const Expr = struct {
     pub const Kind = union(enum) {
+        sizeof: Typ,
         array: Array,
         unary: *Unary,
         struc: StructExpr,

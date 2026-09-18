@@ -774,6 +774,7 @@ fn getLocation(parser: Parser) Location {
 
 fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
     return parser.parseEither(Ast.Expr, .{
+        parseAtExpr,
         parseParExpr,
         parseArrayExpr,
         parseUnaryExpr,
@@ -792,6 +793,23 @@ fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
         }
         return err;
     };
+}
+
+fn parseAtExpr(parser: *Parser) !Ast.Expr {
+    const start = parser.getLocation();
+    try parser.expect(.at);
+    const name = try parser.parseNameLoud();
+    if (std.mem.eql(u8, name, "sizeof")) {
+        try parser.expectLoud(.les);
+        const typ = try parser.parseTypLoud();
+        const end = parser.getLocation();
+        try parser.expectLoud(.mor);
+        return .{
+            .location = start.combine(end),
+            .kind = .{ .sizeof = typ },
+        };
+    }
+    return error.ParseFailed;
 }
 
 fn parseArrayExpr(parser: *Parser) !Ast.Expr {

@@ -14,6 +14,7 @@ pub const Lexeme = union(enum) {
     int_too_big,
     unclosed_char,
     invalid_char,
+    at,
     moreq,
     mor,
     unre,
@@ -60,6 +61,7 @@ pub const Lexeme = union(enum) {
             .int_too_big => "<int too big>",
             .unclosed_char => "<unclosed char>",
             .invalid_char => "<invalid char>",
+            .at => "`@`",
             .moreq => "`>=`",
             .mor => "`>`",
             .unre => "`unreachable`",
@@ -280,6 +282,7 @@ fn lexByList(lexer: *Lexer) ?Token {
 }
 
 const lex_list = [_]LexPair{
+    .{ .str = "@", .lexeme = .at },
     .{ .str = ">=", .lexeme = .moreq },
     .{ .str = ">", .lexeme = .mor },
     .{ .str = "|", .lexeme = .pipe },

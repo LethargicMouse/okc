@@ -232,3 +232,7 @@ test "constant.ok" {
 test "default_field.ok" {
     try testFile("default_field", "six seven\n");
 }
+
+test "box.ok" {
+    try testFile("box", "6 7");
+}

@@ -7,17 +7,30 @@ const Memo = @import("memo.zig").Memo;
 const Name = @import("typ_kinds.zig").Name(Typ);
 const Resolver = @import("resolver.zig").Resolver(Typ);
 
+const Layout = struct {
+    size: u64,
+    alig: u64,
+
+    fn make(size: u64, alig: u64) Layout {
+        return .{
+            .size = size,
+            .alig = alig,
+        };
+    }
+};
+
 const DefaultField = struct {
     index: usize,
     expr: Ast.Expr,
 };
 
-const StructInfo = struct {
+const Struct = struct {
     indices: std.StringHashMap(usize),
     default_fields: []const DefaultField,
+    layout: Layout,
 };
 
-const StrInfo = struct {
+const Str = struct {
     len: usize,
     tmp: u32,
 };
@@ -106,7 +119,7 @@ typ_memo: *Memo(Ast.Typ),
 items: std.StringHashMap(*const Ast.Item),
 structs: std.HashMap(
     Name,
-    StructInfo,
+    Struct,
     HashContext(Name),
     std.hash_map.default_max_load_percentage,
 ),
@@ -195,7 +208,10 @@ fn genSliceDecl(gen: *Codegen) !void {
 }
 
 fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
-    try gen.print("\ndeclare i32 @{s}(", .{ext_fun.header.name});
+    try gen.print("\ndeclare {f} @{s}(", .{
+        LlvmTyp{ .inner = ext_fun.header.ret_typ },
+        ext_fun.header.name,
+    });
     if (ext_fun.header.params.len != 0) {
         try gen.print("{f}", .{LlvmTyp{ .inner = ext_fun.header.params[0].typ }});
         for (ext_fun.header.params[1..]) |param| {
@@ -205,7 +221,7 @@ fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
     try gen.print(")", .{});
 }
 
-fn genStrDecl(gen: *Codegen, str: []const u8) !StrInfo {
+fn genStrDecl(gen: *Codegen, str: []const u8) !Str {
     const buffer = gen.buffer.?;
     gen.buffer = null;
     defer gen.buffer = buffer;
@@ -306,14 +322,19 @@ fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
     gen.resolver.map.clearRetainingCapacity();
 }
 
-fn genStruct(gen: *Codegen, name: Name) !void {
+fn genStruct(gen: *Codegen, name: Name) Error!void {
     const was = try gen.generated.getOrPut(name);
     if (was.found_existing) {
         return;
     }
     const buffer = gen.buffer.?;
-    gen.buffer = null;
-    defer gen.buffer = buffer;
+    gen.buffer = .empty;
+    defer {
+        if (gen.buffer) |*buf| {
+            buf.deinit(gen.gpa);
+        }
+        gen.buffer = buffer;
+    }
     var indices = std.StringHashMap(usize).init(gen.gpa);
     var default_fields_vec = std.ArrayList(DefaultField).empty;
     try gen.print("\n%\"{f}\" = type {{", .{name});
@@ -332,18 +353,28 @@ fn genStruct(gen: *Codegen, name: Name) !void {
             });
         }
     }
+    var struct_layout = Layout{ .size = 0, .alig = 1 };
     if (struc.fields.len != 0) {
         const first = try struc.fields[0].typ.resolve(&resolver);
+        const first_layout = try gen.getLayout(first);
+        appendLayout(&struct_layout, first_layout);
         try gen.print("\n  {f}", .{LlvmTyp{ .inner = first }});
         for (struc.fields[1..]) |field| {
             const typ = try field.typ.resolve(&resolver);
+            const layout = try gen.getLayout(typ);
+            appendLayout(&struct_layout, layout);
             try gen.print(",\n  {f}", .{LlvmTyp{ .inner = typ }});
         }
     }
     try gen.print("\n}}", .{});
+    var written = gen.buffer.?;
+    gen.buffer = null;
+    defer written.deinit(gen.gpa);
+    try gen.print("{s}", .{written.items});
     try gen.structs.put(name, .{
         .indices = indices,
         .default_fields = try default_fields_vec.toOwnedSlice(gen.gpa),
+        .layout = struct_layout,
     });
 }
 
@@ -567,6 +598,7 @@ fn genRet(gen: *Codegen, ret: Ast.Return) !void {
 
 fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
     switch (expr.kind) {
+        .sizeof => |typ| return gen.genSizeof(typ),
         .array => |array| return gen.genArray(array),
         .unary => |unary| return gen.genUnary(unary.*),
         .struc => |struc| return gen.genStructExpr(struc),
@@ -582,6 +614,34 @@ fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
         .field => |field| return gen.genField(field.*),
         .named_struc => |struc| return gen.genNamedStructExpr(struc),
         .elem => |elem| return gen.genElem(elem.*),
+    }
+}
+
+fn genSizeof(gen: *Codegen, typ: Typ) !TypVal {
+    const resolved = try typ.resolve(&gen.resolver);
+    const layout = try gen.getLayout(resolved);
+    return .{
+        .typ = .{ .prime = .u64 },
+        .val = .{ .int = layout.size },
+    };
+}
+
+fn getLayout(gen: *Codegen, typ: Typ) !Layout {
+    switch (typ) {
+        .prime => |prime| return primeLayout(prime),
+        .array => |array| {
+            const inner = try gen.getLayout(array.typ.*);
+            return .{
+                .size = inner.size * array.len,
+                .alig = inner.alig,
+            };
+        },
+        .fun, .ptr => return .make(8, 8),
+        .slice => return .make(16, 8),
+        .name => |name| {
+            try gen.genStruct(name.delocate());
+            return gen.structs.get(name.delocate()).?.layout;
+        },
     }
 }
 
@@ -728,6 +788,7 @@ fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Ref {
         .vari => |name| return gen.genVarRef(name),
         .field => |field| return gen.genFieldRef(field.*),
         .elem => |elem| return gen.genElemRef(elem.*),
+        .sizeof,
         .fn_ptr,
         .call,
         .binary,
@@ -1020,4 +1081,22 @@ fn deinitStructs(gen: *Codegen) void {
         gen.gpa.free(info.default_fields);
     }
     gen.structs.deinit();
+}
+
+fn appendLayout(res: *Layout, layout: Layout) void {
+    res.alig = @max(res.alig, layout.alig);
+    // padding
+    if (layout.size % layout.alig != 0) {
+        res.size += layout.alig - (res.size % layout.alig);
+    }
+    res.size += layout.size;
+}
+
+fn primeLayout(prime: Ast.Typ.Prime) !Layout {
+    return switch (prime) {
+        .u8, .bool => .make(1, 1),
+        .i32, .u32 => .make(4, 4),
+        .u64 => .make(8, 8),
+        .void => .make(0, 1),
+    };
 }

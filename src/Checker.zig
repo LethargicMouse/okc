@@ -736,6 +736,7 @@ fn checkDeclare(
 
 fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) Error!ExprInfo {
     switch (expr.kind) {
+        .sizeof => |typ| return checker.checkSizeof(typ),
         .array => |*array| return checker.checkArray(array, expr.location, hint.typ),
         .unary => |unary| return checker.checkUnary(unary, expr.location, hint.typ),
         .struc => |*struc| return checker.checkStructExpr(struc, expr.location, hint.typ),
@@ -758,6 +759,14 @@ fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) Error!ExprInfo 
         .elem => |elem| return checker.checkElem(elem, expr.location),
         .fn_ptr => unreachable,
     }
+}
+
+fn checkSizeof(checker: *Checker, typ: Ast.Typ) !ExprInfo {
+    _ = try checker.checkTyp(typ);
+    return .{
+        .typ = .{ .prime = .u64 },
+        .mutable = false,
+    };
 }
 
 fn checkArray(checker: *Checker, array: *Ast.Array, location: Location, hint: Typ) !ExprInfo {
@@ -1059,7 +1068,11 @@ fn checkField(
         .typ = .err,
         .mutable = true,
     };
-    const norm = info.typ.normalise();
+    var norm = info.typ.normalise();
+    if (norm == .ptr) {
+        info.mutable = norm.ptr.mutable;
+        norm = norm.ptr.typ.normalise();
+    }
     if (norm == .slice) {
         return checker.checkSliceField(
             norm.slice,
@@ -1069,13 +1082,13 @@ fn checkField(
             location,
         );
     }
-    const name = checker.getTypName(norm, &info.mutable, field.expr.location) orelse return err;
+    const name = checker.getTypName(norm, field.expr.location) orelse return err;
     const item = checker.items.get(name.name) orelse {
-        checker.failNotStruct(field.expr.location, info.typ);
+        checker.failNotStruct(field.expr.location, norm);
         return err;
     };
     const struc = if (item.kind == .struc) item.kind.struc else {
-        checker.failNotStruct(field.expr.location, info.typ);
+        checker.failNotStruct(field.expr.location, norm);
         return err;
     };
     const fiel = struc.fields.getPtr(field.name) orelse {
@@ -1132,20 +1145,15 @@ fn checkSliceField(
     };
 }
 
-fn getTypName(checker: *Checker, norm: Typ, mutable: *bool, location: Location) ?Typ.Name {
+fn getTypName(checker: *Checker, norm: Typ, location: Location) ?Typ.Name {
     switch (norm) {
         .err => return null,
         .name => |name| return name,
-        // auto-deref
-        .ptr => |ptr| if (ptr.typ.* == .name) {
-            mutable.* = ptr.mutable;
-            return ptr.typ.name;
-        } else {
-            checker.failNotStruct(location, norm);
-            return null;
+        .slice, .array, .any, .lazy => {
+            std.log.err("getTypName: {f}", .{norm});
+            unreachable;
         },
-        .slice, .array, .any, .lazy => unreachable,
-        .fun, .prime => {
+        .fun, .prime, .ptr => {
             checker.failNotStruct(location, norm);
             return null;
         },

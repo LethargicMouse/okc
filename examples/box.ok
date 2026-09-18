@@ -1,0 +1,16 @@
+extern fn printf(fmt: &u8, a: &u8, b: i32) void;
+
+extern fn malloc<t>(size: u64) &mut t;
+
+fn main() i32 {
+  let six = box("6");
+  let seven: &i32 = box(7);
+  printf("%s %d".ptr, six.ptr, *seven);
+  return 0;
+}
+
+fn box<T>(val: T) &T {
+  let ptr: &mut T = malloc(@sizeof<T>);
+  *ptr = val;
+  return ptr;
+}
