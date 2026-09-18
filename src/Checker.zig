@@ -1256,42 +1256,15 @@ fn failNotDeclared(checker: *Checker, location: Location, name: []const u8) void
 }
 
 fn checkCall(checker: *Checker, call: *Ast.Call, location: Location, hint: Typ) !ExprInfo {
-    const err = ExprInfo{
-        .typ = .err,
-        .mutable = false,
-    };
-    const item = checker.items.getPtr(call.name) orelse {
-        checker.failNotDeclared(location, call.name);
+    const header = checker.getHeader(call.name, location) orelse {
         for (call.args) |*arg| {
             _ = try checker.checkExpr(arg, .{});
         }
-        return err;
+        return .{
+            .typ = .err,
+            .mutable = false,
+        };
     };
-    const header = switch (item.kind) {
-        .vari => |vari| switch (vari.typ) {
-            .fun => |fun| Header{
-                .generics = &.{},
-                .params = fun.params,
-                .ret_typ = fun.ret_typ.*,
-            },
-            else => {
-                checker.fail(location, "value of type `{}` is not a function", .{vari.typ});
-                for (call.args) |*arg| {
-                    _ = try checker.checkExpr(arg, .{});
-                }
-                return err;
-            },
-        },
-        .struc => {
-            checker.fail(location, "expected function, found type", .{});
-            for (call.args) |*arg| {
-                _ = try checker.checkExpr(arg, .{});
-            }
-            return err;
-        },
-        .fun => |header| header,
-    };
-    item.used = true;
     var resolver = Resolver.init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (header.generics) |generic| {
@@ -1320,6 +1293,37 @@ fn checkCall(checker: *Checker, call: *Ast.Call, location: Location, hint: Typ) 
         .typ = ret_typ,
         .mutable = false,
     };
+}
+
+fn getHeader(checker: *Checker, name: []const u8, location: Location) ?Header {
+    const item = checker.items.getPtr(name) orelse {
+        checker.failNotDeclared(location, name);
+        return null;
+    };
+    switch (item.kind) {
+        .vari => |vari| switch (vari.typ) {
+            .fun => |fun| {
+                item.used = true;
+                return Header{
+                    .generics = &.{},
+                    .params = fun.params,
+                    .ret_typ = fun.ret_typ.*,
+                };
+            },
+            else => {
+                checker.fail(location, "value of type `{}` is not a function", .{vari.typ});
+                return null;
+            },
+        },
+        .struc => {
+            checker.fail(location, "expected function, found type", .{});
+            return null;
+        },
+        .fun => |header| {
+            item.used = true;
+            return header;
+        },
+    }
 }
 
 fn checkRet(checker: *Checker, ret: *Ast.Return, location: Location) !ControlFlow {
