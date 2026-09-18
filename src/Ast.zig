@@ -11,7 +11,7 @@ pub const ExtFun = struct {
 
 pub const Header = struct {
     name: []const u8,
-    generics: []const []const u8,
+    generics: []const Generic,
     params: []const Param,
     ret_typ: Typ,
 };
@@ -229,9 +229,14 @@ pub const Binary = struct {
     right: Expr,
 };
 
+pub const Generic = struct {
+    name: []const u8,
+    location: Location,
+};
+
 pub const Struct = struct {
     name: []const u8,
-    generics: []const []const u8,
+    generics: []const Generic,
     fields: []FieldDecl,
 };
 

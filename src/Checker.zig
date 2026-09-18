@@ -32,8 +32,13 @@ const Field = struct {
 };
 
 const Struct = struct {
-    generics: []const []const u8,
+    generics: []const Ast.Generic,
     fields: std.StringHashMap(Field),
+
+    fn deinit(struc: *Struct) void {
+        struc.fields.deinit();
+        struc.* = undefined;
+    }
 };
 
 const Var = struct {
@@ -44,7 +49,7 @@ const Var = struct {
 };
 
 const Header = struct {
-    generics: []const []const u8,
+    generics: []const Ast.Generic,
     params: []const Typ,
     ret_typ: Typ,
 };
@@ -54,18 +59,18 @@ const Item = struct {
         fun: Header,
         vari: Var,
         struc: Struct,
-
-        fn describe(kind: Kind) []const u8 {
-            return switch (kind) {
-                .fun => "function",
-                .vari => "variable",
-                .struc => "struct",
-            };
-        }
     };
     kind: Kind,
     location: Location,
     used: bool = false,
+
+    fn deinit(item: *Item) void {
+        switch (item.kind) {
+            .struc => |*struc| struc.deinit(),
+            .fun => {},
+            .vari => {},
+        }
+    }
 };
 
 const Checker = @This();
@@ -81,7 +86,8 @@ items: std.StringHashMap(Item),
 ret_typ: Typ = undefined,
 errors_cnt: u16 = 0,
 loops_nested: u16 = 0,
-current_generics: []const []const u8 = &.{},
+current_generics: []const Ast.Generic = &.{},
+generics_usage: std.DynamicBitSetUnmanaged,
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -96,6 +102,7 @@ pub fn init(
         .typ_memo = .init(arena),
         .ast_items = .init(gpa),
         .items = .init(gpa),
+        .generics_usage = try .initEmpty(gpa, 0),
     };
 }
 
@@ -303,6 +310,7 @@ fn checkMain(checker: *Checker, location: Location) void {
 
 fn regHeader(checker: *Checker, header: Ast.Header, location: Location) !void {
     checker.current_generics = header.generics;
+    try checker.generics_usage.resize(checker.gpa, header.generics.len, false);
     if (checker.items.get(header.name)) |prev| {
         checker.failAlreadyDeclared(location, header.name, prev.location);
         return;
@@ -312,6 +320,7 @@ fn regHeader(checker: *Checker, header: Ast.Header, location: Location) !void {
         params[i] = try checker.checkTyp(param.typ);
     }
     const ret_typ = try checker.checkTyp(header.ret_typ);
+    checker.checkGenericsUsage();
     try checker.items.put(header.name, .{
         .location = location,
         .kind = .{ .fun = .{
@@ -345,6 +354,7 @@ fn regStruct(checker: *Checker, struc: Ast.Struct, location: Location) !void {
         .fields = .init(checker.gpa),
     };
     checker.current_generics = struc.generics;
+    try checker.generics_usage.resize(checker.gpa, struc.generics.len, false);
     for (struc.fields) |*field| {
         if (res.fields.get(field.name)) |prev| {
             checker.failAlreadyDeclared(field.location, field.name, prev.location);
@@ -364,10 +374,19 @@ fn regStruct(checker: *Checker, struc: Ast.Struct, location: Location) !void {
             .used = field.name[0] == '_',
         });
     }
+    checker.checkGenericsUsage();
     try checker.items.put(struc.name, .{
         .location = location,
         .kind = .{ .struc = res },
     });
+}
+
+fn checkGenericsUsage(checker: *Checker) void {
+    for (checker.current_generics, 0..) |generic, i| {
+        if (!checker.generics_usage.isSet(i)) {
+            checker.failUnused(generic.location);
+        }
+    }
 }
 
 fn checkFun(checker: *Checker, fun: Ast.Fun, location: Location) !void {
@@ -925,7 +944,7 @@ fn checkTypedStruc(
     var resolver = Typ.Resolver.init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (decl.generics, generics) |generic, typ| {
-        try resolver.map.put(generic, typ);
+        try resolver.map.put(generic.name, typ);
     }
     for (fields) |*field| {
         try checker.checkNewField(field, name.name, decl.fields, &resolver);
@@ -1066,7 +1085,7 @@ fn checkField(
     var resolver = Typ.Resolver.init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (struc.generics, name.generics) |generic, typ| {
-        try resolver.map.put(generic, typ);
+        try resolver.map.put(generic.name, typ);
     }
     const typ = try resolver.resolve(fiel.typ);
     if (try checker.convertTyp(typ, location)) |ast_typ| {
@@ -1269,7 +1288,7 @@ fn checkCall(checker: *Checker, call: *Ast.Call, location: Location, hint: Typ) 
     for (header.generics) |generic| {
         const ptr = try checker.fun_arena.allocator().create(Typ);
         ptr.* = .any;
-        try resolver.map.put(generic, .{ .lazy = ptr });
+        try resolver.map.put(generic.name, .{ .lazy = ptr });
     }
     const ret_typ = try resolver.resolve(header.ret_typ);
     // to propagate hint to generics
@@ -1281,7 +1300,7 @@ fn checkCall(checker: *Checker, call: *Ast.Call, location: Location, hint: Typ) 
     }
     call.generics = try checker.ast_typ_memo.arena.allocator().alloc(Ast.Typ, header.generics.len);
     for (call.generics, header.generics) |*target, generic| {
-        if (try checker.convertTyp(resolver.map.get(generic).?, null)) |llvm_typ| {
+        if (try checker.convertTyp(resolver.map.get(generic.name).?, null)) |llvm_typ| {
             target.* = llvm_typ;
         }
     }
@@ -1305,19 +1324,20 @@ fn checkRet(checker: *Checker, ret: *Ast.Return, location: Location) !ControlFlo
 }
 
 fn deinit(checker: *Checker) void {
-    var items = checker.items.valueIterator();
-    while (items.next()) |item| {
-        switch (item.kind) {
-            .struc => |*struc| struc.fields.deinit(),
-            .fun => {},
-            .vari => {},
-        }
-    }
-    checker.items.deinit();
+    checker.deinitItems();
     checker.typ_memo.deinit();
     checker.fun_arena.deinit();
     checker.vars_stack.deinit(checker.gpa);
+    checker.generics_usage.deinit(checker.gpa);
     checker.* = undefined;
+}
+
+fn deinitItems(checker: *Checker) void {
+    var items = checker.items.valueIterator();
+    while (items.next()) |item| {
+        item.deinit();
+    }
+    checker.items.deinit();
 }
 
 fn fail(checker: *Checker, location: Location, comptime msg: []const u8, args: anytype) void {
@@ -1372,9 +1392,10 @@ pub fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
         .prime => |prime| return .{ .prime = prime },
         .name => |name| {
             var check_decl = true;
-            for (checker.current_generics) |generic| {
-                if (std.mem.eql(u8, generic, name.name)) {
+            for (checker.current_generics, 0..) |generic, i| {
+                if (std.mem.eql(u8, generic.name, name.name)) {
                     check_decl = false;
+                    checker.generics_usage.set(i);
                     break;
                 }
             }

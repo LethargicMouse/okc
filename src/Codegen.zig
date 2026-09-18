@@ -181,7 +181,7 @@ fn genFunNamed(gen: *Codegen, name: Typ.Name) !void {
         return;
     }
     for (fun.header.generics, name.generics) |generic, typ| {
-        try gen.resolver.map.put(generic, typ);
+        try gen.resolver.map.put(generic.name, typ);
     }
     try gen.genFun(fun, name.generics);
 }
@@ -319,7 +319,7 @@ fn genStruct(gen: *Codegen, name: Typ.Name) !void {
     var resolver = Typ.Resolver.init(gen.gpa, gen.typ_memo);
     defer resolver.map.deinit();
     for (struc.generics, name.generics) |generic, typ| {
-        try resolver.map.put(generic, typ);
+        try resolver.map.put(generic.name, typ);
     }
     for (struc.fields, 0..) |field, i| {
         try indices.put(field.name, i);
