@@ -16,23 +16,23 @@ extern fn write(fd: i32, ptr: &u8, len: u64) void;
 
 fn main() i32 {
   let mut config: termios = undefined;
-  let stdin: i32 = 0;
+  let stdin = 0;
   tcgetattr(stdin, &config);
   let old_config = config;
-  let echo: u32 = 8;
-  let icanon: u32 = 2;
+  let echo = 8;
+  let icanon = 2;
   config.lflag &= ~(echo | icanon);
-  let opost: u32 = 1;
+  let opost = 1;
   config.oflag &= ~(opost);
-  let vtime: u8 = 5;
+  let vtime = 5;
   config.cc[vtime] = 1;
-  let vmin: u8 = 6;
+  let vmin = 6;
   config.cc[vmin] = 0;
-  let flush: i32 = 2;
+  let flush = 2;
   tcsetattr(stdin, flush, &config);
   put_str("\x1b[2J    six seven");
   while (true) {
-    let mut input: u8 = 0;
+    let mut input = 0;
     read(stdin, &input, 1);
     if (input == 'q') {
       break;
@@ -44,6 +44,6 @@ fn main() i32 {
 }
 
 fn put_str(str: []u8) void {
-  let stdout: i32 = 1;
+  let stdout = 1;
   write(stdout, str.ptr, str.len);
 }

@@ -102,6 +102,17 @@ pub const Unary = struct {
         ptr,
         deref,
         notb,
+        neg,
+
+        pub fn fromLexeme(lexeme: Lexeme) ?Kind {
+            return switch (lexeme) {
+                .amp => .ptr,
+                .star => .deref,
+                .tild => .notb,
+                .minus => .neg,
+                else => null,
+            };
+        }
     };
     kind: Kind,
     expr: Expr,

@@ -20,12 +20,8 @@ fn run(init: std.process.Init) !u8 {
     var args = try init.minimal.args.iterateAllocator(init.gpa);
     // skip exec name
     _ = args.skip();
-    var gpa = std.heap.DebugAllocator(.{
-        .stack_trace_frames = 20,
-    }).init;
-    defer _ = gpa.deinit();
     if (args.next()) |path| {
-        return runFile(init.io, gpa.allocator(), path);
+        return runFile(init.io, init.gpa, path);
     } else {
         std.log.err("no source path given", .{});
         return error.Handled;
@@ -235,4 +231,8 @@ test "default_field.ok" {
 
 test "box.ok" {
     try testFile("box", "6 7");
+}
+
+test "infer_int.ok" {
+    try testFile("infer_int", "");
 }

@@ -840,26 +840,10 @@ fn parseUnaryExpr(parser: *Parser) !Ast.Expr {
 }
 
 fn parseUnaryOp(parser: *Parser) !Ast.Unary.Kind {
-    return parser.parseEither(Ast.Unary.Kind, &.{
-        parsePtr,
-        parseNotB,
-        parseDeref,
-    });
-}
-
-fn parseDeref(parser: *Parser) !Ast.Unary.Kind {
-    try parser.expect(.star);
-    return .deref;
-}
-
-fn parsePtr(parser: *Parser) !Ast.Unary.Kind {
-    try parser.expect(.amp);
-    return .ptr;
-}
-
-fn parseNotB(parser: *Parser) !Ast.Unary.Kind {
-    try parser.expect(.tild);
-    return .notb;
+    const res = Ast.Unary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
+        return error.ParseFailed;
+    parser.cursor += 1;
+    return res;
 }
 
 fn parseInferStructExpr(parser: *Parser) !Ast.Expr {

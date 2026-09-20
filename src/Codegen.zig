@@ -662,7 +662,21 @@ fn genUnary(gen: *Codegen, unary: Ast.Unary) !TypVal {
         .deref => return gen.genDeref(unary.expr),
         .notb => return gen.genNotb(unary.expr),
         .ptr => return gen.genPtr(unary.expr),
+        .neg => return gen.genNeg(unary.expr),
     }
+}
+
+fn genNeg(gen: *Codegen, expr: Ast.Expr) !TypVal {
+    const typ_val = try gen.genExpr(expr);
+    const tmp = gen.newTmp();
+    try gen.print(
+        "\n  %{d} = sub {f} 0, {f}",
+        .{ tmp, LlvmTyp{ .inner = typ_val.typ }, typ_val.val },
+    );
+    return .{
+        .typ = typ_val.typ,
+        .val = .{ .tmp = tmp },
+    };
 }
 
 fn genDerefRef(gen: *Codegen, expr: Ast.Expr) !Ref {
@@ -811,7 +825,7 @@ fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Ref {
 fn genUnaryRef(gen: *Codegen, unary: Ast.Unary) !Ref {
     switch (unary.kind) {
         .deref => return gen.genDerefRef(unary.expr),
-        .notb, .ptr => {
+        .notb, .ptr, .neg => {
             const typ_val = try gen.genUnary(unary);
             const vari = try gen.toStack(typ_val);
             return vari;
