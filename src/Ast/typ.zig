@@ -1,11 +1,8 @@
 const std = @import("std");
 
-const Ast = @import("Ast.zig");
-const HashContext = @import("hash_context.zig").HashContext;
-const Location = @import("Location.zig");
-const Memo = @import("memo.zig").Memo;
-const typ_kinds = @import("typ_kinds.zig");
-const Resolver = @import("resolver.zig").Resolver(Typ);
+const Location = @import("../Location.zig");
+const typ_kinds = @import("../typ_kinds.zig");
+const Resolver = @import("../resolver.zig").Resolver(Typ);
 
 pub const Typ = union(enum) {
     prime: Prime,

@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 
 const Lexeme = @import("Lexer.zig").Lexeme;
 const Location = @import("Location.zig");
-pub const Typ = @import("ast_typ.zig").Typ;
+pub const Typ = @import("Ast/typ.zig").Typ;
 
 pub const ExtFun = struct {
     header: Header,
