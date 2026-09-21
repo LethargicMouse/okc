@@ -275,8 +275,8 @@ fn checkComptime(checker: *Checker, expr: Ast.Expr) void {
                 checker.checkComptime(elem);
             }
         },
-        .named_struc => |struc| {
-            for (struc.fields) |field| {
+        .named_struc => |named| {
+            for (named.struc.fields) |field| {
                 checker.checkComptime(field.expr);
             }
         },
@@ -568,7 +568,7 @@ fn checkAssign(checker: *Checker, assign: *Ast.Assign) !ControlFlow {
     return .cont;
 }
 
-fn checkUnary(checker: *Checker, unary: *Ast.Unary, location: Location, hint: Typ) !ExprInfo {
+fn checkUnary(checker: *Checker, unary: *Ast.Expr.Unary, location: Location, hint: Typ) !ExprInfo {
     switch (unary.kind) {
         .deref => return checker.checkDeref(&unary.expr, location),
         .notb => return checker.checkNotb(&unary.expr, hint),
@@ -615,7 +615,7 @@ fn failNotMut(checker: *Checker, location: Location) void {
     checker.fail(location, "it is immutable", .{});
 }
 
-fn checkElem(checker: *Checker, elem: *Ast.Elem, location: Location) !ExprInfo {
+fn checkElem(checker: *Checker, elem: *Ast.Expr.Elem, location: Location) !ExprInfo {
     const info = try checker.checkExpr(&elem.expr, .{});
     const index = try checker.checkExpr(&elem.index, .{ .typ = .{ .prime = .u64 } });
     _ = checker.unify(elem.index.location, .{ .prime = .u64 }, index.typ);
@@ -843,7 +843,7 @@ fn checkSizeof(checker: *Checker, typ: Ast.Typ) !ExprInfo {
     };
 }
 
-fn checkArray(checker: *Checker, array: *Ast.Array, location: Location, hint: Typ) !ExprInfo {
+fn checkArray(checker: *Checker, array: *Ast.Expr.Array, location: Location, hint: Typ) !ExprInfo {
     var inner_typ: Typ = .any;
     var inner_hint = if (hint == .array) hint.array.typ.* else .any;
     if (array.mtyp) |typ| {
@@ -918,7 +918,7 @@ fn checkPtr(checker: *Checker, expr: *Ast.Expr, hint: Typ) !ExprInfo {
 
 fn checkStructExpr(
     checker: *Checker,
-    struc: *Ast.StructExpr,
+    struc: *Ast.Expr.Struct,
     location: Location,
     hint: Typ,
 ) Error!ExprInfo {
@@ -944,18 +944,13 @@ fn checkStructExpr(
             return err;
         },
     };
-    return checker.checkTypedStruc(
-        name,
-        struc.fields,
-        &struc.typ,
-        location,
-    );
+    return checker.checkTypedStruc(name, struc, location);
 }
 
 fn checkSliceStruc(
     checker: *Checker,
     slice: Typ.Slice,
-    fields: []Ast.NewField,
+    fields: []Ast.Expr.Struct.Field,
     typ_target: *Ast.Typ,
     location: Location,
 ) !ExprInfo {
@@ -1008,8 +1003,7 @@ fn failNewFieldSecond(checker: *Checker, location: Location, name: []const u8) v
 fn checkTypedStruc(
     checker: *Checker,
     name: Typ.Name,
-    fields: []Ast.NewField,
-    typ_target: *Ast.Typ,
+    struc: *Ast.Expr.Struct,
     location: Location,
 ) !ExprInfo {
     const err = ExprInfo{
@@ -1034,16 +1028,16 @@ fn checkTypedStruc(
     for (decl.generics, generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
     }
-    for (fields) |*field| {
+    for (struc.fields) |*field| {
         try checker.checkNewField(field, name.name, decl.fields, &resolver);
     }
-    checker.checkFieldsInitialised(decl.fields, fields, location);
+    checker.checkFieldsInitialised(decl.fields, struc.fields, location);
     const typ = Typ{ .name = .{
         .name = name.name,
         .generics = generics,
     } };
     if (try checker.convertTyp(typ, location)) |ast_typ| {
-        typ_target.* = ast_typ;
+        struc.typ = ast_typ;
     }
     return .{
         .typ = typ,
@@ -1064,7 +1058,7 @@ fn makeGenerics(checker: *Checker, len: usize) ![]const Typ {
 fn checkFieldsInitialised(
     checker: *Checker,
     decl_fields: std.StringHashMap(Field),
-    fields: []const Ast.NewField,
+    fields: []const Ast.Expr.Struct.Field,
     location: Location,
 ) void {
     var iter = decl_fields.iterator();
@@ -1087,7 +1081,7 @@ fn checkFieldsInitialised(
 
 fn checkNewField(
     checker: *Checker,
-    field: *Ast.NewField,
+    field: *Ast.Expr.Struct.Field,
     struc_name: []const u8,
     decl_fields: std.StringHashMap(Field),
     resolver: *Resolver,
@@ -1105,16 +1099,11 @@ fn failNotInit(checker: *Checker, location: Location, name: []const u8) void {
     checker.fail(location, "field `{s}` is not initialized", .{name});
 }
 
-fn checkNamedStructExpr(checker: *Checker, struc: *Ast.NamedStructExpr, location: Location) !ExprInfo {
-    return checker.checkTypedStruc(
-        .{ .name = struc.name },
-        struc.fields,
-        &struc.typ,
-        location,
-    );
+fn checkNamedStructExpr(checker: *Checker, named: *Ast.Expr.Struct.Named, location: Location) !ExprInfo {
+    return checker.checkTypedStruc(.{ .name = named.name }, &named.struc, location);
 }
 
-fn checkUndef(checker: *Checker, undef: *Ast.Undef, location: Location, typ: Typ) !ExprInfo {
+fn checkUndef(checker: *Checker, undef: *Ast.Expr.Undef, location: Location, typ: Typ) !ExprInfo {
     if (try checker.convertTyp(typ, location)) |ast_typ| {
         undef.typ = ast_typ;
     }
@@ -1124,7 +1113,7 @@ fn checkUndef(checker: *Checker, undef: *Ast.Undef, location: Location, typ: Typ
     };
 }
 
-fn checkInt(checker: *Checker, location: Location, int: *Ast.Int) !ExprInfo {
+fn checkInt(checker: *Checker, location: Location, int: *Ast.Expr.Int) !ExprInfo {
     const ptr = try checker.fun_arena.allocator().create(Typ);
     ptr.* = .int;
     try checker.convert_queue.append(checker.gpa, .{
@@ -1140,7 +1129,7 @@ fn checkInt(checker: *Checker, location: Location, int: *Ast.Int) !ExprInfo {
 
 fn checkField(
     checker: *Checker,
-    field: *Ast.Field,
+    field: *Ast.Expr.Field,
     location: Location,
     hint_mutable: bool,
 ) !ExprInfo {
@@ -1261,7 +1250,7 @@ fn failCannotInfer(checker: *Checker, typ: Typ, location: Location) void {
     }
 }
 
-fn checkBinary(checker: *Checker, binary: *Ast.Binary) !ExprInfo {
+fn checkBinary(checker: *Checker, binary: *Ast.Expr.Binary) !ExprInfo {
     var left = try checker.checkExpr(&binary.left, .{});
     if (!left.typ.isNumber()) {
         checker.failWrongTyp(binary.left.location, .int, left.typ);
@@ -1332,7 +1321,7 @@ fn failNotDeclared(checker: *Checker, location: Location, name: []const u8) void
     checker.fail(location, "item `{s}` is not declared", .{name});
 }
 
-fn checkCall(checker: *Checker, call: *Ast.Call, location: Location, hint: Typ) !ExprInfo {
+fn checkCall(checker: *Checker, call: *Ast.Expr.Call, location: Location, hint: Typ) !ExprInfo {
     const header = checker.getHeader(call.name, location) orelse {
         for (call.args) |*arg| {
             _ = try checker.checkExpr(arg, .{});

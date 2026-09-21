@@ -513,7 +513,7 @@ fn storeInto(gen: *Codegen, val: Val, typ_val: TypVal) !void {
     try gen.print("\n  store {f}, ptr {f}", .{ typ_val, val });
 }
 
-fn genCall(gen: *Codegen, call: Ast.Call) !TypVal {
+fn genCall(gen: *Codegen, call: Ast.Expr.Call) !TypVal {
     var name = Typ.Name{
         .name = call.name,
         .generics = &.{},
@@ -645,7 +645,7 @@ fn getLayout(gen: *Codegen, typ: Typ) !Layout {
     }
 }
 
-fn genArray(gen: *Codegen, array: Ast.Array) !TypVal {
+fn genArray(gen: *Codegen, array: Ast.Expr.Array) !TypVal {
     var res = TypVal{
         .typ = array.typ,
         .val = .undef,
@@ -657,7 +657,7 @@ fn genArray(gen: *Codegen, array: Ast.Array) !TypVal {
     return res;
 }
 
-fn genUnary(gen: *Codegen, unary: Ast.Unary) !TypVal {
+fn genUnary(gen: *Codegen, unary: Ast.Expr.Unary) !TypVal {
     switch (unary.kind) {
         .deref => return gen.genDeref(unary.expr),
         .notb => return gen.genNotb(unary.expr),
@@ -722,11 +722,11 @@ fn genPtr(gen: *Codegen, expr: Ast.Expr) !TypVal {
     };
 }
 
-fn genUndef(undef: Ast.Undef) !TypVal {
+fn genUndef(undef: Ast.Expr.Undef) !TypVal {
     return .{ .typ = undef.typ, .val = .undef };
 }
 
-fn genFieldRef(gen: *Codegen, field: Ast.Field) !Ref {
+fn genFieldRef(gen: *Codegen, field: Ast.Expr.Field) !Ref {
     var vari = try gen.genExprRef(field.expr);
     if (vari.inner_typ == .ptr) {
         const tmp = try gen.load(vari);
@@ -743,12 +743,12 @@ fn genFieldRef(gen: *Codegen, field: Ast.Field) !Ref {
     };
 }
 
-fn genField(gen: *Codegen, field: Ast.Field) !TypVal {
+fn genField(gen: *Codegen, field: Ast.Expr.Field) !TypVal {
     const ref = try gen.genFieldRef(field);
     return gen.loadTypVal(ref);
 }
 
-fn genElemRef(gen: *Codegen, elem: Ast.Elem) !Ref {
+fn genElemRef(gen: *Codegen, elem: Ast.Expr.Elem) !Ref {
     const ref = try gen.genExprRef(elem.expr);
     const index = try gen.genExpr(elem.index);
     switch (ref.inner_typ) {
@@ -791,7 +791,7 @@ fn genGEP(gen: *Codegen, ref: Ref, index: TypVal) !u32 {
     return tmp;
 }
 
-fn genElem(gen: *Codegen, elem: Ast.Elem) !TypVal {
+fn genElem(gen: *Codegen, elem: Ast.Expr.Elem) !TypVal {
     const ref = try gen.genElemRef(elem);
     return gen.loadTypVal(ref);
 }
@@ -822,7 +822,7 @@ fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Ref {
     }
 }
 
-fn genUnaryRef(gen: *Codegen, unary: Ast.Unary) !Ref {
+fn genUnaryRef(gen: *Codegen, unary: Ast.Expr.Unary) !Ref {
     switch (unary.kind) {
         .deref => return gen.genDerefRef(unary.expr),
         .notb, .ptr, .neg => {
@@ -842,7 +842,7 @@ fn load(gen: *Codegen, vari: Ref) !u32 {
     return to;
 }
 
-fn genInt(int: Ast.Int) TypVal {
+fn genInt(int: Ast.Expr.Int) TypVal {
     return .{
         .typ = int.typ,
         .val = .{ .int = int.val },
@@ -882,7 +882,7 @@ fn genStr(gen: *Codegen, str: []const u8) !TypVal {
     };
 }
 
-fn genStructExpr(gen: *Codegen, struc: Ast.StructExpr) !TypVal {
+fn genStructExpr(gen: *Codegen, struc: Ast.Expr.Struct) !TypVal {
     if (struc.typ == .name) {
         try gen.genStruct(struc.typ.name.delocate());
     }
@@ -913,14 +913,11 @@ fn genIV(gen: *Codegen, to: *TypVal, typ_val: TypVal, index: u64) !void {
     to.val = .{ .tmp = tmp };
 }
 
-fn genNamedStructExpr(gen: *Codegen, struc: Ast.NamedStructExpr) !TypVal {
-    return gen.genStructExpr(.{
-        .fields = struc.fields,
-        .typ = struc.typ,
-    });
+fn genNamedStructExpr(gen: *Codegen, named: Ast.Expr.Struct.Named) !TypVal {
+    return gen.genStructExpr(named.struc);
 }
 
-fn genBinary(gen: *Codegen, binary: Ast.Binary) !TypVal {
+fn genBinary(gen: *Codegen, binary: Ast.Expr.Binary) !TypVal {
     const left = try gen.genExpr(binary.left);
     const right = try gen.genExpr(binary.right);
     const tmp = gen.newTmp();
@@ -933,14 +930,14 @@ fn genBinary(gen: *Codegen, binary: Ast.Binary) !TypVal {
     };
 }
 
-fn binOpRetTyp(kind: Ast.Binary.Kind, child_typ: Typ) Typ {
+fn binOpRetTyp(kind: Ast.Expr.Binary.Kind, child_typ: Typ) Typ {
     switch (kind) {
         .sub, .add, .mul, .div, .rem, .andb, .orb => return child_typ,
         .equ, .les, .moreq => return .{ .prime = .bool },
     }
 }
 
-fn genBinOp(gen: *Codegen, kind: Ast.Binary.Kind) !void {
+fn genBinOp(gen: *Codegen, kind: Ast.Expr.Binary.Kind) !void {
     switch (kind) {
         .moreq => try gen.print("icmp sge", .{}),
         .orb => try gen.print("or", .{}),
@@ -992,17 +989,14 @@ fn genConst(gen: *Codegen, name: []const u8) !void {
 fn genConstExpr(gen: *Codegen, expr: Ast.Expr) Error!Typ {
     switch (expr.kind) {
         .str => |str| return gen.genConstStr(str),
-        .named_struc => |struc| return gen.genConstStruc(.{
-            .fields = struc.fields,
-            .typ = struc.typ,
-        }),
+        .named_struc => |named| return gen.genConstStruc(named.struc),
         .struc => |struc| return gen.genConstStruc(struc),
         .array => |array| return gen.genConstArray(array),
         else => unreachable,
     }
 }
 
-fn genConstArray(gen: *Codegen, array: Ast.Array) !Typ {
+fn genConstArray(gen: *Codegen, array: Ast.Expr.Array) !Typ {
     try gen.print("{f} [", .{LlvmTyp{ .inner = array.typ }});
     if (array.exprs.len != 0) {
         try gen.print("\n  ", .{});
@@ -1016,7 +1010,7 @@ fn genConstArray(gen: *Codegen, array: Ast.Array) !Typ {
     return array.typ;
 }
 
-fn genConstStruc(gen: *Codegen, struc: Ast.StructExpr) !Typ {
+fn genConstStruc(gen: *Codegen, struc: Ast.Expr.Struct) !Typ {
     if (struc.typ == .name) {
         try gen.genStruct(struc.typ.name.delocate());
     }

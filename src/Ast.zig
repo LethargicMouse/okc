@@ -1,9 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+pub const Expr = @import("Ast/Expr.zig");
+pub const Typ = @import("Ast/typ.zig").Typ;
 const Lexeme = @import("Lexer.zig").Lexeme;
 const Location = @import("Location.zig");
-pub const Typ = @import("Ast/typ.zig").Typ;
 
 pub const ExtFun = struct {
     header: Header,
@@ -29,7 +30,7 @@ pub const Fun = struct {
 
 pub const OpAssign = struct {
     left: Expr,
-    kind: Binary.Kind,
+    kind: Expr.Binary.Kind,
     right: Expr,
 };
 
@@ -85,161 +86,9 @@ pub const Declare = struct {
     expr: Expr,
 };
 
-pub const Call = struct {
-    name: []const u8,
-    args: []Expr,
-    generics: []Typ = undefined,
-    ret_typ: Typ = undefined,
-};
-
-pub const Elem = struct {
-    expr: Expr,
-    index: Expr,
-};
-
-pub const Unary = struct {
-    pub const Kind = enum {
-        ptr,
-        deref,
-        notb,
-        neg,
-
-        pub fn fromLexeme(lexeme: Lexeme) ?Kind {
-            return switch (lexeme) {
-                .amp => .ptr,
-                .star => .deref,
-                .tild => .notb,
-                .minus => .neg,
-                else => null,
-            };
-        }
-    };
-    kind: Kind,
-    expr: Expr,
-};
-
-pub const Int = struct {
-    val: u64,
-    typ: Typ = undefined,
-};
-
-pub const Array = struct {
-    mtyp: ?Typ,
-    exprs: []Expr,
-    typ: Typ = undefined,
-};
-
 pub const GlobalVar = struct {
     name: []const u8,
     typ: Typ,
-};
-
-pub const Expr = struct {
-    pub const Kind = union(enum) {
-        sizeof: Typ,
-        array: Array,
-        unary: *Unary,
-        struc: StructExpr,
-        int: Int,
-        str: []const u8,
-        vari: []const u8,
-        fn_ptr: []const u8,
-        char: u8,
-        undef: Undef,
-        bool: bool,
-        call: Call,
-        binary: *Binary,
-        field: *Field,
-        named_struc: NamedStructExpr,
-        elem: *Elem,
-    };
-    location: Location,
-    kind: Kind,
-};
-
-pub const NamedStructExpr = struct {
-    name: []const u8,
-    fields: []NewField,
-    typ: Typ = undefined,
-};
-
-pub const StructExpr = struct {
-    fields: []NewField,
-    typ: Typ = undefined,
-};
-
-pub const NewField = struct {
-    name: []const u8,
-    expr: Expr,
-    location: Location,
-};
-
-// lol
-pub const Undef = struct {
-    typ: Typ = undefined,
-};
-
-pub const Field = struct {
-    expr: Expr,
-    name: []const u8,
-    typ: Typ = undefined,
-};
-
-pub const Binary = struct {
-    pub const Kind = enum {
-        pub const Class = enum {
-            arith,
-            bool,
-        };
-
-        orb,
-        andb,
-        equ,
-        add,
-        sub,
-        mul,
-        div,
-        les,
-        rem,
-        moreq,
-
-        pub fn getPrior(kind: Kind) u8 {
-            switch (kind) {
-                .equ, .les, .moreq => return 0,
-                .orb => return 1,
-                .andb => return 2,
-                .add, .sub => return 3,
-                .mul, .div, .rem => return 4,
-            }
-        }
-
-        pub fn fromLexeme(lexeme: Lexeme) ?Kind {
-            return switch (lexeme) {
-                .pipe => .orb,
-                .amp => .andb,
-                .equ2 => .equ,
-                .plus => .add,
-                .minus => .sub,
-                .star => .mul,
-                .slash => .div,
-                .les => .les,
-                .rem => .rem,
-                .moreq => .moreq,
-                else => null,
-            };
-        }
-
-        pub fn getClass(kind: Kind) Class {
-            return switch (kind) {
-                .orb, .andb, .add, .sub, .mul, .div, .rem => .arith,
-                .equ, .les, .moreq => .bool,
-            };
-        }
-    };
-
-    left: Expr,
-    kind: Kind,
-    right: Expr,
 };
 
 pub const Generic = struct {

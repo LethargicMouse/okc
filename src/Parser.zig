@@ -13,12 +13,12 @@ const ExprStatementPostfix = union(enum) {
 };
 
 const OpAssignPostfix = struct {
-    kind: Ast.Binary.Kind,
+    kind: Ast.Expr.Binary.Kind,
     expr: Ast.Expr,
 };
 
 const BinPostfix = struct {
-    kind: Ast.Binary.Kind,
+    kind: Ast.Expr.Binary.Kind,
     expr: Ast.Expr,
 };
 
@@ -469,8 +469,8 @@ fn parseOpAssignStatementPostfix(
     } };
 }
 
-fn parseOpAssignBinOp(parser: *Parser) !Ast.Binary.Kind {
-    const res = Ast.Binary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
+fn parseOpAssignBinOp(parser: *Parser) !Ast.Expr.Binary.Kind {
+    const res = Ast.Expr.Binary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
         return error.ParseFailed;
     if (res.getClass() != .arith) {
         return error.ParseFailed;
@@ -626,7 +626,7 @@ fn parseExprStatementPostfix(parser: *Parser) !ExprStatementPostfix {
     }) catch .none;
 }
 
-fn parseCall(parser: *Parser) !Ast.Call {
+fn parseCall(parser: *Parser) !Ast.Expr.Call {
     const name = try parser.parseName();
     try parser.expect(.parl);
     const args = try parser.parseSep(Ast.Expr, parseExprLoud);
@@ -665,7 +665,7 @@ fn parseExpr(parser: *Parser) !Ast.Expr {
 fn parseExprPrior(parser: *Parser, prior: u8, loud: bool) Error!Ast.Expr {
     var res = try parser.parseExprPosted(loud);
     while (try parser.parseBinPostfix(prior)) |bin_postfix| {
-        const binary = try parser.ast_arena.allocator().create(Ast.Binary);
+        const binary = try parser.ast_arena.allocator().create(Ast.Expr.Binary);
         binary.* = .{
             .left = res,
             .kind = bin_postfix.kind,
@@ -695,8 +695,8 @@ fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
     };
 }
 
-fn parseBinOp(parser: *Parser, prior: u8) ?Ast.Binary.Kind {
-    const res = Ast.Binary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
+fn parseBinOp(parser: *Parser, prior: u8) ?Ast.Expr.Binary.Kind {
+    const res = Ast.Expr.Binary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
         return null;
     if (res.getPrior() < prior) {
         return null;
@@ -714,7 +714,7 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
     while (try parser.parseMaybe(Postfix, parsePostfix)) |postfix| {
         switch (postfix) {
             .field => |field_postfix| {
-                const field = try parser.ast_arena.allocator().create(Ast.Field);
+                const field = try parser.ast_arena.allocator().create(Ast.Expr.Field);
                 field.* = .{
                     .expr = res,
                     .name = field_postfix.name,
@@ -725,7 +725,7 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
                 };
             },
             .elem => |elem_postfix| {
-                const elem = try parser.ast_arena.allocator().create(Ast.Elem);
+                const elem = try parser.ast_arena.allocator().create(Ast.Expr.Elem);
                 elem.expr = res;
                 elem.index = elem_postfix.index;
                 res = .{
@@ -839,7 +839,7 @@ fn parseUnaryExpr(parser: *Parser) !Ast.Expr {
     const location = parser.getLocation();
     const kind = try parser.parseUnaryOp();
     const expr = try parser.parseExprPostedLoud();
-    const unary = try parser.ast_arena.allocator().create(Ast.Unary);
+    const unary = try parser.ast_arena.allocator().create(Ast.Expr.Unary);
     unary.* = .{
         .kind = kind,
         .expr = expr,
@@ -850,8 +850,8 @@ fn parseUnaryExpr(parser: *Parser) !Ast.Expr {
     };
 }
 
-fn parseUnaryOp(parser: *Parser) !Ast.Unary.Kind {
-    const res = Ast.Unary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
+fn parseUnaryOp(parser: *Parser) !Ast.Expr.Unary.Kind {
+    const res = Ast.Expr.Unary.Kind.fromLexeme(parser.tokens[parser.cursor].lexeme) orelse
         return error.ParseFailed;
     parser.cursor += 1;
     return res;
@@ -885,19 +885,19 @@ fn parseStructExpr(parser: *Parser) !Ast.Expr {
         .location = location,
         .kind = .{ .named_struc = .{
             .name = name,
-            .fields = fields,
+            .struc = .{ .fields = fields },
         } },
     };
 }
 
-fn parseStructExprBody(parser: *Parser) ![]Ast.NewField {
+fn parseStructExprBody(parser: *Parser) ![]Ast.Expr.Struct.Field {
     try parser.expect(.curl);
-    const fields = try parser.parseSep(Ast.NewField, parseNewFieldLoud);
+    const fields = try parser.parseSep(Ast.Expr.Struct.Field, parseNewFieldLoud);
     try parser.expect(.curr);
     return fields;
 }
 
-fn parseNewFieldLoud(parser: *Parser) !Ast.NewField {
+fn parseNewFieldLoud(parser: *Parser) !Ast.Expr.Struct.Field {
     const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.equ);
