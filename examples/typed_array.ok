@@ -1,0 +1,16 @@
+extern fn puts(s: &u8) void;
+
+struct number {
+  name: []u8,
+}
+
+fn main() i32 {
+  puts(list[0].name.ptr);
+  puts(list[1].name.ptr);
+  return 0;
+}
+
+let list = <number>[
+  .{ name = "six" },
+  .{ name = "seven" }
+];

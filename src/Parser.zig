@@ -814,14 +814,25 @@ fn parseAtExpr(parser: *Parser) !Ast.Expr {
 
 fn parseArrayExpr(parser: *Parser) !Ast.Expr {
     const start = parser.getLocation();
+    const mtyp = try parser.parseMaybe(Ast.Typ, parseTypHint);
     try parser.expect(.bral);
     const exprs = try parser.parseSep(Ast.Expr, parseExprLoud);
-    try parser.expect(.brar);
     const end = parser.getLocation();
+    try parser.expect(.brar);
     return .{
         .location = start.combine(end),
-        .kind = .{ .array = .{ .exprs = exprs } },
+        .kind = .{ .array = .{
+            .exprs = exprs,
+            .mtyp = mtyp,
+        } },
     };
+}
+
+fn parseTypHint(parser: *Parser) !Ast.Typ {
+    try parser.expect(.les);
+    const typ = try parser.parseTypLoud();
+    try parser.expectLoud(.mor);
+    return typ;
 }
 
 fn parseUnaryExpr(parser: *Parser) !Ast.Expr {

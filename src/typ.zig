@@ -89,7 +89,6 @@ pub const Typ = union(enum) {
     }
 
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        const show_lazy = true;
         switch (typ) {
             .prime => |prime| try prime.format(writer),
             .name => |name| try name.format(writer),
@@ -97,7 +96,7 @@ pub const Typ = union(enum) {
             .ptr => |ptr| try ptr.format(writer),
             .array => |array| try array.format(writer),
             .slice => |slice| try slice.format(writer),
-            .lazy => |inner| if (show_lazy) {
+            .lazy => |inner| if (debug_lazies) {
                 try writer.print("@{x}<{f}>", .{ @intFromPtr(inner) & 0xffff, inner });
             } else {
                 try inner.format(writer);

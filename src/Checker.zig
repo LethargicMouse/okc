@@ -270,6 +270,11 @@ fn checkConstExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) !Typ {
 fn checkComptime(checker: *Checker, expr: Ast.Expr) void {
     switch (expr.kind) {
         .str => {},
+        .array => |array| {
+            for (array.exprs) |elem| {
+                checker.checkComptime(elem);
+            }
+        },
         .named_struc => |struc| {
             for (struc.fields) |field| {
                 checker.checkComptime(field.expr);
@@ -839,7 +844,12 @@ fn checkSizeof(checker: *Checker, typ: Ast.Typ) !ExprInfo {
 }
 
 fn checkArray(checker: *Checker, array: *Ast.Array, location: Location, hint: Typ) !ExprInfo {
-    const inner_hint = if (hint == .array) hint.array.typ.* else .any;
+    var inner_typ: Typ = .any;
+    var inner_hint = if (hint == .array) hint.array.typ.* else .any;
+    if (array.mtyp) |typ| {
+        inner_typ = try checker.checkTyp(typ);
+        inner_hint = inner_typ;
+    }
     if (array.exprs.len == 0) {
         const typ = Typ{ .array = .{
             .typ = try checker.typ_memo.box(inner_hint),
@@ -853,7 +863,6 @@ fn checkArray(checker: *Checker, array: *Ast.Array, location: Location, hint: Ty
             .mutable = false,
         };
     }
-    var inner_typ: Typ = .any;
     for (array.exprs) |*expr| {
         const info = try checker.checkExpr(expr, .{ .typ = inner_hint });
         inner_typ = checker.unify(expr.location, inner_typ, info.typ);

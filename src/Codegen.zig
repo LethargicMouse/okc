@@ -997,15 +997,30 @@ fn genConstExpr(gen: *Codegen, expr: Ast.Expr) Error!Typ {
             .typ = struc.typ,
         }),
         .struc => |struc| return gen.genConstStruc(struc),
+        .array => |array| return gen.genConstArray(array),
         else => unreachable,
     }
+}
+
+fn genConstArray(gen: *Codegen, array: Ast.Array) !Typ {
+    try gen.print("{f} [", .{LlvmTyp{ .inner = array.typ }});
+    if (array.exprs.len != 0) {
+        try gen.print("\n  ", .{});
+        _ = try gen.genConstExpr(array.exprs[0]);
+        for (array.exprs[1..]) |expr| {
+            try gen.print(",\n  ", .{});
+            _ = try gen.genConstExpr(expr);
+        }
+    }
+    try gen.print("\n]", .{});
+    return array.typ;
 }
 
 fn genConstStruc(gen: *Codegen, struc: Ast.StructExpr) !Typ {
     if (struc.typ == .name) {
         try gen.genStruct(struc.typ.name.delocate());
     }
-    try gen.print("{f} {{ ", .{LlvmTyp{ .inner = struc.typ }});
+    try gen.print("{f} {{", .{LlvmTyp{ .inner = struc.typ }});
     if (struc.fields.len != 0) {
         const fields = try gen.gpa.alloc(Ast.Expr, struc.fields.len);
         defer gen.gpa.free(fields);
@@ -1018,13 +1033,14 @@ fn genConstStruc(gen: *Codegen, struc: Ast.StructExpr) !Typ {
             const index = gen.getFieldIndex(struc.typ, field.name);
             fields[index] = field.expr;
         }
+        try gen.print("\n  ", .{});
         _ = try gen.genConstExpr(fields[0]);
         for (fields[1..]) |expr| {
-            try gen.print(", ", .{});
+            try gen.print(",\n  ", .{});
             _ = try gen.genConstExpr(expr);
         }
     }
-    try gen.print(" }}", .{});
+    try gen.print("\n}}", .{});
     return struc.typ;
 }
 

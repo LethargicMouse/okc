@@ -19,7 +19,7 @@ pub fn format(location: Location, writer: *std.Io.Writer) std.Io.Writer.Error!vo
         try underline(writer, location.start.symbol, location.end.symbol);
         return;
     }
-    try underline(writer, location.start.symbol, location.lines[location.start.line - 1].len);
+    try underline(writer, location.start.symbol, location.lines[location.start.line - 1].len + 1);
     for (location.start.line + 1..location.end.line + 1) |i| {
         try line(writer, i, location.lines);
     }

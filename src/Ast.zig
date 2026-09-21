@@ -124,6 +124,7 @@ pub const Int = struct {
 };
 
 pub const Array = struct {
+    mtyp: ?Typ,
     exprs: []Expr,
     typ: Typ = undefined,
 };

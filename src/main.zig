@@ -236,3 +236,7 @@ test "box.ok" {
 test "infer_int.ok" {
     try testFile("infer_int", "");
 }
+
+test "typed_array.ok" {
+    try testFile("typed_array", "six\nseven\n");
+}
