@@ -18,7 +18,7 @@ fn main() i32 {
   let mut config: termios = undefined;
   let stdin = 0;
   tcgetattr(stdin, &config);
-  let old_config = config;
+  let oldConfig = config;
   let echo = 8;
   let icanon = 2;
   config.lflag &= ~(echo | icanon);
@@ -30,7 +30,7 @@ fn main() i32 {
   config.cc[vmin] = 0;
   let flush = 2;
   tcsetattr(stdin, flush, &config);
-  put_str("\x1b[2J    six seven");
+  putStr("\x1b[2J    six seven");
   while (true) {
     let mut input = 0;
     read(stdin, &input, 1);
@@ -38,12 +38,12 @@ fn main() i32 {
       break;
     }
   }
-  tcsetattr(stdin, flush, &old_config);
+  tcsetattr(stdin, flush, &oldConfig);
 
   return 0;
 }
 
-fn put_str(str: []u8) void {
+fn putStr(str: []u8) void {
   let stdout = 1;
   write(stdout, str.ptr, str.len);
 }

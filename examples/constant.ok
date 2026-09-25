@@ -3,8 +3,8 @@ extern fn printf(fmt: &u8, a: &u8, b: &u8) void;
 fn main() i32 {
   printf(
     "%s %s\n".ptr, 
-    my_pair.first.ptr, 
-    my_pair.second.ptr,
+    myPair.first.ptr, 
+    myPair.second.ptr,
   );
   return 0;
 }
@@ -14,7 +14,7 @@ struct Pair<a, b> {
   second: b,
 }
 
-let my_pair = Pair {
+let myPair = Pair {
   first = "six",
   second = "seven",
 };

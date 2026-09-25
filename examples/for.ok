@@ -6,12 +6,12 @@ fn main() i32 {
     "seven",
   ];
   while (s : list) {
-    put_str(s);
+    putStr(s);
   }
   return 0;
 }
 
-fn put_str(s: []u8) void {
+fn putStr(s: []u8) void {
   s[0] = 'a';
   write(1, s.ptr, s.len);
 }
