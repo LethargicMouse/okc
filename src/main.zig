@@ -240,3 +240,7 @@ test "infer_int.ok" {
 test "typed_array.ok" {
     try testFile("typed_array", "six\nseven\n");
 }
+
+test "for.ok" {
+    try testFile("for", "six\nseven\n");
+}
