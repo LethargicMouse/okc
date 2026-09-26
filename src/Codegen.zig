@@ -386,6 +386,7 @@ fn genParam(gen: *Codegen, typ: Typ) !TypVal {
 
 fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
     switch (statement.kind) {
+        .forr => |forr| try gen.genFor(forr),
         .op_assign => |op_assign| try gen.genOpAssign(op_assign),
         .unre => try gen.genUnreachable(),
         .ret => |ret| try gen.genRet(ret),
@@ -417,6 +418,50 @@ fn genWhile(gen: *Codegen, whi: Ast.While) !void {
     const condition_label = gen.newTmp();
     try gen.uncond(condition_label, condition_label);
     try gen.genBranch(whi.branch, condition_label, true);
+}
+
+fn genFor(gen: *Codegen, forr: Ast.For) !void {
+    const slice = try gen.genExprRef(forr.expr);
+    // int i = 0
+    const iref = try gen.toStack(.{
+        .typ = .{ .prime = .u64 },
+        .val = .{ .int = 0 },
+    });
+    // goto cond
+    // start:
+    const start_label = gen.newTmp();
+    const cond_label = gen.newTmp();
+    try gen.uncond(cond_label, start_label);
+    // i++
+    const ival = try gen.loadTypVal(iref);
+    const inew = try gen.genBinary(.add, ival.typ, ival.val, .{ .int = 1 });
+    try gen.storeInto(iref.val, .{ .typ = ival.typ, .val = .{ .tmp = inew } });
+    // goto cond
+    // cond:
+    try gen.uncond(cond_label, cond_label);
+    // cond = i < .len
+    const ival_ = try gen.loadTypVal(iref);
+    const len = try gen.genField(.{
+        .expr = forr.expr,
+        .name = "len",
+        .typ = .{ .prime = .u64 },
+    });
+    const less = try gen.genBinary(.les, ival.typ, ival_.val, len.val);
+    // if cond, body, end
+    // body:
+    const body_label = gen.newTmp();
+    const end_label = gen.newTmp();
+    try gen.cond(.{ .tmp = less }, body_label, end_label);
+    // var = slice[i]
+    const elem = try gen.genElemRef(slice, ival_);
+    try gen.vars.put(forr.vari, elem);
+    // <body>
+    for (forr.body) |statement| {
+        try gen.genStatement(statement);
+    }
+    // goto start
+    // end:
+    try gen.uncond(start_label, end_label);
 }
 
 fn cond(
@@ -476,7 +521,7 @@ fn genBranch(gen: *Codegen, branch: Ast.Branch, end_label: u32, loop: bool) !voi
 
 fn genOpAssign(gen: *Codegen, op_assign: Ast.OpAssign) !void {
     const vari = try gen.genExprRef(op_assign.left);
-    const typ_val = try gen.genBinary(.{
+    const typ_val = try gen.genBinaryExpr(.{
         .left = op_assign.left,
         .kind = op_assign.kind,
         .right = op_assign.right,
@@ -501,12 +546,16 @@ fn toStack(gen: *Codegen, typ_val: TypVal) !Ref {
         try gen.genStruct(typ_val.typ.name.delocate());
     }
     const tmp = gen.newTmp();
-    try gen.print("\n  %{} = alloca {f}", .{ tmp, LlvmTyp{ .inner = typ_val.typ } });
+    try gen.genAlloca(tmp, typ_val.typ);
     try gen.storeInto(.{ .tmp = tmp }, typ_val);
     return .{
         .val = .{ .tmp = tmp },
         .inner_typ = typ_val.typ,
     };
+}
+
+fn genAlloca(gen: *Codegen, tmp: u32, typ: Typ) !void {
+    try gen.print("\n  %{} = alloca {f}", .{ tmp, LlvmTyp{ .inner = typ } });
 }
 
 fn storeInto(gen: *Codegen, val: Val, typ_val: TypVal) !void {
@@ -610,7 +659,7 @@ fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
         .bool => |boo| return genBool(boo),
         .undef => |undef| return genUndef(undef),
         .call => |call| return gen.genCall(call),
-        .binary => |binary| return gen.genBinary(binary.*),
+        .binary => |binary| return gen.genBinaryExpr(binary.*),
         .field => |field| return gen.genField(field.*),
         .named_struc => |struc| return gen.genNamedStructExpr(struc),
         .elem => |elem| return gen.genElem(elem.*),
@@ -735,6 +784,13 @@ fn genFieldRef(gen: *Codegen, field: Ast.Expr.Field) !Ref {
             .val = .{ .tmp = tmp },
         };
     }
+    if (vari.inner_typ == .array) {
+        std.debug.assert(std.mem.eql(u8, field.name, "len"));
+        return gen.toStack(.{
+            .typ = .{ .prime = .u64 },
+            .val = .{ .int = vari.inner_typ.array.len },
+        });
+    }
     const index = gen.getFieldIndex(vari.inner_typ, field.name);
     const tmp = try gen.genGEP(vari, .int(index));
     return .{
@@ -748,19 +804,23 @@ fn genField(gen: *Codegen, field: Ast.Expr.Field) !TypVal {
     return gen.loadTypVal(ref);
 }
 
-fn genElemRef(gen: *Codegen, elem: Ast.Expr.Elem) !Ref {
+fn genElemExprRef(gen: *Codegen, elem: Ast.Expr.Elem) !Ref {
     const ref = try gen.genExprRef(elem.expr);
     const index = try gen.genExpr(elem.index);
-    switch (ref.inner_typ) {
+    return gen.genElemRef(ref, index);
+}
+
+fn genElemRef(gen: *Codegen, from: Ref, index: TypVal) !Ref {
+    switch (from.inner_typ) {
         .array => {
-            const tmp = try gen.genGEP(ref, index);
+            const tmp = try gen.genGEP(from, index);
             return .{
-                .inner_typ = ref.inner_typ.array.typ.*,
+                .inner_typ = from.inner_typ.array.typ.*,
                 .val = .{ .tmp = tmp },
             };
         },
         .slice => |slice| {
-            const ptrptr = try gen.genGEP(ref, .int(0));
+            const ptrptr = try gen.genGEP(from, .int(0));
             const ptr = try gen.load(.{
                 .inner_typ = .{ .ptr = .{
                     .typ = slice.typ,
@@ -792,7 +852,7 @@ fn genGEP(gen: *Codegen, ref: Ref, index: TypVal) !u32 {
 }
 
 fn genElem(gen: *Codegen, elem: Ast.Expr.Elem) !TypVal {
-    const ref = try gen.genElemRef(elem);
+    const ref = try gen.genElemExprRef(elem);
     return gen.loadTypVal(ref);
 }
 
@@ -801,7 +861,7 @@ fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Ref {
         .unary => |unary| return gen.genUnaryRef(unary.*),
         .vari => |name| return gen.genVarRef(name),
         .field => |field| return gen.genFieldRef(field.*),
-        .elem => |elem| return gen.genElemRef(elem.*),
+        .elem => |elem| return gen.genElemExprRef(elem.*),
         .sizeof,
         .fn_ptr,
         .call,
@@ -816,8 +876,7 @@ fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Ref {
         .array,
         => {
             const typ_val = try gen.genExpr(expr);
-            const vari = try gen.toStack(typ_val);
-            return vari;
+            return gen.toStack(typ_val);
         },
     }
 }
@@ -917,17 +976,22 @@ fn genNamedStructExpr(gen: *Codegen, named: Ast.Expr.Struct.Named) !TypVal {
     return gen.genStructExpr(named.struc);
 }
 
-fn genBinary(gen: *Codegen, binary: Ast.Expr.Binary) !TypVal {
+fn genBinaryExpr(gen: *Codegen, binary: Ast.Expr.Binary) !TypVal {
     const left = try gen.genExpr(binary.left);
     const right = try gen.genExpr(binary.right);
-    const tmp = gen.newTmp();
-    try gen.print("\n  %{} = ", .{tmp});
-    try gen.genBinOp(binary.kind);
-    try gen.print(" {f}, {f}", .{ left, right.val });
+    const tmp = try gen.genBinary(binary.kind, left.typ, left.val, right.val);
     return .{
         .typ = binOpRetTyp(binary.kind, left.typ),
         .val = .{ .tmp = tmp },
     };
+}
+
+fn genBinary(gen: *Codegen, kind: Ast.Expr.Binary.Kind, typ: Typ, a: Val, b: Val) !u32 {
+    const tmp = gen.newTmp();
+    try gen.print("\n  %{} = ", .{tmp});
+    try gen.genBinOp(kind);
+    try gen.print(" {f} {f}, {f}", .{ LlvmTyp{ .inner = typ }, a, b });
+    return tmp;
 }
 
 fn binOpRetTyp(kind: Ast.Expr.Binary.Kind, child_typ: Typ) Typ {

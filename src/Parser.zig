@@ -428,6 +428,7 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
         parseDeclareStatement,
         parseMutDeclareStatement,
         parseIfStatement,
+        parseForStatement,
         parseWhileStatement,
         parseIgnoreStatement,
         parseExprStatement,
@@ -491,6 +492,24 @@ fn parseIgnoreStatement(parser: *Parser) !Ast.Statement {
             .expr = expr,
         } },
     };
+}
+
+fn parseForStatement(parser: *Parser) !Ast.Statement {
+    const location = parser.getLocation();
+    try parser.expect(.whi);
+    try parser.expectLoud(.parl);
+    const vari_location = parser.getLocation();
+    const vari = try parser.parseNameLoud();
+    try parser.expectLoud(.colon);
+    const expr = try parser.parseExprLoud();
+    try parser.expectLoud(.parr);
+    const body = try parser.parseBlockLoud();
+    return .{ .location = location, .kind = .{ .forr = .{
+        .vari = vari,
+        .expr = expr,
+        .body = body,
+        .vari_location = vari_location,
+    } } };
 }
 
 fn parseWhileStatement(parser: *Parser) !Ast.Statement {

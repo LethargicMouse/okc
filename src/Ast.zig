@@ -34,8 +34,16 @@ pub const OpAssign = struct {
     right: Expr,
 };
 
+pub const For = struct {
+    vari: []const u8,
+    expr: Expr,
+    body: []Statement,
+    vari_location: Location,
+};
+
 pub const Statement = struct {
     pub const Kind = union(enum) {
+        forr: For,
         ret: Return,
         expr: Expr,
         declare: Declare,

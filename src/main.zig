@@ -119,29 +119,34 @@ test "if.ok" {
     try testFile("if", "SIXSEVEEEN!\n");
 }
 
+const fizzbuzz_output =
+    \\1
+    \\2
+    \\fizz
+    \\4
+    \\buzz
+    \\fizz
+    \\7
+    \\8
+    \\fizz
+    \\buzz
+    \\11
+    \\fizz
+    \\13
+    \\14
+    \\fizzbuzz
+    \\16
+    \\17
+    \\fizz
+    \\19
+    \\buzz
+    \\
+;
+
 test "fizzbuzz.ok" {
-    try testFile("fizzbuzz",
-        \\1
-        \\2
-        \\fizz
-        \\4
-        \\buzz
-        \\fizz
-        \\7
-        \\8
-        \\fizz
-        \\buzz
-        \\11
-        \\fizz
-        \\13
-        \\14
-        \\fizzbuzz
-        \\16
-        \\17
-        \\fizz
-        \\19
-        \\buzz
-        \\
+    try testFile(
+        "fizzbuzz",
+        fizzbuzz_output,
     );
 }
 
@@ -243,4 +248,8 @@ test "typed_array.ok" {
 
 test "for.ok" {
     try testFile("for", "six\nseven\n");
+}
+
+test "fizzbuzz2.ok" {
+    try testFile("fizzbuzz2", fizzbuzz_output);
 }

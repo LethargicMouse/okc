@@ -2,8 +2,8 @@ extern fn write(fd: i32, ptr: &u8, len: u64) void;
 
 fn main() i32 {
   let list = [
-    "six",
-    "seven",
+    "six ",
+    "seven\n",
   ];
   while (s : list) {
     putStr(s);
@@ -12,6 +12,5 @@ fn main() i32 {
 }
 
 fn putStr(s: []u8) void {
-  s[0] = 'a';
   write(1, s.ptr, s.len);
 }

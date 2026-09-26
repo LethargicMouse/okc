@@ -1,0 +1,17 @@
+fn main() i32 {
+  while (i : 0..20) {
+    let printNumber = true;
+    if (i % 3 == 0) {
+      putStr("fizz");
+      printNumber = false;
+    }
+    if (i % 5 == 0) {
+      putStr("buzz");
+      printNumber = false;
+    }
+    if (printNumber) {
+      putI32(i);
+    }
+  }
+  return 0;
+}

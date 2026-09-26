@@ -405,19 +405,11 @@ fn checkFun(checker: *Checker, fun: Ast.Fun, location: Location) !void {
     checker.ret_typ = checker.items.get(fun.header.name).?.kind.fun.ret_typ;
     const rbp = checker.vars_stack.items.len;
     for (fun.header.params) |param| {
-        if (checker.items.get(param.name)) |prev| {
-            checker.failAlreadyDeclared(param.location, param.name, prev.location);
-            continue;
-        }
-        try checker.vars_stack.append(checker.gpa, param.name);
-        try checker.items.put(param.name, .{
-            .location = param.location,
-            .kind = .{ .vari = .{
-                .typ = try checker.checkTyp(param.typ),
-                .mutable = false,
-                .can_be_mutable = false,
-            } },
-        });
+        try checker.declareVar(param.name, .{
+            .typ = try checker.checkTyp(param.typ),
+            .mutable = false,
+            .can_be_mutable = false,
+        }, param.location);
     }
     const cf = try checker.checkBlock(fun.body);
     if (cf != .ret and !fun.header.ret_typ.isVoid()) {
@@ -435,6 +427,17 @@ fn flushConvertQueue(checker: *Checker) !void {
         }
     }
     checker.convert_queue.clearRetainingCapacity();
+}
+
+fn checkLoopBlock(checker: *Checker, block: []Ast.Statement) !ControlFlow {
+    checker.loops_nested += 1;
+    const res = try checker.checkBlock(block);
+    checker.loops_nested -= 1;
+    switch (res) {
+        .ret => return .ret,
+        .brek, .cont => return .cont,
+    }
+    return res;
 }
 
 fn checkBlock(checker: *Checker, block: []Ast.Statement) !ControlFlow {
@@ -457,14 +460,14 @@ fn checkBlock(checker: *Checker, block: []Ast.Statement) !ControlFlow {
 
 fn freeVars(checker: *Checker, rbp: usize) void {
     for (checker.vars_stack.items[rbp..]) |name| {
-        const item = checker.items.fetchRemove(name).?.value;
-        checker.checkItemUsage(item);
+        checker.freeVar(name);
     }
     checker.vars_stack.shrinkRetainingCapacity(rbp);
 }
 
 fn checkStatement(checker: *Checker, statement: *Ast.Statement) Error!ControlFlow {
     switch (statement.kind) {
+        .forr => |*forr| return checker.checkFor(forr),
         .unre => return .ret,
         .brek => return checker.checkBreak(statement.location),
         .ret => |*ret| return checker.checkRet(ret, statement.location),
@@ -481,6 +484,29 @@ fn checkStatement(checker: *Checker, statement: *Ast.Statement) Error!ControlFlo
             return checker.checkDeclare(declare, statement.location, true);
         },
     }
+}
+
+fn checkFor(checker: *Checker, forr: *Ast.For) !ControlFlow {
+    const info = try checker.checkExpr(&forr.expr, .{});
+    const elem_info = checker.getElemExprInfo(info, forr.expr.location) orelse ExprInfo{
+        .typ = .err,
+        .mutable = true,
+    };
+    try checker.declareVar(forr.vari, .{
+        .typ = elem_info.typ,
+        .mutable = false,
+        .can_be_mutable = false,
+    }, forr.vari_location);
+    defer {
+        _ = checker.vars_stack.pop();
+        checker.freeVar(forr.vari);
+    }
+    return checker.checkLoopBlock(forr.body);
+}
+
+fn freeVar(checker: *Checker, name: []const u8) void {
+    const item = checker.items.fetchRemove(name).?.value;
+    checker.checkItemUsage(item);
 }
 
 fn checkIgnore(checker: *Checker, ignore: *Ast.Ignore, location: Location) !ControlFlow {
@@ -534,13 +560,9 @@ fn checkBranch(checker: *Checker, branch: *Ast.Branch, loop: bool) !ControlFlow 
     const info = try checker.checkExpr(&branch.condition, .{});
     _ = checker.unify(branch.condition.location, .{ .prime = .bool }, info.typ);
     if (loop) {
-        checker.loops_nested += 1;
+        return checker.checkLoopBlock(branch.body);
     }
-    const cf = try checker.checkBlock(branch.body);
-    if (loop) {
-        checker.loops_nested -= 1;
-    }
-    return cf;
+    return checker.checkBlock(branch.body);
 }
 
 fn checkOpAssign(checker: *Checker, op_assign: *Ast.OpAssign) !ControlFlow {
@@ -619,12 +641,14 @@ fn checkElem(checker: *Checker, elem: *Ast.Expr.Elem, location: Location) !ExprI
     const info = try checker.checkExpr(&elem.expr, .{});
     const index = try checker.checkExpr(&elem.index, .{ .typ = .{ .prime = .u64 } });
     _ = checker.unify(elem.index.location, .{ .prime = .u64 }, index.typ);
-    const norm = info.typ.normalise();
-    const err = ExprInfo{
+    return checker.getElemExprInfo(info, location) orelse .{
         .typ = .err,
         .mutable = true,
     };
-    switch (norm) {
+}
+
+fn getElemExprInfo(checker: *Checker, info: ExprInfo, location: Location) ?ExprInfo {
+    switch (info.typ.normalise()) {
         .array => |array| return .{
             .typ = array.typ.*,
             .mutable = info.mutable,
@@ -633,10 +657,10 @@ fn checkElem(checker: *Checker, elem: *Ast.Expr.Elem, location: Location) !ExprI
             .typ = slice.typ.*,
             .mutable = slice.mutable,
         },
-        .err => return err,
+        .err => return null,
         .prime, .name, .ptr, .any, .fun, .int => {
             checker.fail(location, "type `{f}` does not support indexing", .{info.typ});
-            return err;
+            return null;
         },
         .lazy => unreachable,
     }
@@ -792,20 +816,24 @@ fn checkDeclare(
     }
     const info = try checker.checkExpr(&declare.expr, .{ .typ = decl_typ });
     const typ = checker.unify(declare.expr.location, decl_typ, info.typ);
-    if (checker.items.get(declare.name)) |prev| {
-        checker.failAlreadyDeclared(location, declare.name, prev.location);
-        return .cont;
-    }
-    try checker.vars_stack.append(checker.gpa, declare.name);
-    try checker.items.put(declare.name, .{
-        .location = location,
-        .kind = .{ .vari = .{
-            .typ = typ,
-            .mutable = mutable,
-            .can_be_mutable = true,
-        } },
-    });
+    try checker.declareVar(declare.name, .{
+        .typ = typ,
+        .mutable = mutable,
+        .can_be_mutable = true,
+    }, location);
     return .cont;
+}
+
+fn declareVar(checker: *Checker, name: []const u8, vari: Var, location: Location) !void {
+    if (checker.items.get(name)) |prev| {
+        checker.failAlreadyDeclared(location, name, prev.location);
+        return;
+    }
+    try checker.vars_stack.append(checker.gpa, name);
+    try checker.items.put(name, .{
+        .location = location,
+        .kind = .{ .vari = vari },
+    });
 }
 
 fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) Error!ExprInfo {

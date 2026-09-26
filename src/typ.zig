@@ -118,6 +118,10 @@ pub const Typ = union(enum) {
 
     pub fn normalise(typ: Typ) Typ {
         var res = typ;
+        if (res == .lazy) {
+            res.lazy = res.lazy.shorten();
+        }
+        // may be 2 or 1 lazies on the way
         while (res == .lazy) {
             res = res.lazy.*;
         }
