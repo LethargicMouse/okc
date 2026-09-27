@@ -8,6 +8,7 @@ location: Location,
 kind: Kind,
 
 pub const Kind = union(enum) {
+    subslice: *Subslice,
     sizeof: Typ,
     array: Array,
     unary: *Unary,
@@ -24,6 +25,12 @@ pub const Kind = union(enum) {
     binary: *Binary,
     field: *Field,
     elem: *Elem,
+};
+
+pub const Subslice = struct {
+    expr: Expr,
+    start: Expr,
+    end: Expr,
 };
 
 pub const Array = struct {

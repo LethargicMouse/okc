@@ -247,9 +247,13 @@ test "typed_array.ok" {
 }
 
 test "for.ok" {
-    try testFile("for", "six\nseven\n");
+    try testFile("for", "six seven\n");
 }
 
 test "fizzbuzz2.ok" {
     try testFile("fizzbuzz2", fizzbuzz_output);
+}
+
+test "subslice.ok" {
+    try testFile("subslice", "6\n7\n");
 }

@@ -623,26 +623,7 @@ fn genCall(gen: *Codegen, call: Ast.Expr.Call) !TypVal {
         target.* = try gen.genExpr(arg);
         if (params.len != 0) {
             if (params[i].typ == .slice and target.typ == .ptr) {
-                // &[_]T -> []T
-                var res = TypVal{
-                    .typ = .{ .slice = .{
-                        .typ = target.typ.ptr.typ.array.typ,
-                        .mutable = false,
-                    } },
-                    .val = .undef,
-                };
-                try gen.genIV(&res, .{
-                    .typ = .{ .ptr = .{
-                        .typ = target.typ.ptr.typ.array.typ,
-                        .mutable = false,
-                    } },
-                    .val = target.val,
-                }, 0);
-                try gen.genIV(&res, .{
-                    .typ = .{ .prime = .u64 },
-                    .val = .{ .int = target.typ.ptr.typ.array.len },
-                }, 1);
-                target.* = res;
+                target.* = try gen.genArrayToSlice(target.typ.ptr.typ.array, target.val);
             }
         }
     }
@@ -669,6 +650,28 @@ fn genCall(gen: *Codegen, call: Ast.Expr.Call) !TypVal {
     return .{ .val = .{ .tmp = ret_tmp }, .typ = call.ret_typ };
 }
 
+fn genArrayToSlice(gen: *Codegen, array: Ast.Typ.Array, val: Val) !TypVal {
+    var res = TypVal{
+        .typ = .{ .slice = .{
+            .typ = array.typ,
+            .mutable = false,
+        } },
+        .val = .undef,
+    };
+    try gen.genIV(&res, .{
+        .typ = .{ .ptr = .{
+            .typ = array.typ,
+            .mutable = false,
+        } },
+        .val = val,
+    }, 0);
+    try gen.genIV(&res, .{
+        .typ = .{ .prime = .u64 },
+        .val = .{ .int = array.len },
+    }, 1);
+    return res;
+}
+
 fn newTmp(gen: *Codegen) u32 {
     gen.next_tmp += 1;
     return gen.next_tmp - 1;
@@ -685,6 +688,7 @@ fn genRet(gen: *Codegen, ret: Ast.Return) !void {
 
 fn genExpr(gen: *Codegen, expr: Ast.Expr) Error!TypVal {
     switch (expr.kind) {
+        .subslice => |subslice| return gen.genSubslice(subslice.*),
         .sizeof => |typ| return gen.genSizeof(typ),
         .array => |array| return gen.genArray(array),
         .unary => |unary| return gen.genUnary(unary.*),
@@ -798,14 +802,17 @@ fn genNotb(gen: *Codegen, expr: Ast.Expr) !TypVal {
 }
 
 fn genPtr(gen: *Codegen, expr: Ast.Expr) !TypVal {
-    const vari = try gen.genExprRef(expr);
-    const typ = try gen.typ_memo.box(vari.inner_typ);
+    const ref = try gen.genExprRef(expr);
+    return gen.makePtrFromRef(ref);
+}
+
+fn makePtrFromRef(gen: *Codegen, ref: Ref) !TypVal {
     return .{
         .typ = .{ .ptr = .{
-            .typ = typ,
+            .typ = try gen.typ_memo.box(ref.inner_typ),
             .mutable = false,
         } },
-        .val = vari.val,
+        .val = ref.val,
     };
 }
 
@@ -830,7 +837,7 @@ fn genFieldRef(gen: *Codegen, field: Ast.Expr.Field) !Ref {
         });
     }
     const index = gen.getFieldIndex(vari.inner_typ, field.name);
-    const tmp = try gen.genGEP(vari, .int(index));
+    const tmp = try gen.genGEPIB(vari, .int(index));
     return .{
         .inner_typ = field.typ,
         .val = .{ .tmp = tmp },
@@ -851,14 +858,14 @@ fn genElemExprRef(gen: *Codegen, elem: Ast.Expr.Elem) !Ref {
 fn genElemRef(gen: *Codegen, from: Ref, index: TypVal) !Ref {
     switch (from.inner_typ) {
         .array => {
-            const tmp = try gen.genGEP(from, index);
+            const tmp = try gen.genGEPIB(from, index);
             return .{
                 .inner_typ = from.inner_typ.array.typ.*,
                 .val = .{ .tmp = tmp },
             };
         },
         .slice => |slice| {
-            const ptrptr = try gen.genGEP(from, .int(0));
+            const ptrptr = try gen.genGEPIB(from, .int(0));
             const ptr = try gen.load(.{
                 .inner_typ = .{ .ptr = .{
                     .typ = slice.typ,
@@ -866,11 +873,7 @@ fn genElemRef(gen: *Codegen, from: Ref, index: TypVal) !Ref {
                 } },
                 .val = .{ .tmp = ptrptr },
             });
-            const tmp = gen.newTmp();
-            try gen.print(
-                "\n  %{} = getelementptr {f}, ptr %{}, {f}",
-                .{ tmp, LlvmTyp{ .inner = slice.typ.* }, ptr, index },
-            );
+            const tmp = try gen.genGEP(slice.typ.*, ptr, index);
             return .{
                 .inner_typ = slice.typ.*,
                 .val = .{ .tmp = tmp },
@@ -880,7 +883,16 @@ fn genElemRef(gen: *Codegen, from: Ref, index: TypVal) !Ref {
     }
 }
 
-fn genGEP(gen: *Codegen, ref: Ref, index: TypVal) !u32 {
+fn genGEP(gen: *Codegen, typ: Typ, ptr: u32, index: TypVal) !u32 {
+    const tmp = gen.newTmp();
+    try gen.print(
+        "\n  %{} = getelementptr {f}, ptr %{}, {f}",
+        .{ tmp, LlvmTyp{ .inner = typ }, ptr, index },
+    );
+    return tmp;
+}
+
+fn genGEPIB(gen: *Codegen, ref: Ref, index: TypVal) !u32 {
     const tmp = gen.newTmp();
     try gen.print(
         "\n  %{} = getelementptr inbounds {f}, ptr {f}, i32 0, {f}",
@@ -894,12 +906,32 @@ fn genElem(gen: *Codegen, elem: Ast.Expr.Elem) !TypVal {
     return gen.loadTypVal(ref);
 }
 
+fn genSubslice(gen: *Codegen, subslice: Ast.Expr.Subslice) !TypVal {
+    const ref = try gen.genExprRef(subslice.expr);
+    const start = try gen.genExpr(subslice.start);
+    const end = try gen.genExpr(subslice.end);
+    const ptr_ref = try gen.genElemRef(ref, start);
+    const ptr = try gen.makePtrFromRef(ptr_ref);
+    const len = try gen.genBinary(.sub, start.typ, end.val, start.val);
+    var res = TypVal{ .typ = .{ .slice = .{
+        .typ = try gen.typ_memo.box(ptr_ref.inner_typ),
+        .mutable = false,
+    } }, .val = .undef };
+    try gen.genIV(&res, ptr, 0);
+    try gen.genIV(&res, .{
+        .typ = .{ .prime = .u64 },
+        .val = .{ .tmp = len },
+    }, 1);
+    return res;
+}
+
 fn genExprRef(gen: *Codegen, expr: Ast.Expr) Error!Ref {
     switch (expr.kind) {
         .unary => |unary| return gen.genUnaryRef(unary.*),
         .vari => |name| return gen.genVarRef(name),
         .field => |field| return gen.genFieldRef(field.*),
         .elem => |elem| return gen.genElemExprRef(elem.*),
+        .subslice,
         .sizeof,
         .fn_ptr,
         .call,
@@ -962,21 +994,26 @@ fn genBool(boo: bool) TypVal {
 
 fn genStr(gen: *Codegen, str: []const u8) !TypVal {
     const info = try gen.genStrDecl(str);
-    const tmp1 = gen.newTmp();
-    const tmp = gen.newTmp();
-    try gen.print(
-        \\
-        \\  %{} = insertvalue %"[]" poison, ptr @.s{}, 0
-        \\  %{} = insertvalue %"[]" %{}, i64 {}, 1
-    , .{ tmp1, info.tmp, tmp, tmp1, info.len });
-
-    return .{
+    const ptr_u8 = try gen.typ_memo.box(.{ .prime = .u8 });
+    var res = TypVal{
         .typ = .{ .slice = .{
-            .typ = try gen.typ_memo.box(.{ .prime = .u8 }),
+            .typ = ptr_u8,
             .mutable = false,
         } },
-        .val = .{ .tmp = tmp },
+        .val = .undef,
     };
+    try gen.genIV(&res, .{
+        .typ = .{ .ptr = .{
+            .typ = ptr_u8,
+            .mutable = false,
+        } },
+        .val = .{ .str = info.tmp },
+    }, 0);
+    try gen.genIV(&res, .{
+        .typ = .{ .prime = .u64 },
+        .val = .{ .int = info.len },
+    }, 1);
+    return res;
 }
 
 fn genStructExpr(gen: *Codegen, struc: Ast.Expr.Struct) !TypVal {

@@ -10,7 +10,7 @@ const Error = error{OutOfMemory};
 
 const ConvertReq = struct {
     to: *Ast.Typ,
-    from: *Typ,
+    from: Typ,
     location: Location,
 };
 
@@ -150,7 +150,7 @@ fn convertTyp(checker: *Checker, typ: Typ, location: ?Location) !?Ast.Typ {
     };
 }
 
-fn convertTypRec(checker: Checker, typ: Typ) !Ast.Typ {
+fn convertTypRec(checker: Checker, typ: Typ) ConvertError!Ast.Typ {
     switch (typ) {
         .name => |name| {
             const generics =
@@ -205,6 +205,8 @@ fn convertTypRec(checker: Checker, typ: Typ) !Ast.Typ {
         .lazy => |inner| return checker.convertTypRec(inner.*),
     }
 }
+
+const ConvertError = error{ BadConvert, ConvertAny, OutOfMemory };
 
 fn checkItems(checker: *Checker) void {
     var iter = checker.items.valueIterator();
@@ -422,10 +424,8 @@ fn checkFun(checker: *Checker, fun: Ast.Fun, location: Location) !void {
 
 fn flushConvertQueue(checker: *Checker) !void {
     for (checker.convert_queue.items) |req| {
-        if (try checker.convertTyp(.{ .lazy = req.from }, req.location)) |ast_typ| {
+        if (try checker.convertTyp(req.from, req.location)) |ast_typ| {
             req.to.* = ast_typ;
-        } else {
-            req.from.shorten().* = .err;
         }
     }
     checker.convert_queue.clearRetainingCapacity();
@@ -663,7 +663,7 @@ fn failNotMut(checker: *Checker, location: Location) void {
 
 fn checkElem(checker: *Checker, elem: *Ast.Expr.Elem, location: Location) !ExprInfo {
     const info = try checker.checkExpr(&elem.expr, .{});
-    const index = try checker.checkExpr(&elem.index, .{ .typ = .{ .prime = .u64 } });
+    const index = try checker.checkExpr(&elem.index, .{});
     _ = checker.unify(elem.index.location, .{ .prime = .u64 }, index.typ);
     return checker.getElemExprInfo(info, location) orelse .{
         .typ = .err,
@@ -862,6 +862,7 @@ fn declareVar(checker: *Checker, name: []const u8, vari: Var, location: Location
 
 fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) Error!ExprInfo {
     switch (expr.kind) {
+        .subslice => |subslice| return checker.checkSubslice(subslice, expr.location),
         .sizeof => |typ| return checker.checkSizeof(typ),
         .array => |*array| return checker.checkArray(array, expr.location, hint.typ),
         .unary => |unary| return checker.checkUnary(unary, expr.location, hint.typ),
@@ -884,6 +885,33 @@ fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) Error!ExprInfo 
         .named_struc => |*struc| return checker.checkNamedStructExpr(struc, expr.location),
         .elem => |elem| return checker.checkElem(elem, expr.location),
         .fn_ptr => unreachable,
+    }
+}
+
+fn checkSubslice(checker: *Checker, subslice: *Ast.Expr.Subslice, location: Location) !ExprInfo {
+    const info = try checker.checkExpr(&subslice.expr, .{});
+    const start = try checker.checkExpr(&subslice.start, .{});
+    _ = checker.unify(subslice.start.location, .{ .prime = .u64 }, start.typ);
+    const end = try checker.checkExpr(&subslice.end, .{});
+    _ = checker.unify(subslice.end.location, .{ .prime = .u64 }, end.typ);
+    switch (info.typ.normalise()) {
+        .array => |array| return .{
+            .typ = .{ .slice = .{
+                .typ = array.typ,
+                .mutable = info.mutable,
+            } },
+            .mutable = false,
+        },
+        else => |typ| {
+            checker.fail(location, "cannot take slice of `{f}`", .{typ});
+            return .{
+                .typ = .{ .slice = .{
+                    .typ = try checker.typ_memo.box(.err),
+                    .mutable = true,
+                } },
+                .mutable = false,
+            };
+        },
     }
 }
 
@@ -923,9 +951,11 @@ fn checkArray(checker: *Checker, array: *Ast.Expr.Array, location: Location, hin
         .typ = try checker.typ_memo.box(inner_typ),
         .len = array.exprs.len,
     } };
-    if (try checker.convertTyp(typ, location)) |ast_typ| {
-        array.typ = ast_typ;
-    }
+    try checker.convert_queue.append(checker.gpa, .{
+        .from = typ,
+        .to = &array.typ,
+        .location = location,
+    });
     return .{
         .typ = typ,
         .mutable = false,
@@ -1167,14 +1197,15 @@ fn checkUndef(checker: *Checker, undef: *Ast.Expr.Undef, location: Location, typ
 
 fn checkInt(checker: *Checker, location: Location, int: *Ast.Expr.Int) !ExprInfo {
     const ptr = try checker.fun_arena.allocator().create(Typ);
-    ptr.* = .int;
+    const typ: Typ = .{ .lazy = ptr };
+    typ.lazy.* = .int;
     try checker.convert_queue.append(checker.gpa, .{
-        .from = ptr,
+        .from = typ,
         .to = &int.typ,
         .location = location,
     });
     return .{
-        .typ = .{ .lazy = ptr },
+        .typ = typ,
         .mutable = false,
     };
 }

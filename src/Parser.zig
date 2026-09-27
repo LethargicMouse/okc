@@ -22,19 +22,28 @@ const BinPostfix = struct {
     expr: Ast.Expr,
 };
 
-const Postfix = union(enum) {
-    const Elem = struct {
-        index: Ast.Expr,
-        location: Location,
-    };
+const Postfix = struct {
+    kind: Kind,
+    location: Location,
 
-    const Field = struct {
-        name: []const u8,
-        location: Location,
-    };
+    const Kind = union(enum) {
+        field: Field,
+        elem: Elem,
+        subslice: Subslice,
 
-    field: Field,
-    elem: Elem,
+        const Elem = struct {
+            index: Ast.Expr,
+        };
+
+        const Field = struct {
+            name: []const u8,
+        };
+
+        const Subslice = struct {
+            start: Ast.Expr,
+            end: Ast.Expr,
+        };
+    };
 };
 
 const ErrMsgs = struct {
@@ -752,7 +761,7 @@ fn parseExprPostedLoud(parser: *Parser) Error!Ast.Expr {
 fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
     var res = try parser.parseExprAtom(loud);
     while (try parser.parseMaybe(Postfix, parsePostfix)) |postfix| {
-        switch (postfix) {
+        switch (postfix.kind) {
             .field => |field_postfix| {
                 const field = try parser.ast_arena.allocator().create(Ast.Expr.Field);
                 field.* = .{
@@ -760,17 +769,31 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
                     .name = field_postfix.name,
                 };
                 res = .{
-                    .location = res.location.combine(field_postfix.location),
+                    .location = res.location.combine(postfix.location),
                     .kind = .{ .field = field },
                 };
             },
             .elem => |elem_postfix| {
                 const elem = try parser.ast_arena.allocator().create(Ast.Expr.Elem);
-                elem.expr = res;
-                elem.index = elem_postfix.index;
+                elem.* = .{
+                    .expr = res,
+                    .index = elem_postfix.index,
+                };
                 res = .{
-                    .location = res.location.combine(elem_postfix.location),
+                    .location = res.location.combine(postfix.location),
                     .kind = .{ .elem = elem },
+                };
+            },
+            .subslice => |subslice_postfix| {
+                const subslice = try parser.ast_arena.allocator().create(Ast.Expr.Subslice);
+                subslice.* = .{
+                    .expr = res,
+                    .start = subslice_postfix.start,
+                    .end = subslice_postfix.end,
+                };
+                res = .{
+                    .location = res.location.combine(postfix.location),
+                    .kind = .{ .subslice = subslice },
                 };
             },
         }
@@ -781,8 +804,25 @@ fn parseExprPosted(parser: *Parser, loud: bool) Error!Ast.Expr {
 fn parsePostfix(parser: *Parser) !Postfix {
     return parser.parseEither(Postfix, .{
         parseFieldPostfix,
+        parseSubslicePostfix,
         parseElemPostfix,
     });
+}
+
+fn parseSubslicePostfix(parser: *Parser) !Postfix {
+    try parser.expect(.bral);
+    const start = try parser.parseExpr();
+    try parser.expect(.dot2);
+    const end = try parser.parseExprLoud();
+    const location = parser.getLocation();
+    try parser.expectLoud(.brar);
+    return .{
+        .location = location,
+        .kind = .{ .subslice = .{
+            .start = start,
+            .end = end,
+        } },
+    };
 }
 
 fn parseElemPostfix(parser: *Parser) !Postfix {
@@ -791,10 +831,8 @@ fn parseElemPostfix(parser: *Parser) !Postfix {
     const location = parser.getLocation();
     try parser.expectLoud(.brar);
     return .{
-        .elem = .{
-            .index = index,
-            .location = location,
-        },
+        .location = location,
+        .kind = .{ .elem = .{ .index = index } },
     };
 }
 
@@ -802,10 +840,10 @@ fn parseFieldPostfix(parser: *Parser) !Postfix {
     try parser.expect(.dot);
     const location = parser.getLocation();
     const name = try parser.parseNameLoud();
-    return .{ .field = .{
-        .name = name,
+    return .{
         .location = location,
-    } };
+        .kind = .{ .field = .{ .name = name } },
+    };
 }
 
 fn getLocation(parser: Parser) Location {

@@ -1,8 +1,9 @@
 extern fn write(fd: i32, ptr: &u8, size: u64) void;
 extern fn printf(fmt: &u8, n: i32) void;
+extern fn fflush(filePtrAsU64: u64) void;
 
 fn main() i32 {
-  while (i : 0..20) {
+  while (i : 1..21) {
     let mut printNumber = true;
     if (i % 3 == 0) {
       putStr("fizz");
@@ -14,9 +15,8 @@ fn main() i32 {
     }
     if (printNumber) {
       putI32(i);
-    } else {
-      putStr("\n");
     }
+    putStr("\n");
   }
   return 0;
 }
@@ -26,5 +26,6 @@ fn putStr(s: []u8) void {
 }
 
 fn putI32(n: i32) void {
-  printf("%d\n".ptr, n);
+  printf("%d".ptr, n);
+  fflush(0);
 }
