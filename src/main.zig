@@ -90,33 +90,33 @@ fn testFile(comptime name: []const u8, output: []const u8) !void {
     try std.testing.expectEqualStrings(output, run_res.stdout);
 }
 
-test "empty.ok" {
-    const code = try runFile(std.testing.io, std.testing.allocator, "examples/empty.ok");
+test "Empty.ok" {
+    const code = try runFile(std.testing.io, std.testing.allocator, "examples/Empty.ok");
     try std.testing.expectEqual(123, code);
 }
 
-test "simple_call.ok" {
-    try testFile("simple_call", "hello\n");
+test "SimpleCall.ok" {
+    try testFile("SimpleCall", "hello\n");
 }
 
-test "simple_call_2.ok" {
-    try testFile("simple_call_2", "123");
+test "SimpleCall2.ok" {
+    try testFile("SimpleCall2", "123");
 }
 
-test "var.ok" {
-    try testFile("var", "wazzup niggas\n");
+test "Var.ok" {
+    try testFile("Var", "wazzup niggas\n");
 }
 
-test "var_assign.ok" {
-    try testFile("var_assign", "oh gotta go nvm bye\n");
+test "VarAssign.ok" {
+    try testFile("VarAssign", "oh gotta go nvm bye\n");
 }
 
-test "arith.ok" {
-    try testFile("arith", "1");
+test "Arith.ok" {
+    try testFile("Arith", "1");
 }
 
-test "if.ok" {
-    try testFile("if", "SIXSEVEEEN!\n");
+test "If.ok" {
+    try testFile("If", "SIXSEVEEEN!\n");
 }
 
 const fizzbuzz_output =
@@ -143,117 +143,117 @@ const fizzbuzz_output =
     \\
 ;
 
-test "fizzbuzz.ok" {
+test "Fizzbuzz.ok" {
     try testFile(
-        "fizzbuzz",
+        "Fizzbuzz",
         fizzbuzz_output,
     );
 }
 
-test "str.ok" {
-    try testFile("str", "6-7!!!\n");
+test "Str.ok" {
+    try testFile("Str", "6-7!!!\n");
 }
 
-test "void_fun.ok" {
-    try testFile("void_fun", "hello\n");
+test "VoidFun.ok" {
+    try testFile("VoidFun", "hello\n");
 }
 
-test "ignore.ok" {
-    try testFile("ignore", "");
+test "Ignore.ok" {
+    try testFile("Ignore", "");
 }
 
-test "fun_arg.ok" {
-    try testFile("fun_arg", "hello there\n");
+test "FunArg.ok" {
+    try testFile("FunArg", "hello there\n");
 }
 
-test "struct.ok" {
-    try testFile("struct", "six seven\n");
+test "Struct.ok" {
+    try testFile("Struct", "six seven\n");
 }
 
-test "raw_term.ok" {
-    try compile(std.testing.io, std.testing.allocator, "examples/raw_term.ok");
+test "RawTerm.ok" {
+    try compile(std.testing.io, std.testing.allocator, "examples/RawTerm.ok");
 }
 
-test "nest_ret.ok" {
-    try testFile("nest_ret", "does return\n");
+test "NestRet.ok" {
+    try testFile("NestRet", "does return\n");
 }
 
-test "unreachable.ok" {
-    try testFile("unreachable", "reachable\n");
+test "Unreachable.ok" {
+    try testFile("Unreachable", "reachable\n");
 }
 
-test "infer_struct.ok" {
-    try testFile("infer_struct", "6-7\n");
+test "InferStruct.ok" {
+    try testFile("InferStruct", "6-7\n");
 }
 
-test "mut_ptr.ok" {
-    try testFile("mut_ptr", "six seven\n");
+test "MutPtr.ok" {
+    try testFile("MutPtr", "six seven\n");
 }
 
-test "comment.ok" {
-    try testFile("comment", "comments\n");
+test "Comment.ok" {
+    try testFile("Comment", "comments\n");
 }
 
-test "ret_void.ok" {
-    try testFile("ret_void", "hello");
+test "RetVoid.ok" {
+    try testFile("RetVoid", "hello");
 }
 
-test "nest_var.ok" {
-    try testFile("nest_var", "six\nseven\n");
+test "NestVar.ok" {
+    try testFile("NestVar", "six\nseven\n");
 }
 
-test "generic_struct.ok" {
-    try testFile("generic_struct", "67\n");
+test "GenericStruct.ok" {
+    try testFile("GenericStruct", "67\n");
 }
 
-test "slice_elem.ok" {
-    try testFile("slice_elem", "6-7...");
+test "SliceElem.ok" {
+    try testFile("SliceElem", "6-7...");
 }
 
-test "generic_fun.ok" {
-    try testFile("generic_fun", "six 7\n");
+test "GenericFun.ok" {
+    try testFile("GenericFun", "six 7\n");
 }
 
-test "mut_slice.ok" {
-    try testFile("mut_slice", "6 7\n");
+test "MutSlice.ok" {
+    try testFile("MutSlice", "6 7\n");
 }
 
-test "fn_ptr.ok" {
-    try testFile("fn_ptr", "hello\n");
+test "FnPtr.ok" {
+    try testFile("FnPtr", "hello\n");
 }
 
-test "array_to_slice.ok" {
-    try testFile("array_to_slice", "6 7");
+test "ArrayToSlice.ok" {
+    try testFile("ArrayToSlice", "6 7");
 }
 
-test "constant.ok" {
-    try testFile("constant", "six seven\n");
+test "Constant.ok" {
+    try testFile("Constant", "six seven\n");
 }
 
-test "default_field.ok" {
-    try testFile("default_field", "six seven\n");
+test "DefaultField.ok" {
+    try testFile("DefaultField", "six seven\n");
 }
 
-test "box.ok" {
-    try testFile("box", "6 7");
+test "Box.ok" {
+    try testFile("Box", "6 7");
 }
 
-test "infer_int.ok" {
-    try testFile("infer_int", "");
+test "InferInt.ok" {
+    try testFile("InferInt", "");
 }
 
-test "typed_array.ok" {
-    try testFile("typed_array", "six\nseven\n");
+test "TypedArray.ok" {
+    try testFile("TypedArray", "six\nseven\n");
 }
 
-test "for.ok" {
-    try testFile("for", "six seven\n");
+test "For.ok" {
+    try testFile("For", "six seven\n");
 }
 
-test "fizzbuzz2.ok" {
-    try testFile("fizzbuzz2", fizzbuzz_output);
+test "Fizzbuzz2.ok" {
+    try testFile("Fizzbuzz2", fizzbuzz_output);
 }
 
-test "subslice.ok" {
-    try testFile("subslice", "6\n7\n");
+test "Subslice.ok" {
+    try testFile("Subslice", "6\n7\n");
 }
