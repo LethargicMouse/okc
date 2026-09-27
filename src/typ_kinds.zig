@@ -98,7 +98,8 @@ pub fn Ptr(Typ: type) type {
         }
 
         pub fn hashIn(ptr: @This(), hasher: *std.hash.Wyhash) void {
-            hasher.update(std.mem.asBytes(&ptr));
+            hasher.update(std.mem.asBytes(&ptr.typ));
+            hasher.update(&.{@intFromBool(ptr.mutable)});
         }
 
         pub fn format(ptr: @This(), writer: *std.Io.Writer) !void {
@@ -130,7 +131,8 @@ pub fn Slice(Typ: type) type {
         }
 
         pub fn hashIn(slice: @This(), hasher: *std.hash.Wyhash) void {
-            hasher.update(std.mem.asBytes(&slice));
+            hasher.update(std.mem.asBytes(&slice.typ));
+            hasher.update(&.{@intFromBool(slice.mutable)});
         }
 
         pub fn format(slice: @This(), writer: *std.Io.Writer) !void {
