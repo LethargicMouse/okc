@@ -143,11 +143,9 @@ fn parseItemLoud(parser: *Parser) !Ast.Item {
 }
 
 fn parseConstantItem(parser: *Parser) !Ast.Item {
-    try parser.expect(.let);
-    const location = parser.getLocation();
-    const declare = try parser.parseDeclareLoud();
+    const declare = try parser.parseDeclare();
     return .{
-        .location = location,
+        .location = parser.tmp_location,
         .kind = .{ .constant = declare },
     };
 }
@@ -435,7 +433,6 @@ fn parseStatementLoud(parser: *Parser) !Ast.Statement {
         parseBreakStatement,
         parseRetStatement,
         parseDeclareStatement,
-        parseMutDeclareStatement,
         parseIfStatement,
         parseForStatement,
         parseWhileStatement,
@@ -600,37 +597,34 @@ fn parseAssignPostfix(parser: *Parser) !Ast.Expr {
 }
 
 fn parseDeclareStatement(parser: *Parser) !Ast.Statement {
-    try parser.expect(.let);
-    const location = parser.getLocation();
-    const declare = try parser.parseDeclareLoud();
+    const declare = try parser.parseDeclare();
     return .{
-        .location = location,
+        .location = parser.tmp_location,
         .kind = .{ .declare = declare },
     };
 }
 
-fn parseMutDeclareStatement(parser: *Parser) !Ast.Statement {
+fn parseDeclare(parser: *Parser) !Ast.Declare {
     try parser.expect(.let);
-    try parser.expect(.mut);
+    const mutable = try parser.parseMaybe(bool, parseMutable) orelse false;
     const location = parser.getLocation();
-    const declare = try parser.parseDeclareLoud();
-    return .{
-        .location = location,
-        .kind = .{ .mut_declare = declare },
-    };
-}
-
-fn parseDeclareLoud(parser: *Parser) !Ast.Declare {
     const name = try parser.parseNameLoud();
     const typ = try parser.parseMaybe(Ast.Typ, parseTypAnnotLoud);
     try parser.expectLoud(.equ);
     const expr = try parser.parseExprLoud();
     try parser.expectLoud(.semi);
+    parser.tmp_location = location;
     return .{
         .name = name,
         .typ = typ,
         .expr = expr,
+        .mutable = mutable,
     };
+}
+
+fn parseMutable(parser: *Parser) !bool {
+    try parser.expect(.mut);
+    return true;
 }
 
 fn parseTypAnnotLoud(parser: *Parser) !Ast.Typ {

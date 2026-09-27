@@ -489,17 +489,12 @@ fn checkStatement(checker: *Checker, statement: *Ast.Statement) Error!ControlFlo
         .brek => return checker.checkBreak(statement.location),
         .ret => |*ret| return checker.checkRet(ret, statement.location),
         .expr => |*expr| return checker.checkExprStatement(expr),
-        .declare => |*declare| {
-            return checker.checkDeclare(declare, statement.location, false);
-        },
+        .declare => |*declare| return checker.checkDeclare(declare, statement.location),
         .op_assign => |*op_assign| return checker.checkOpAssign(op_assign),
         .assign => |*assign| return checker.checkAssign(assign),
         .iff => |*iff| return checker.checkIf(iff),
         .whi => |*whi| return checker.checkWhile(whi),
         .ignore => |*ignore| return checker.checkIgnore(ignore, statement.location),
-        .mut_declare => |*declare| {
-            return checker.checkDeclare(declare, statement.location, true);
-        },
     }
 }
 
@@ -842,12 +837,7 @@ fn canUnify(a: Typ, b: Typ, active: bool) ?Typ {
     }
 }
 
-fn checkDeclare(
-    checker: *Checker,
-    declare: *Ast.Declare,
-    location: Location,
-    mutable: bool,
-) !ControlFlow {
+fn checkDeclare(checker: *Checker, declare: *Ast.Declare, location: Location) !ControlFlow {
     var decl_typ: Typ = .any;
     if (declare.typ) |typ_decl| {
         decl_typ = try checker.checkTyp(typ_decl);
@@ -856,7 +846,7 @@ fn checkDeclare(
     const typ = checker.unify(declare.expr.location, decl_typ, info.typ);
     try checker.declareVar(declare.name, .{
         .typ = typ,
-        .mutable = mutable,
+        .mutable = declare.mutable,
         .can_be_mutable = true,
     }, location);
     return .cont;

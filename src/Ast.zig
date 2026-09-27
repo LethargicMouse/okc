@@ -61,7 +61,6 @@ pub const Statement = struct {
         iff: If,
         whi: While,
         ignore: Ignore,
-        mut_declare: Declare,
         brek,
         unre,
     };
@@ -101,6 +100,7 @@ pub const Declare = struct {
     name: []const u8,
     typ: ?Typ,
     expr: Expr,
+    mutable: bool,
 };
 
 pub const GlobalVar = struct {

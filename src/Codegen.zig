@@ -387,7 +387,6 @@ fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
         .iff => |iff| try gen.genIf(iff),
         .whi => |whi| try gen.genWhile(whi),
         .ignore => |ignore| try gen.genIgnore(ignore),
-        .mut_declare => |declare| try gen.genDeclare(declare),
         .brek => try gen.genBreak(),
     }
 }
@@ -417,6 +416,7 @@ fn genForRange(gen: *Codegen, forr: Ast.ForRange) !void {
         .name = forr.vari,
         .expr = forr.start,
         .typ = null,
+        .mutable = false,
     });
     const end = try gen.genExpr(forr.end);
     // goto cond
