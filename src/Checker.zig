@@ -1,9 +1,10 @@
 const std = @import("std");
 
 const Ast = @import("Ast.zig");
+const HashMap = @import("hash_map.zig").HashMap;
 const Location = @import("Location.zig");
 const Memo = @import("memo.zig").Memo;
-const Resolver = @import("resolver.zig").Resolver(Typ);
+const Resolver = @import("resolver.zig").Resolver;
 const Typ = @import("typ.zig").Typ;
 
 const Error = error{OutOfMemory};
@@ -96,6 +97,7 @@ loops_nested: u16 = 0,
 current_generics: []const Ast.Generic = &.{},
 generics_usage: std.DynamicBitSetUnmanaged,
 convert_queue: std.ArrayList(ConvertReq) = .empty,
+checked_typs: HashMap(Ast.Typ, Typ),
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -111,6 +113,7 @@ pub fn init(
         .ast_items = .init(gpa),
         .items = .init(gpa),
         .generics_usage = try .initEmpty(gpa, 0),
+        .checked_typs = .init(gpa),
     };
 }
 
@@ -1105,7 +1108,7 @@ fn checkTypedStruc(
     if (generics.len == 0) {
         generics = try checker.makeGenerics(decl.generics.len);
     }
-    var resolver = Resolver.init(checker.gpa, &checker.typ_memo);
+    var resolver = Resolver(Typ).init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (decl.generics, generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
@@ -1166,7 +1169,7 @@ fn checkNewField(
     field: *Ast.Expr.Struct.Field,
     struc_name: []const u8,
     decl_fields: std.StringHashMap(Field),
-    resolver: *Resolver,
+    resolver: *Resolver(Typ),
 ) !void {
     const f_decl = decl_fields.get(field.name) orelse {
         checker.failNoField(field.location, field.name, struc_name);
@@ -1249,7 +1252,7 @@ fn checkField(
         return err;
     };
     fiel.used = true;
-    var resolver = Resolver.init(checker.gpa, &checker.typ_memo);
+    var resolver = Resolver(Typ).init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
@@ -1414,7 +1417,7 @@ fn checkCall(checker: *Checker, call: *Ast.Expr.Call, location: Location, hint: 
             .mutable = false,
         };
     };
-    var resolver = Resolver.init(checker.gpa, &checker.typ_memo);
+    var resolver = Resolver(Typ).init(checker.gpa, &checker.typ_memo);
     defer resolver.map.deinit();
     for (header.generics) |generic| {
         const ptr = try checker.fun_arena.allocator().create(Typ);
@@ -1492,6 +1495,7 @@ fn deinit(checker: *Checker) void {
     checker.vars_stack.deinit(checker.gpa);
     checker.generics_usage.deinit(checker.gpa);
     checker.convert_queue.deinit(checker.gpa);
+    checker.checked_typs.deinit();
     checker.* = undefined;
 }
 
@@ -1530,7 +1534,16 @@ pub fn checkTypDecl(checker: *Checker, name: Ast.Typ.Name) void {
     }
 }
 
-pub fn checkTyp(checker: *Checker, typ: Ast.Typ) !Typ {
+fn checkTyp(checker: *Checker, typ: Ast.Typ) Error!Typ {
+    if (checker.checked_typs.get(typ)) |res| {
+        return res;
+    }
+    const res = try checker.checkTypFirstTime(typ);
+    try checker.checked_typs.put(typ, res);
+    return res;
+}
+
+fn checkTypFirstTime(checker: *Checker, typ: Ast.Typ) !Typ {
     switch (typ) {
         .slice => |inner| {
             const new = try checker.checkTyp(inner.typ.*);
