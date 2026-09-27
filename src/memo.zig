@@ -1,18 +1,13 @@
 const std = @import("std");
 
-const HashContext = @import("hash_context.zig").HashContext;
+const HashMap = @import("hash_map.zig").HashMap;
 
 pub fn Memo(T: type) type {
     return struct {
         const Self = @This();
 
         arena: *std.heap.ArenaAllocator,
-        map: std.HashMap(
-            T,
-            *const T,
-            HashContext(T),
-            std.hash_map.default_max_load_percentage,
-        ),
+        map: HashMap(T, *const T),
 
         pub fn init(arena: *std.heap.ArenaAllocator) Self {
             return .{

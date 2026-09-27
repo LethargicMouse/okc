@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Ast = @import("Ast.zig");
 const Typ = Ast.Typ;
-const HashContext = @import("hash_context.zig").HashContext;
+const HashMap = @import("hash_map.zig").HashMap;
 const Memo = @import("memo.zig").Memo;
 const Name = @import("typ_kinds.zig").Name(Typ);
 const Resolver = @import("resolver.zig").Resolver(Typ);
@@ -117,22 +117,12 @@ writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 typ_memo: *Memo(Ast.Typ),
 items: std.StringHashMap(*const Ast.Item),
-structs: std.HashMap(
-    Name,
-    Struct,
-    HashContext(Name),
-    std.hash_map.default_max_load_percentage,
-),
+structs: HashMap(Name, Struct),
 consts: std.StringHashMap(Typ),
 vars: std.StringHashMap(Ref),
 loop_ends: std.ArrayList(u32) = .empty,
 fun_queue: std.ArrayList(Name) = .empty,
-generated: std.HashMap(
-    Name,
-    void,
-    HashContext(Name),
-    std.hash_map.default_max_load_percentage,
-),
+generated: HashMap(Name, void),
 resolver: Resolver,
 next_tmp: u32 = 0,
 
