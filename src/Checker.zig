@@ -98,6 +98,7 @@ current_generics: []const Ast.Generic = &.{},
 generics_usage: std.DynamicBitSetUnmanaged,
 convert_queue: std.ArrayList(ConvertReq) = .empty,
 checked_typs: HashMap(Ast.Typ, Typ),
+converted_typs: HashMap(Typ, Ast.Typ),
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -114,6 +115,7 @@ pub fn init(
         .items = .init(gpa),
         .generics_usage = try .initEmpty(gpa, 0),
         .checked_typs = .init(gpa),
+        .converted_typs = .init(gpa),
     };
 }
 
@@ -140,8 +142,8 @@ fn checkAst(checker: *Checker, ast: Ast) !void {
     checker.checkItems();
 }
 
-fn convertTyp(checker: *Checker, typ: Typ, location: ?Location) !?Ast.Typ {
-    return checker.convertTypRec(typ) catch |err| switch (err) {
+fn convertTypOrFail(checker: *Checker, typ: Typ, location: ?Location) !?Ast.Typ {
+    return checker.convertTyp(typ) catch |err| switch (err) {
         error.BadConvert => return null,
         error.ConvertAny => {
             if (location) |loc| {
@@ -153,13 +155,22 @@ fn convertTyp(checker: *Checker, typ: Typ, location: ?Location) !?Ast.Typ {
     };
 }
 
-fn convertTypRec(checker: Checker, typ: Typ) ConvertError!Ast.Typ {
+fn convertTyp(checker: *Checker, typ: Typ) !Ast.Typ {
+    if (checker.converted_typs.get(typ)) |res| {
+        return res;
+    }
+    const res = try checker.convertTypFirstTime(typ);
+    try checker.converted_typs.put(typ, res);
+    return res;
+}
+
+fn convertTypFirstTime(checker: *Checker, typ: Typ) ConvertError!Ast.Typ {
     switch (typ) {
         .name => |name| {
             const generics =
                 try checker.ast_typ_memo.arena.allocator().alloc(Ast.Typ, name.generics.len);
             for (generics, name.generics) |*target, generic| {
-                target.* = try checker.convertTypRec(generic);
+                target.* = try checker.convertTyp(generic);
             }
             return .{ .name = .{
                 .name = name.name,
@@ -169,9 +180,9 @@ fn convertTypRec(checker: Checker, typ: Typ) ConvertError!Ast.Typ {
         .fun => |fun| {
             const params = try checker.ast_typ_memo.arena.allocator().alloc(Ast.Typ, fun.params.len);
             for (params, fun.params) |*target, param| {
-                target.* = try checker.convertTypRec(param);
+                target.* = try checker.convertTyp(param);
             }
-            const ret_typ = try checker.convertTypRec(fun.ret_typ.*);
+            const ret_typ = try checker.convertTyp(fun.ret_typ.*);
             const ptr = try checker.ast_typ_memo.box(ret_typ);
             return .{ .fun = .{
                 .params = params,
@@ -179,7 +190,7 @@ fn convertTypRec(checker: Checker, typ: Typ) ConvertError!Ast.Typ {
             } };
         },
         .slice => |slice| {
-            const new = try checker.convertTypRec(slice.typ.*);
+            const new = try checker.convertTyp(slice.typ.*);
             const ptr = try checker.ast_typ_memo.box(new);
             return .{ .slice = .{
                 .typ = ptr,
@@ -188,7 +199,7 @@ fn convertTypRec(checker: Checker, typ: Typ) ConvertError!Ast.Typ {
         },
         .prime => |prime| return .{ .prime = prime },
         .ptr => |ptr| {
-            const inner = try checker.convertTypRec(ptr.typ.*);
+            const inner = try checker.convertTyp(ptr.typ.*);
             const new = try checker.ast_typ_memo.box(inner);
             return .{ .ptr = .{
                 .typ = new,
@@ -196,7 +207,7 @@ fn convertTypRec(checker: Checker, typ: Typ) ConvertError!Ast.Typ {
             } };
         },
         .array => |array| {
-            const inner = try checker.convertTypRec(array.typ.*);
+            const inner = try checker.convertTyp(array.typ.*);
             const new = try checker.ast_typ_memo.box(inner);
             return .{ .array = .{
                 .len = array.len,
@@ -205,7 +216,7 @@ fn convertTypRec(checker: Checker, typ: Typ) ConvertError!Ast.Typ {
         },
         .err => return error.BadConvert,
         .any, .int => return error.ConvertAny,
-        .lazy => |inner| return checker.convertTypRec(inner.*),
+        .lazy => |inner| return checker.convertTyp(inner.*),
     }
 }
 
@@ -427,7 +438,7 @@ fn checkFun(checker: *Checker, fun: Ast.Fun, location: Location) !void {
 
 fn flushConvertQueue(checker: *Checker) !void {
     for (checker.convert_queue.items) |req| {
-        if (try checker.convertTyp(req.from, req.location)) |ast_typ| {
+        if (try checker.convertTypOrFail(req.from, req.location)) |ast_typ| {
             req.to.* = ast_typ;
         }
     }
@@ -938,7 +949,7 @@ fn checkArray(checker: *Checker, array: *Ast.Expr.Array, location: Location, hin
             .typ = try checker.typ_memo.box(inner_hint),
             .len = 0,
         } };
-        if (try checker.convertTyp(typ, location)) |ast_typ| {
+        if (try checker.convertTypOrFail(typ, location)) |ast_typ| {
             array.typ = ast_typ;
         }
         return .{
@@ -1072,7 +1083,7 @@ fn checkSliceStruc(
         .typ = was_ptr.?,
         .mutable = slice.mutable,
     } };
-    if (try checker.convertTyp(typ, location)) |ast_typ| {
+    if (try checker.convertTypOrFail(typ, location)) |ast_typ| {
         typ_target.* = ast_typ;
     }
     return .{
@@ -1121,7 +1132,7 @@ fn checkTypedStruc(
         .name = name.name,
         .generics = generics,
     } };
-    if (try checker.convertTyp(typ, location)) |ast_typ| {
+    if (try checker.convertTypOrFail(typ, location)) |ast_typ| {
         struc.typ = ast_typ;
     }
     return .{
@@ -1189,7 +1200,7 @@ fn checkNamedStructExpr(checker: *Checker, named: *Ast.Expr.Struct.Named, locati
 }
 
 fn checkUndef(checker: *Checker, undef: *Ast.Expr.Undef, location: Location, typ: Typ) !ExprInfo {
-    if (try checker.convertTyp(typ, location)) |ast_typ| {
+    if (try checker.convertTypOrFail(typ, location)) |ast_typ| {
         undef.typ = ast_typ;
     }
     return .{
@@ -1258,7 +1269,7 @@ fn checkField(
         try resolver.map.put(generic.name, typ);
     }
     const typ = try fiel.typ.resolve(&resolver);
-    if (try checker.convertTyp(typ, location)) |ast_typ| {
+    if (try checker.convertTypOrFail(typ, location)) |ast_typ| {
         field.typ = ast_typ;
     }
     return .{
@@ -1280,7 +1291,7 @@ fn checkSliceField(
             .typ = slice.typ,
             .mutable = slice.mutable,
         } };
-        if (try checker.convertTyp(typ, location)) |ast_typ| {
+        if (try checker.convertTypOrFail(typ, location)) |ast_typ| {
             typ_target.* = ast_typ;
         }
         return .{
@@ -1434,11 +1445,11 @@ fn checkCall(checker: *Checker, call: *Ast.Expr.Call, location: Location, hint: 
     }
     call.generics = try checker.ast_typ_memo.arena.allocator().alloc(Ast.Typ, header.generics.len);
     for (call.generics, header.generics) |*target, generic| {
-        if (try checker.convertTyp(resolver.map.get(generic.name).?, null)) |llvm_typ| {
+        if (try checker.convertTypOrFail(resolver.map.get(generic.name).?, null)) |llvm_typ| {
             target.* = llvm_typ;
         }
     }
-    if (try checker.convertTyp(ret_typ, location)) |ast_typ| {
+    if (try checker.convertTypOrFail(ret_typ, location)) |ast_typ| {
         call.ret_typ = ast_typ;
     }
     return .{
@@ -1496,6 +1507,7 @@ fn deinit(checker: *Checker) void {
     checker.generics_usage.deinit(checker.gpa);
     checker.convert_queue.deinit(checker.gpa);
     checker.checked_typs.deinit();
+    checker.converted_typs.deinit();
     checker.* = undefined;
 }
 
