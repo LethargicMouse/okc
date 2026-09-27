@@ -1,6 +1,9 @@
+extern fn write(fd: i32, ptr: &u8, size: u64) void;
+extern fn printf(fmt: &u8, n: i32) void;
+
 fn main() i32 {
   while (i : 0..20) {
-    let printNumber = true;
+    let mut printNumber = true;
     if (i % 3 == 0) {
       putStr("fizz");
       printNumber = false;
@@ -11,7 +14,17 @@ fn main() i32 {
     }
     if (printNumber) {
       putI32(i);
+    } else {
+      putStr("\n");
     }
   }
   return 0;
+}
+
+fn putStr(s: []u8) void {
+  write(1, s.ptr, s.len);
+}
+
+fn putI32(n: i32) void {
+  printf("%d\n".ptr, n);
 }

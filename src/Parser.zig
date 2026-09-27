@@ -502,14 +502,35 @@ fn parseForStatement(parser: *Parser) !Ast.Statement {
     const vari = try parser.parseNameLoud();
     try parser.expectLoud(.colon);
     const expr = try parser.parseExprLoud();
+    const mend = try parser.parseMaybe(Ast.Expr, parseRangeEnd);
     try parser.expectLoud(.parr);
     const body = try parser.parseBlockLoud();
-    return .{ .location = location, .kind = .{ .forr = .{
-        .vari = vari,
-        .expr = expr,
-        .body = body,
-        .vari_location = vari_location,
-    } } };
+    if (mend) |end| {
+        return .{
+            .location = location,
+            .kind = .{ .for_range = .{
+                .vari = vari,
+                .start = expr,
+                .end = end,
+                .body = body,
+                .vari_location = vari_location,
+            } },
+        };
+    }
+    return .{
+        .location = location,
+        .kind = .{ .forr = .{
+            .vari = vari,
+            .expr = expr,
+            .body = body,
+            .vari_location = vari_location,
+        } },
+    };
+}
+
+fn parseRangeEnd(parser: *Parser) !Ast.Expr {
+    try parser.expect(.dot2);
+    return parser.parseExprLoud();
 }
 
 fn parseWhileStatement(parser: *Parser) !Ast.Statement {
@@ -806,6 +827,7 @@ fn parseExprAtom(parser: *Parser, loud: bool) Error!Ast.Expr {
         parseVarExpr,
         parseUndefinedExpr,
         parseTrueExpr,
+        parseFalseExpr,
     }) catch |err| {
         if (loud) {
             try parser.fail("<expr>");
@@ -979,6 +1001,15 @@ fn parseTrueExpr(parser: *Parser) !Ast.Expr {
     return .{
         .location = location,
         .kind = .{ .bool = true },
+    };
+}
+
+fn parseFalseExpr(parser: *Parser) !Ast.Expr {
+    const location = parser.getLocation();
+    try parser.expect(.fals);
+    return .{
+        .location = location,
+        .kind = .{ .bool = false },
     };
 }
 

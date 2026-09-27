@@ -424,6 +424,8 @@ fn flushConvertQueue(checker: *Checker) !void {
     for (checker.convert_queue.items) |req| {
         if (try checker.convertTyp(.{ .lazy = req.from }, req.location)) |ast_typ| {
             req.to.* = ast_typ;
+        } else {
+            req.from.shorten().* = .err;
         }
     }
     checker.convert_queue.clearRetainingCapacity();
@@ -467,6 +469,7 @@ fn freeVars(checker: *Checker, rbp: usize) void {
 
 fn checkStatement(checker: *Checker, statement: *Ast.Statement) Error!ControlFlow {
     switch (statement.kind) {
+        .for_range => |*forr| return checker.checkForRange(forr),
         .forr => |*forr| return checker.checkFor(forr),
         .unre => return .ret,
         .brek => return checker.checkBreak(statement.location),
@@ -484,6 +487,26 @@ fn checkStatement(checker: *Checker, statement: *Ast.Statement) Error!ControlFlo
             return checker.checkDeclare(declare, statement.location, true);
         },
     }
+}
+
+fn checkForRange(checker: *Checker, forr: *Ast.ForRange) !ControlFlow {
+    var start = try checker.checkExpr(&forr.start, .{});
+    if (!start.typ.isNumber()) {
+        checker.failWrongTyp(forr.start.location, .int, start.typ);
+        start.typ = .err;
+    }
+    const end = try checker.checkExpr(&forr.end, .{});
+    const typ = checker.unify(forr.end.location, start.typ, end.typ);
+    try checker.declareVar(forr.vari, .{
+        .typ = typ,
+        .mutable = false,
+        .can_be_mutable = false,
+    }, forr.vari_location);
+    defer {
+        _ = checker.vars_stack.pop();
+        checker.freeVar(forr.vari);
+    }
+    return checker.checkLoopBlock(forr.body);
 }
 
 fn checkFor(checker: *Checker, forr: *Ast.For) !ControlFlow {
@@ -593,16 +616,17 @@ fn checkAssign(checker: *Checker, assign: *Ast.Assign) !ControlFlow {
 fn checkUnary(checker: *Checker, unary: *Ast.Expr.Unary, location: Location, hint: Typ) !ExprInfo {
     switch (unary.kind) {
         .deref => return checker.checkDeref(&unary.expr, location),
-        .notb => return checker.checkNotb(&unary.expr, hint),
+        .notb => return checker.checkNotb(&unary.expr),
         .ptr => return checker.checkPtr(&unary.expr, hint),
-        .neg => return checker.checkNeg(&unary.expr, hint),
+        .neg => return checker.checkNeg(&unary.expr),
     }
 }
 
-fn checkNeg(checker: *Checker, expr: *Ast.Expr, hint: Typ) !ExprInfo {
-    var info = try checker.checkExpr(expr, .{ .typ = hint });
+fn checkNeg(checker: *Checker, expr: *Ast.Expr) !ExprInfo {
+    var info = try checker.checkExpr(expr, .{});
     if (!info.typ.isNumber()) {
         checker.failWrongTyp(expr.location, .int, info.typ);
+        info.typ = .err;
     }
     return .{
         .typ = info.typ,
@@ -919,8 +943,8 @@ fn checkStr(checker: *Checker) !ExprInfo {
     };
 }
 
-fn checkNotb(checker: *Checker, expr: *Ast.Expr, hint: Typ) !ExprInfo {
-    var info = try checker.checkExpr(expr, .{ .typ = hint });
+fn checkNotb(checker: *Checker, expr: *Ast.Expr) !ExprInfo {
+    var info = try checker.checkExpr(expr, .{});
     if (!info.typ.isNumber()) {
         checker.failWrongTyp(expr.location, .int, info.typ);
         info.typ = .err;

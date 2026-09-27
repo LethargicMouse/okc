@@ -96,6 +96,7 @@ pub const Binary = struct {
         orb,
         andb,
         equ,
+        neq,
         add,
         sub,
         mul,
@@ -106,7 +107,7 @@ pub const Binary = struct {
 
         pub fn getPrior(kind: Binary.Kind) u8 {
             switch (kind) {
-                .equ, .les, .moreq => return 0,
+                .equ, .neq, .les, .moreq => return 0,
                 .orb => return 1,
                 .andb => return 2,
                 .add, .sub => return 3,
@@ -133,7 +134,7 @@ pub const Binary = struct {
         pub fn getClass(kind: Binary.Kind) Class {
             return switch (kind) {
                 .orb, .andb, .add, .sub, .mul, .div, .rem => .arith,
-                .equ, .les, .moreq => .bool,
+                .equ, .neq, .les, .moreq => .bool,
             };
         }
     };

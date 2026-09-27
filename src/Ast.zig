@@ -41,9 +41,18 @@ pub const For = struct {
     vari_location: Location,
 };
 
+pub const ForRange = struct {
+    vari: []const u8,
+    start: Expr,
+    end: Expr,
+    body: []Statement,
+    vari_location: Location,
+};
+
 pub const Statement = struct {
     pub const Kind = union(enum) {
         forr: For,
+        for_range: ForRange,
         ret: Return,
         expr: Expr,
         declare: Declare,

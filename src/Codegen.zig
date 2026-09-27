@@ -386,6 +386,7 @@ fn genParam(gen: *Codegen, typ: Typ) !TypVal {
 
 fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
     switch (statement.kind) {
+        .for_range => |forr| try gen.genForRange(forr),
         .forr => |forr| try gen.genFor(forr),
         .op_assign => |op_assign| try gen.genOpAssign(op_assign),
         .unre => try gen.genUnreachable(),
@@ -418,6 +419,43 @@ fn genWhile(gen: *Codegen, whi: Ast.While) !void {
     const condition_label = gen.newTmp();
     try gen.uncond(condition_label, condition_label);
     try gen.genBranch(whi.branch, condition_label, true);
+}
+
+fn genForRange(gen: *Codegen, forr: Ast.ForRange) !void {
+    // int i = start
+    try gen.genDeclare(.{
+        .name = forr.vari,
+        .expr = forr.start,
+        .typ = null,
+    });
+    const end = try gen.genExpr(forr.end);
+    // goto cond
+    // start:
+    const start_label = gen.newTmp();
+    const cond_label = gen.newTmp();
+    try gen.uncond(cond_label, start_label);
+    // i++
+    const ival = try gen.genVar(forr.vari);
+    const inew = try gen.genBinary(.add, ival.typ, ival.val, .{ .int = 1 });
+    try gen.storeInto(gen.vars.get(forr.vari).?.val, .{ .typ = ival.typ, .val = .{ .tmp = inew } });
+    // goto cond
+    // cond:
+    try gen.uncond(cond_label, cond_label);
+    // cond = i != end
+    const ival_ = try gen.loadTypVal(gen.vars.get(forr.vari).?);
+    const at_end = try gen.genBinary(.neq, ival.typ, ival_.val, end.val);
+    // if cond, body, end
+    // body:
+    const body_label = gen.newTmp();
+    const end_label = gen.newTmp();
+    try gen.cond(.{ .tmp = at_end }, body_label, end_label);
+    // <body>
+    for (forr.body) |statement| {
+        try gen.genStatement(statement);
+    }
+    // goto start
+    // end:
+    try gen.uncond(start_label, end_label);
 }
 
 fn genFor(gen: *Codegen, forr: Ast.For) !void {
@@ -995,10 +1033,10 @@ fn genBinary(gen: *Codegen, kind: Ast.Expr.Binary.Kind, typ: Typ, a: Val, b: Val
 }
 
 fn binOpRetTyp(kind: Ast.Expr.Binary.Kind, child_typ: Typ) Typ {
-    switch (kind) {
-        .sub, .add, .mul, .div, .rem, .andb, .orb => return child_typ,
-        .equ, .les, .moreq => return .{ .prime = .bool },
-    }
+    return switch (kind.getClass()) {
+        .arith => child_typ,
+        .bool => .{ .prime = .bool },
+    };
 }
 
 fn genBinOp(gen: *Codegen, kind: Ast.Expr.Binary.Kind) !void {
@@ -1013,6 +1051,7 @@ fn genBinOp(gen: *Codegen, kind: Ast.Expr.Binary.Kind) !void {
         .rem => try gen.print("srem", .{}),
         .equ => try gen.print("icmp eq", .{}),
         .les => try gen.print("icmp slt", .{}),
+        .neq => try gen.print("icmp ne", .{}),
     }
 }
 
