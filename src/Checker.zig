@@ -735,11 +735,9 @@ fn getElemExprInfo(checker: *Checker, info: ExprInfo, location: Location) ?ExprI
     }
 }
 
-const debug_unify = false;
-
 fn unify(checker: *Checker, location: Location, a: Typ, b: Typ) Typ {
-    if (canUnify(a, b, true)) |typ| {
-        if (debug_unify) {
+    if (a.unify(b, true)) |typ| {
+        if (Typ.debug_unify) {
             std.debug.print("==> {f}\n", .{typ});
         }
         return typ;
@@ -763,114 +761,6 @@ fn failWrongTyp(checker: *Checker, location: Location, a: Typ, b: Typ) void {
         \\         expected  {f}
         \\            found  {f}
     , .{ a, b });
-}
-
-fn canUnify(a: Typ, b: Typ, active: bool) ?Typ {
-    if (debug_unify) {
-        std.debug.print("unify {f} vs {f}\n", .{ a, b });
-    }
-    if (a == .err or b == .err) {
-        return .err;
-    }
-    if (a == .any) {
-        return b;
-    }
-    if (b == .any) {
-        return a;
-    }
-    if (a == .lazy and b == .lazy) {
-        const sa = a.lazy.shorten();
-        const sb = b.lazy.shorten();
-        if (sa != sb) {
-            const typ = canUnify(sa.*, sb.*, active) orelse return null;
-            sa.setLazy(typ);
-            sb.setLazy(.{ .lazy = sa });
-        }
-        return .{ .lazy = sa };
-    }
-    if (a == .lazy) {
-        const res = canUnify(a.lazy.*, b, active) orelse return null;
-        if (active) {
-            a.lazy.setLazy(res);
-        }
-        return a;
-    }
-    if (b == .lazy) {
-        const res = canUnify(a, b.lazy.*, active) orelse return null;
-        if (active) {
-            b.lazy.setLazy(res);
-        }
-        return b;
-    }
-    if (a == .slice and b == .ptr and b.ptr.typ.* == .array and
-        a.slice.mutable == b.ptr.mutable)
-    {
-        if (a.slice.typ != b.ptr.typ.array.typ) {
-            _ = canUnify(a.slice.typ.*, b.ptr.typ.array.typ.*, active) orelse return null;
-        }
-        return a;
-    }
-    if (a == .int and b.isNumber()) {
-        return b;
-    }
-    if (b == .int and a.isNumber()) {
-        return a;
-    }
-    if (@intFromEnum(a) != @intFromEnum(b)) {
-        return null;
-    }
-    switch (a) {
-        .prime => |aprime| if (aprime == b.prime) {
-            return b;
-        } else {
-            return null;
-        },
-        .name => |aname| {
-            if (!std.mem.eql(u8, aname.name, b.name.name)) {
-                return null;
-            }
-            for (aname.generics, b.name.generics) |ag, bg| {
-                _ = canUnify(ag, bg, active) orelse return null;
-            }
-            return b;
-        },
-        .fun => |fun| {
-            if (fun.ret_typ != b.fun.ret_typ) {
-                _ = canUnify(fun.ret_typ.*, b.fun.ret_typ.*, active) orelse return null;
-            }
-            for (fun.params, b.fun.params) |ap, bp| {
-                _ = canUnify(ap, bp, active) orelse return null;
-            }
-            return a;
-        },
-        .slice => |aslice| {
-            if (aslice.mutable != b.slice.mutable) {
-                return null;
-            }
-            if (aslice.typ != b.slice.typ) {
-                _ = canUnify(aslice.typ.*, b.slice.typ.*, active) orelse return null;
-            }
-            return a;
-        },
-        .ptr => |aptr| {
-            if (aptr.mutable and !b.ptr.mutable) {
-                return null;
-            }
-            if (aptr.typ != b.ptr.typ and canUnify(aptr.typ.*, b.ptr.typ.*, active) == null) {
-                return null;
-            }
-            return a;
-        },
-        .array => |arr| {
-            if (arr.len != b.array.len or
-                (arr.typ != b.array.typ and canUnify(arr.typ.*, b.array.typ.*, active) == null))
-            {
-                return null;
-            }
-            return a;
-        },
-        .lazy, .any, .err, .int => unreachable,
-    }
 }
 
 fn checkDeclare(checker: *Checker, declare: *Ast.Declare, location: Location) !ControlFlow {
@@ -1453,7 +1343,7 @@ fn checkCall(checker: *Checker, call: *Ast.Expr.Call, location: Location, hint: 
     }
     const ret_typ = try header.ret_typ.resolve(&resolver);
     // to propagate hint to generics
-    _ = canUnify(ret_typ, hint, true);
+    _ = ret_typ.unify(hint, true);
     for (call.args, header.params) |*arg, param| {
         const param_typ = try param.resolve(&resolver);
         const info = try checker.checkExpr(arg, .{ .typ = param_typ.normalise() });

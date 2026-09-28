@@ -139,4 +139,114 @@ pub const Typ = union(enum) {
             return typ;
         }
     }
+
+    pub const debug_unify = false;
+
+    pub fn unify(a: Typ, b: Typ, active: bool) ?Typ {
+        if (debug_unify) {
+            std.debug.print("unify {f} vs {f}\n", .{ a, b });
+        }
+        if (a == .err or b == .err) {
+            return .err;
+        }
+        if (a == .any) {
+            return b;
+        }
+        if (b == .any) {
+            return a;
+        }
+        if (a == .lazy and b == .lazy) {
+            const sa = a.lazy.shorten();
+            const sb = b.lazy.shorten();
+            if (sa != sb) {
+                const typ = sa.unify(sb.*, active) orelse return null;
+                sa.setLazy(typ);
+                sb.setLazy(.{ .lazy = sa });
+            }
+            return .{ .lazy = sa };
+        }
+        if (a == .lazy) {
+            const res = a.lazy.unify(b, active) orelse return null;
+            if (active) {
+                a.lazy.setLazy(res);
+            }
+            return a;
+        }
+        if (b == .lazy) {
+            const res = a.unify(b.lazy.*, active) orelse return null;
+            if (active) {
+                b.lazy.setLazy(res);
+            }
+            return b;
+        }
+        if (a == .slice and b == .ptr and b.ptr.typ.* == .array and
+            a.slice.mutable == b.ptr.mutable)
+        {
+            if (a.slice.typ != b.ptr.typ.array.typ) {
+                _ = a.slice.typ.unify(b.ptr.typ.array.typ.*, active) orelse return null;
+            }
+            return a;
+        }
+        if (a == .int and b.isNumber()) {
+            return b;
+        }
+        if (b == .int and a.isNumber()) {
+            return a;
+        }
+        if (@intFromEnum(a) != @intFromEnum(b)) {
+            return null;
+        }
+        switch (a) {
+            .prime => |aprime| if (aprime == b.prime) {
+                return b;
+            } else {
+                return null;
+            },
+            .name => |aname| {
+                if (!std.mem.eql(u8, aname.name, b.name.name)) {
+                    return null;
+                }
+                for (aname.generics, b.name.generics) |ag, bg| {
+                    _ = ag.unify(bg, active) orelse return null;
+                }
+                return b;
+            },
+            .fun => |fun| {
+                if (fun.ret_typ != b.fun.ret_typ) {
+                    _ = fun.ret_typ.unify(b.fun.ret_typ.*, active) orelse return null;
+                }
+                for (fun.params, b.fun.params) |ap, bp| {
+                    _ = ap.unify(bp, active) orelse return null;
+                }
+                return a;
+            },
+            .slice => |aslice| {
+                if (aslice.mutable != b.slice.mutable) {
+                    return null;
+                }
+                if (aslice.typ != b.slice.typ) {
+                    _ = aslice.typ.unify(b.slice.typ.*, active) orelse return null;
+                }
+                return a;
+            },
+            .ptr => |aptr| {
+                if (aptr.mutable and !b.ptr.mutable) {
+                    return null;
+                }
+                if (aptr.typ != b.ptr.typ and aptr.typ.unify(b.ptr.typ.*, active) == null) {
+                    return null;
+                }
+                return a;
+            },
+            .array => |arr| {
+                if (arr.len != b.array.len or
+                    (arr.typ != b.array.typ and arr.typ.unify(b.array.typ.*, active) == null))
+                {
+                    return null;
+                }
+                return a;
+            },
+            .lazy, .any, .err, .int => unreachable,
+        }
+    }
 };
