@@ -285,12 +285,34 @@ fn checkConstExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) !Typ {
 
 fn checkExprComptime(checker: *Checker, expr: Ast.Expr) void {
     switch (expr.kind) {
-        .str => {},
+        .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
+        .call => checker.fail(expr.location, "cannot evaluate at compile time", .{}),
+        .fn_ptr => unreachable,
+        .field => |field| checker.checkExprComptime(field.expr),
+        .unary => |unary| checker.checkExprComptime(unary.expr),
+        .elem => |elem| checker.checkElemComptime(elem.*),
+        .binary => |binary| checker.checkBinaryComptime(binary.*),
+        .subslice => |subslice| checker.checkSubsliceComptime(subslice.*),
         .array => |array| checker.checkArrayComptime(array),
         .named_struc => |named| checker.checkStructExprComptime(named.struc),
         .struc => |struc| checker.checkStructExprComptime(struc),
-        else => checker.fail(expr.location, "cannot evaluate at compile time", .{}),
     }
+}
+
+fn checkElemComptime(checker: *Checker, elem: Ast.Expr.Elem) void {
+    checker.checkExprComptime(elem.expr);
+    checker.checkExprComptime(elem.index);
+}
+
+fn checkBinaryComptime(checker: *Checker, binary: Ast.Expr.Binary) void {
+    checker.checkExprComptime(binary.left);
+    checker.checkExprComptime(binary.right);
+}
+
+fn checkSubsliceComptime(checker: *Checker, subslice: Ast.Expr.Subslice) void {
+    checker.checkExprComptime(subslice.expr);
+    checker.checkExprComptime(subslice.start);
+    checker.checkExprComptime(subslice.end);
 }
 
 fn checkStructExprComptime(checker: *Checker, struc: Ast.Expr.Struct) void {
