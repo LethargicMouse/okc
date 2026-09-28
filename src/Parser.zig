@@ -6,7 +6,7 @@ const Lexeme = Lexer.Lexeme;
 const Location = @import("Location.zig");
 const Memo = @import("memo.zig").Memo;
 
-const ExprStatementPostfix = union(enum) {
+const ExprStmtPostfix = union(enum) {
     assign: Ast.Expr,
     op_assign: OpAssignPostfix,
     none,
@@ -259,7 +259,10 @@ fn parseSep(parser: *Parser, T: type, parse: fn (*Parser) Error!T) ![]T {
     if (try parser.parseMaybe(T, parse)) |first| {
         try vec.append(parser.gpa, first);
         while (true) {
-            parser.expectLoud(.comma) catch break;
+            parser.expectLoud(.comma) catch |err| switch (err) {
+                error.ParseFailed => break,
+                else => return err,
+            };
             if (try parser.parseMaybe(T, parse)) |item| {
                 try vec.append(parser.gpa, item);
             } else break;
@@ -420,31 +423,31 @@ fn parseFun(parser: *Parser) !Ast.Fun {
     };
 }
 
-fn parseBlockLoud(parser: *Parser) Error![]Ast.Statement {
+fn parseBlockLoud(parser: *Parser) Error![]Ast.Stmt {
     try parser.expectLoud(.curl);
-    const statements = try parser.parseMany(Ast.Statement, parseStatementLoud);
+    const Stmts = try parser.parseMany(Ast.Stmt, parseStmtLoud);
     try parser.expect(.curr);
-    return statements;
+    return Stmts;
 }
 
-fn parseStatementLoud(parser: *Parser) !Ast.Statement {
-    return parser.parseEither(Ast.Statement, .{
-        parseUnreachableStatement,
-        parseBreakStatement,
-        parseRetStatement,
-        parseDeclareStatement,
-        parseIfStatement,
-        parseForStatement,
-        parseWhileStatement,
-        parseIgnoreStatement,
-        parseExprStatement,
+fn parseStmtLoud(parser: *Parser) !Ast.Stmt {
+    return parser.parseEither(Ast.Stmt, .{
+        parseUnreachableStmt,
+        parseBreakStmt,
+        parseRetStmt,
+        parseDeclareStmt,
+        parseIfStmt,
+        parseForStmt,
+        parseWhileStmt,
+        parseIgnoreStmt,
+        parseExprStmt,
     }) catch |err| {
-        try parser.fail("<statement>");
+        try parser.fail("<Stmt>");
         return err;
     };
 }
 
-fn parseUnreachableStatement(parser: *Parser) !Ast.Statement {
+fn parseUnreachableStmt(parser: *Parser) !Ast.Stmt {
     const location = parser.getLocation();
     try parser.expect(.unre);
     try parser.expectLoud(.semi);
@@ -454,7 +457,7 @@ fn parseUnreachableStatement(parser: *Parser) !Ast.Statement {
     };
 }
 
-fn parseBreakStatement(parser: *Parser) !Ast.Statement {
+fn parseBreakStmt(parser: *Parser) !Ast.Stmt {
     const location = parser.getLocation();
     try parser.expect(.brek);
     try parser.expectLoud(.semi);
@@ -464,9 +467,9 @@ fn parseBreakStatement(parser: *Parser) !Ast.Statement {
     };
 }
 
-fn parseOpAssignStatementPostfix(
+fn parseOpAssignStmtPostfix(
     parser: *Parser,
-) !ExprStatementPostfix {
+) !ExprStmtPostfix {
     const kind = try parser.parseOpAssignBinOp();
     try parser.expect(.equ);
     const expr = try parser.parseExprLoud();
@@ -486,7 +489,7 @@ fn parseOpAssignBinOp(parser: *Parser) !Ast.Expr.Binary.Kind {
     return res;
 }
 
-fn parseIgnoreStatement(parser: *Parser) !Ast.Statement {
+fn parseIgnoreStmt(parser: *Parser) !Ast.Stmt {
     const location = parser.getLocation();
     try parser.expect(.wild);
     try parser.expectLoud(.equ);
@@ -500,7 +503,7 @@ fn parseIgnoreStatement(parser: *Parser) !Ast.Statement {
     };
 }
 
-fn parseForStatement(parser: *Parser) !Ast.Statement {
+fn parseForStmt(parser: *Parser) !Ast.Stmt {
     const location = parser.getLocation();
     try parser.expect(.whi);
     try parser.expectLoud(.parl);
@@ -539,19 +542,19 @@ fn parseRangeEnd(parser: *Parser) !Ast.Expr {
     return parser.parseExprLoud();
 }
 
-fn parseWhileStatement(parser: *Parser) !Ast.Statement {
+fn parseWhileStmt(parser: *Parser) !Ast.Stmt {
     const location = parser.getLocation();
     try parser.expect(.whi);
     const branch = try parser.parseBranch();
     return .{ .location = location, .kind = .{ .whi = .{ .branch = branch } } };
 }
 
-fn parseIfStatement(parser: *Parser) !Ast.Statement {
+fn parseIfStmt(parser: *Parser) !Ast.Stmt {
     const location = parser.getLocation();
     try parser.expect(.iff);
     const branch = try parser.parseBranch();
-    const else_ifs = try parser.parseMany(Ast.Branch, parseElseIf);
-    const else_branch = try parser.parseMaybe([]Ast.Statement, parseElseLoud) orelse @constCast(&.{});
+    const else_ifs = try parser.parseMany(Ast.Stmt.Branch, parseElseIf);
+    const else_branch = try parser.parseMaybe([]Ast.Stmt, parseElseLoud) orelse @constCast(&.{});
     return .{
         .location = location,
         .kind = .{ .iff = .{
@@ -562,31 +565,31 @@ fn parseIfStatement(parser: *Parser) !Ast.Statement {
     };
 }
 
-fn parseElseIf(parser: *Parser) !Ast.Branch {
+fn parseElseIf(parser: *Parser) !Ast.Stmt.Branch {
     try parser.expect(.els);
     try parser.expect(.iff);
     const branch = try parser.parseBranch();
     return branch;
 }
 
-fn parseBranch(parser: *Parser) !Ast.Branch {
+fn parseBranch(parser: *Parser) !Ast.Stmt.Branch {
     try parser.expectLoud(.parl);
     const condition = try parser.parseExprLoud();
     try parser.expectLoud(.parr);
-    const statements = try parser.parseBlockLoud();
+    const Stmts = try parser.parseBlockLoud();
     return .{
         .condition = condition,
-        .body = statements,
+        .body = Stmts,
     };
 }
 
-fn parseElseLoud(parser: *Parser) ![]Ast.Statement {
+fn parseElseLoud(parser: *Parser) ![]Ast.Stmt {
     try parser.expectLoud(.els);
-    const statements = try parser.parseBlockLoud();
-    return statements;
+    const Stmts = try parser.parseBlockLoud();
+    return Stmts;
 }
 
-fn parseAssignStatementPostfix(parser: *Parser) !ExprStatementPostfix {
+fn parseAssignStmtPostfix(parser: *Parser) !ExprStmtPostfix {
     const expr = try parser.parseAssignPostfix();
     return .{ .assign = expr };
 }
@@ -596,7 +599,7 @@ fn parseAssignPostfix(parser: *Parser) !Ast.Expr {
     return parser.parseExprLoud();
 }
 
-fn parseDeclareStatement(parser: *Parser) !Ast.Statement {
+fn parseDeclareStmt(parser: *Parser) !Ast.Stmt {
     const declare = try parser.parseDeclare();
     return .{
         .location = parser.tmp_location,
@@ -604,7 +607,7 @@ fn parseDeclareStatement(parser: *Parser) !Ast.Statement {
     };
 }
 
-fn parseDeclare(parser: *Parser) !Ast.Declare {
+fn parseDeclare(parser: *Parser) !Ast.Stmt.Declare {
     try parser.expect(.let);
     const mutable = try parser.parseMaybe(bool, parseMutable) orelse false;
     const location = parser.getLocation();
@@ -633,9 +636,9 @@ fn parseTypAnnotLoud(parser: *Parser) !Ast.Typ {
     return typ;
 }
 
-fn parseExprStatement(parser: *Parser) !Ast.Statement {
+fn parseExprStmt(parser: *Parser) !Ast.Stmt {
     const expr = try parser.parseExpr();
-    const postfix = try parser.parseExprStatementPostfix();
+    const postfix = try parser.parseExprStmtPostfix();
     try parser.expectLoud(.semi);
     switch (postfix) {
         .none => return .{ .location = expr.location, .kind = .{ .expr = expr } },
@@ -662,10 +665,10 @@ fn parseExprStatement(parser: *Parser) !Ast.Statement {
     }
 }
 
-fn parseExprStatementPostfix(parser: *Parser) !ExprStatementPostfix {
-    return parser.parseEither(ExprStatementPostfix, &.{
-        parseAssignStatementPostfix,
-        parseOpAssignStatementPostfix,
+fn parseExprStmtPostfix(parser: *Parser) !ExprStmtPostfix {
+    return parser.parseEither(ExprStmtPostfix, &.{
+        parseAssignStmtPostfix,
+        parseOpAssignStmtPostfix,
     }) catch .none;
 }
 
@@ -680,7 +683,7 @@ fn parseCall(parser: *Parser) !Ast.Expr.Call {
     };
 }
 
-fn parseRetStatement(parser: *Parser) !Ast.Statement {
+fn parseRetStmt(parser: *Parser) !Ast.Stmt {
     const location = parser.getLocation();
     try parser.expect(.ret);
     const expr = try parser.parseMaybe(Ast.Expr, parseExprLoud);

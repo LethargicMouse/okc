@@ -300,8 +300,8 @@ fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
         const vari = try gen.toStack(typ_val);
         try gen.vars.put(param.name, vari);
     }
-    for (fun.body) |statement| {
-        try gen.genStatement(statement);
+    for (fun.body) |stmt| {
+        try gen.genStmt(stmt);
     }
     if (fun.header.ret_typ == .prime and fun.header.ret_typ.prime == .void) {
         try gen.genRet(.{ .expr = null });
@@ -381,8 +381,8 @@ fn genParam(gen: *Codegen, typ: Typ) !TypVal {
     return .{ .typ = typ, .val = .{ .tmp = tmp } };
 }
 
-fn genStatement(gen: *Codegen, statement: Ast.Statement) Error!void {
-    switch (statement.kind) {
+fn genStmt(gen: *Codegen, stmt: Ast.Stmt) Error!void {
+    switch (stmt.kind) {
         .for_range => |forr| try gen.genForRange(forr),
         .forr => |forr| try gen.genFor(forr),
         .op_assign => |op_assign| try gen.genOpAssign(op_assign),
@@ -402,7 +402,7 @@ fn genUnreachable(gen: *Codegen) !void {
     try gen.print("\n  unreachable", .{});
 }
 
-fn genIgnore(gen: *Codegen, ignore: Ast.Ignore) !void {
+fn genIgnore(gen: *Codegen, ignore: Ast.Stmt.Ignore) !void {
     _ = try gen.genExpr(ignore.expr);
 }
 
@@ -411,13 +411,13 @@ fn genBreak(gen: *Codegen) !void {
     try gen.uncond(gen.loop_ends.getLast(), label);
 }
 
-fn genWhile(gen: *Codegen, whi: Ast.While) !void {
+fn genWhile(gen: *Codegen, whi: Ast.Stmt.While) !void {
     const condition_label = gen.newTmp();
     try gen.uncond(condition_label, condition_label);
     try gen.genBranch(whi.branch, condition_label, true);
 }
 
-fn genForRange(gen: *Codegen, forr: Ast.ForRange) !void {
+fn genForRange(gen: *Codegen, forr: Ast.Stmt.ForRange) !void {
     // int i = start
     try gen.genDeclare(.{
         .name = forr.vari,
@@ -447,15 +447,15 @@ fn genForRange(gen: *Codegen, forr: Ast.ForRange) !void {
     const end_label = gen.newTmp();
     try gen.cond(.{ .tmp = at_end }, body_label, end_label);
     // <body>
-    for (forr.body) |statement| {
-        try gen.genStatement(statement);
+    for (forr.body) |stmt| {
+        try gen.genStmt(stmt);
     }
     // goto start
     // end:
     try gen.uncond(start_label, end_label);
 }
 
-fn genFor(gen: *Codegen, forr: Ast.For) !void {
+fn genFor(gen: *Codegen, forr: Ast.Stmt.For) !void {
     const slice = try gen.genExprRef(forr.expr);
     // int i = 0
     const iref = try gen.toStack(.{
@@ -490,8 +490,8 @@ fn genFor(gen: *Codegen, forr: Ast.For) !void {
     const elem = try gen.genElemRef(slice, ival_);
     try gen.vars.put(forr.vari, elem);
     // <body>
-    for (forr.body) |statement| {
-        try gen.genStatement(statement);
+    for (forr.body) |stmt| {
+        try gen.genStmt(stmt);
     }
     // goto start
     // end:
@@ -524,19 +524,19 @@ fn uncond(gen: *Codegen, to: u32, next: u32) !void {
     , .{ to, next });
 }
 
-fn genIf(gen: *Codegen, iff: Ast.If) !void {
+fn genIf(gen: *Codegen, iff: Ast.Stmt.If) !void {
     const end_label = gen.newTmp();
     try gen.genBranch(iff.branch, end_label, false);
     for (iff.else_ifs) |branch| {
         try gen.genBranch(branch, end_label, false);
     }
-    for (iff.else_branch) |statement| {
-        try gen.genStatement(statement);
+    for (iff.else_branch) |stmt| {
+        try gen.genStmt(stmt);
     }
     try gen.uncond(end_label, end_label);
 }
 
-fn genBranch(gen: *Codegen, branch: Ast.Branch, end_label: u32, loop: bool) !void {
+fn genBranch(gen: *Codegen, branch: Ast.Stmt.Branch, end_label: u32, loop: bool) !void {
     const condition = try gen.genExpr(branch.condition);
     const then_label = gen.newTmp();
     const else_label = gen.newTmp();
@@ -544,8 +544,8 @@ fn genBranch(gen: *Codegen, branch: Ast.Branch, end_label: u32, loop: bool) !voi
         try gen.loop_ends.append(gen.gpa, else_label);
     }
     try gen.cond(condition.val, then_label, else_label);
-    for (branch.body) |statement| {
-        try gen.genStatement(statement);
+    for (branch.body) |stmt| {
+        try gen.genStmt(stmt);
     }
     try gen.uncond(end_label, else_label);
     if (loop) {
@@ -553,7 +553,7 @@ fn genBranch(gen: *Codegen, branch: Ast.Branch, end_label: u32, loop: bool) !voi
     }
 }
 
-fn genOpAssign(gen: *Codegen, op_assign: Ast.OpAssign) !void {
+fn genOpAssign(gen: *Codegen, op_assign: Ast.Stmt.OpAssign) !void {
     const vari = try gen.genExprRef(op_assign.left);
     const typ_val = try gen.genBinaryExpr(.{
         .left = op_assign.left,
@@ -563,13 +563,13 @@ fn genOpAssign(gen: *Codegen, op_assign: Ast.OpAssign) !void {
     try gen.storeInto(vari.val, typ_val);
 }
 
-fn genAssign(gen: *Codegen, assign: Ast.Assign) !void {
+fn genAssign(gen: *Codegen, assign: Ast.Stmt.Assign) !void {
     const vari = try gen.genExprRef(assign.left);
     const typ_val = try gen.genExpr(assign.expr);
     try gen.storeInto(vari.val, typ_val);
 }
 
-fn genDeclare(gen: *Codegen, declare: Ast.Declare) !void {
+fn genDeclare(gen: *Codegen, declare: Ast.Stmt.Declare) !void {
     const typ_val = try gen.genExpr(declare.expr);
     const vari = try gen.toStack(typ_val);
     try gen.vars.put(declare.name, vari);
@@ -673,7 +673,7 @@ fn newTmp(gen: *Codegen) u32 {
     return gen.next_tmp - 1;
 }
 
-fn genRet(gen: *Codegen, ret: Ast.Return) !void {
+fn genRet(gen: *Codegen, ret: Ast.Stmt.Return) !void {
     if (ret.expr) |expr| {
         const val = try gen.genExpr(expr);
         try gen.print("\n  ret {f}", .{val});

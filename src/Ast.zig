@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub const Expr = @import("Ast/Expr.zig");
+pub const Stmt = @import("Ast/Stmt.zig");
 pub const Typ = @import("Ast/typ.zig").Typ;
 const Lexeme = @import("Lexer.zig").Lexeme;
 const Location = @import("Location.zig");
@@ -25,82 +26,7 @@ pub const Param = struct {
 
 pub const Fun = struct {
     header: Header,
-    body: []Statement,
-};
-
-pub const OpAssign = struct {
-    left: Expr,
-    kind: Expr.Binary.Kind,
-    right: Expr,
-};
-
-pub const For = struct {
-    vari: []const u8,
-    expr: Expr,
-    body: []Statement,
-    vari_location: Location,
-};
-
-pub const ForRange = struct {
-    vari: []const u8,
-    start: Expr,
-    end: Expr,
-    body: []Statement,
-    vari_location: Location,
-};
-
-pub const Statement = struct {
-    pub const Kind = union(enum) {
-        forr: For,
-        for_range: ForRange,
-        ret: Return,
-        expr: Expr,
-        declare: Declare,
-        assign: Assign,
-        op_assign: OpAssign,
-        iff: If,
-        whi: While,
-        ignore: Ignore,
-        brek,
-        unre,
-    };
-    location: Location,
-    kind: Kind,
-};
-
-pub const Ignore = struct {
-    expr: Expr,
-};
-
-pub const Return = struct {
-    expr: ?Expr,
-};
-
-pub const While = struct {
-    branch: Branch,
-};
-
-pub const If = struct {
-    branch: Branch,
-    else_ifs: []Branch,
-    else_branch: []Statement,
-};
-
-pub const Branch = struct {
-    condition: Expr,
-    body: []Statement,
-};
-
-pub const Assign = struct {
-    left: Expr,
-    expr: Expr,
-};
-
-pub const Declare = struct {
-    name: []const u8,
-    typ: ?Typ,
-    expr: Expr,
-    mutable: bool,
+    body: []Stmt,
 };
 
 pub const GlobalVar = struct {
@@ -131,7 +57,7 @@ pub const Item = struct {
         ext_fun: ExtFun,
         struc: Struct,
         fun: Fun,
-        constant: Declare,
+        constant: Stmt.Declare,
     };
 
     kind: Kind,
