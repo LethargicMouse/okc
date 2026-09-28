@@ -101,7 +101,7 @@ const Val = union(enum) {
         switch (val) {
             .int => |int| try writer.print("{d}", .{int}),
             .str => |str| try writer.print("@.s{}", .{str}),
-            .tmp => |tmp| try writer.print("%{}", .{tmp}),
+            .tmp => |tmp| try writer.print("%t{}", .{tmp}),
             .global => |name| try writer.print("@\"{s}\"", .{name}),
             .undef => try writer.writeAll("poison"),
         }
@@ -120,6 +120,7 @@ gpa: std.mem.Allocator,
 file: std.Io.File,
 writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
+extra_buffer: std.ArrayList(u8) = .empty,
 typ_memo: *Memo(Ast.Typ),
 items: std.StringHashMap(*const Ast.Item),
 structs: HashMap(Name, Struct),
@@ -269,7 +270,7 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
 }
 
 fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
-    gen.buffer = .empty; // to generate types first
+    gen.buffer = gen.extra_buffer;
     const ret_resolved = try fun.header.ret_typ.resolve(&gen.resolver);
     try gen.print(
         "\ndefine {f} @\"{f}\"(",
@@ -293,6 +294,8 @@ fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
         \\) {{
         \\entry:
     , .{});
+    gen.extra_buffer = gen.buffer.?;
+    gen.buffer = .empty;
     for (
         param_typ_vals[0..fun.header.params.len],
         fun.header.params,
@@ -312,7 +315,8 @@ fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
     var buffer = gen.buffer.?;
     defer buffer.deinit(gen.gpa);
     gen.buffer = null;
-    try gen.print("{s}", .{buffer.items});
+    try gen.print("{s}{s}", .{ gen.extra_buffer.items, buffer.items });
+    gen.extra_buffer.clearRetainingCapacity();
     gen.vars.clearRetainingCapacity();
     gen.resolver.map.clearRetainingCapacity();
 }
@@ -377,7 +381,7 @@ fn genStruct(gen: *Codegen, name: Name) Error!void {
 
 fn genParam(gen: *Codegen, typ: Typ) !TypVal {
     const tmp = gen.newTmp();
-    try gen.print("{f} %{}", .{ LlvmTyp{ .inner = typ }, tmp });
+    try gen.print("{f} %t{}", .{ LlvmTyp{ .inner = typ }, tmp });
     return .{ .typ = typ, .val = .{ .tmp = tmp } };
 }
 
@@ -589,7 +593,14 @@ fn toStack(gen: *Codegen, typ_val: TypVal) !Ref {
 }
 
 fn genAlloca(gen: *Codegen, tmp: u32, typ: Typ) !void {
-    try gen.print("\n  %{} = alloca {f}", .{ tmp, LlvmTyp{ .inner = typ } });
+    const buffer = gen.buffer;
+    // so that all allocs are in entry block
+    gen.buffer = gen.extra_buffer;
+    defer {
+        gen.extra_buffer = gen.buffer.?;
+        gen.buffer = buffer;
+    }
+    try gen.print("\n  %t{} = alloca {f}", .{ tmp, LlvmTyp{ .inner = typ } });
 }
 
 fn storeInto(gen: *Codegen, val: Val, typ_val: TypVal) !void {
@@ -625,13 +636,13 @@ fn genCall(gen: *Codegen, call: Ast.Expr.Call) !TypVal {
     }
     const ret_tmp = gen.newTmp();
     if (call.ret_typ != .prime or call.ret_typ.prime != .void) {
-        try gen.print("\n  %{} = ", .{ret_tmp});
+        try gen.print("\n  %t{} = ", .{ret_tmp});
     } else {
         try gen.print("\n  ", .{});
     }
     try gen.print("call {f} ", .{LlvmTyp{ .inner = call.ret_typ }});
     if (mtmp) |tmp| {
-        try gen.print("%{}", .{tmp});
+        try gen.print("%t{}", .{tmp});
     } else {
         try gen.print("@\"{f}\"", .{name.delocate()});
     }
@@ -757,7 +768,7 @@ fn genNeg(gen: *Codegen, expr: Ast.Expr) !TypVal {
     const typ_val = try gen.genExpr(expr);
     const tmp = gen.newTmp();
     try gen.print(
-        "\n  %{d} = sub {f} 0, {f}",
+        "\n  %t{d} = sub {f} 0, {f}",
         .{ tmp, LlvmTyp{ .inner = typ_val.typ }, typ_val.val },
     );
     return .{
@@ -790,7 +801,7 @@ fn loadTypVal(gen: *Codegen, ref: Ref) !TypVal {
 fn genNotb(gen: *Codegen, expr: Ast.Expr) !TypVal {
     const typ_val = try gen.genExpr(expr);
     const tmp = gen.newTmp();
-    try gen.print("\n  %{d} = xor {f}, -1", .{ tmp, typ_val });
+    try gen.print("\n  %t{d} = xor {f}, -1", .{ tmp, typ_val });
     return .{
         .typ = typ_val.typ,
         .val = .{ .tmp = tmp },
@@ -882,7 +893,7 @@ fn genElemRef(gen: *Codegen, from: Ref, index: TypVal) !Ref {
 fn genGEP(gen: *Codegen, typ: Typ, ptr: u32, index: TypVal) !u32 {
     const tmp = gen.newTmp();
     try gen.print(
-        "\n  %{} = getelementptr {f}, ptr %{}, {f}",
+        "\n  %t{} = getelementptr {f}, ptr %t{}, {f}",
         .{ tmp, LlvmTyp{ .inner = typ }, ptr, index },
     );
     return tmp;
@@ -891,7 +902,7 @@ fn genGEP(gen: *Codegen, typ: Typ, ptr: u32, index: TypVal) !u32 {
 fn genGEPIB(gen: *Codegen, ref: Ref, index: TypVal) !u32 {
     const tmp = gen.newTmp();
     try gen.print(
-        "\n  %{} = getelementptr inbounds {f}, ptr {f}, i32 0, {f}",
+        "\n  %t{} = getelementptr inbounds {f}, ptr {f}, i32 0, {f}",
         .{ tmp, LlvmTyp{ .inner = ref.inner_typ }, ref.val, index },
     );
     return tmp;
@@ -961,7 +972,7 @@ fn genUnaryRef(gen: *Codegen, unary: Ast.Expr.Unary) !Ref {
 fn load(gen: *Codegen, vari: Ref) !u32 {
     const to = gen.newTmp();
     try gen.print(
-        "\n  %{} = load {f}, ptr {f}",
+        "\n  %t{} = load {f}, ptr {f}",
         .{ to, LlvmTyp{ .inner = vari.inner_typ }, vari.val },
     );
     return to;
@@ -1037,7 +1048,7 @@ fn genStructExpr(gen: *Codegen, struc: Ast.Expr.Struct) !TypVal {
 fn genIV(gen: *Codegen, to: *TypVal, typ_val: TypVal, index: u64) !void {
     const tmp = gen.newTmp();
     try gen.print(
-        "\n  %{} = insertvalue {f}, {f}, {d}",
+        "\n  %t{} = insertvalue {f}, {f}, {d}",
         .{ tmp, to, typ_val, index },
     );
     to.val = .{ .tmp = tmp };
@@ -1059,7 +1070,7 @@ fn genBinaryExpr(gen: *Codegen, binary: Ast.Expr.Binary) !TypVal {
 
 fn genBinary(gen: *Codegen, kind: Ast.Expr.Binary.Kind, typ: Typ, a: Val, b: Val) !u32 {
     const tmp = gen.newTmp();
-    try gen.print("\n  %{} = ", .{tmp});
+    try gen.print("\n  %t{} = ", .{tmp});
     try gen.genBinOp(kind);
     try gen.print(" {f} {f}, {f}", .{ LlvmTyp{ .inner = typ }, a, b });
     return tmp;
@@ -1240,6 +1251,7 @@ fn deinit(gen: *Codegen) void {
     gen.items.deinit();
     gen.consts.deinit();
     gen.deinitStructs();
+    gen.extra_buffer.deinit(gen.gpa);
     gen.* = undefined;
 }
 
