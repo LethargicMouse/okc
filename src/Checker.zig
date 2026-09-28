@@ -1115,7 +1115,7 @@ fn checkTypedStruc(
         try resolver.map.put(generic.name, typ);
     }
     for (struc.fields) |*field| {
-        try checker.checkNewField(field, name.name, decl.fields, &resolver);
+        try checker.checkNewField(field, .{ .name = name }, decl.fields, &resolver);
     }
     checker.checkFieldsInitialised(decl.fields, struc.fields, location);
     const typ = Typ{ .name = .{
@@ -1168,12 +1168,12 @@ fn checkFieldsInitialised(
 fn checkNewField(
     checker: *Checker,
     field: *Ast.Expr.Struct.Field,
-    struc_name: []const u8,
+    struc_typ: Typ,
     decl_fields: std.StringHashMap(Field),
     resolver: *Resolver(Typ),
 ) !void {
     const f_decl = decl_fields.get(field.name) orelse {
-        checker.failNoField(field.location, field.name, struc_name);
+        checker.failNoField(field.location, field.name, struc_typ);
         return;
     };
     const decl_typ = try f_decl.typ.resolve(resolver);
@@ -1235,7 +1235,6 @@ fn checkField(
             norm.slice,
             info.mutable,
             field.name,
-            &field.typ,
             location,
         );
     }
@@ -1249,7 +1248,7 @@ fn checkField(
         return err;
     };
     const fiel = struc.fields.getPtr(field.name) orelse {
-        checker.failNoField(location, field.name, name.name);
+        checker.failNoField(location, field.name, .{ .name = name });
         return err;
     };
     fiel.used = true;
@@ -1258,12 +1257,8 @@ fn checkField(
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
     }
-    const typ = try fiel.typ.resolve(&resolver);
-    if (try checker.convertTypOrFail(typ, location)) |ast_typ| {
-        field.typ = ast_typ;
-    }
     return .{
-        .typ = typ,
+        .typ = try fiel.typ.resolve(&resolver),
         .mutable = info.mutable,
     };
 }
@@ -1273,29 +1268,24 @@ fn checkSliceField(
     slice: Typ.Slice,
     mutable: bool,
     name: []const u8,
-    typ_target: *Ast.Typ,
     location: Location,
 ) !ExprInfo {
     if (std.mem.eql(u8, name, "ptr")) {
-        const typ = Typ{ .ptr = .{
-            .typ = slice.typ,
-            .mutable = slice.mutable,
-        } };
-        if (try checker.convertTypOrFail(typ, location)) |ast_typ| {
-            typ_target.* = ast_typ;
-        }
         return .{
-            .typ = typ,
+            .typ = .{ .ptr = .{
+                .typ = slice.typ,
+                .mutable = slice.mutable,
+            } },
             .mutable = mutable,
         };
     }
     if (std.mem.eql(u8, name, "len")) {
-        typ_target.* = .{ .prime = .u64 };
         return .{
             .typ = .{ .prime = .u64 },
             .mutable = mutable,
         };
     }
+    checker.failNoField(location, name, .{ .slice = slice });
     return .{
         .typ = .err,
         .mutable = true,
@@ -1321,9 +1311,9 @@ fn failNoField(
     checker: *Checker,
     location: Location,
     field: []const u8,
-    struc: []const u8,
+    typ: Typ,
 ) void {
-    checker.fail(location, "no field `{s}` in struct `{s}`", .{ field, struc });
+    checker.fail(location, "type `{s}` has no member named `{f}`", .{ field, typ });
 }
 
 fn failNotStruct(checker: *Checker, location: Location, typ: Typ) void {

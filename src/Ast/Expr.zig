@@ -154,7 +154,6 @@ pub const Binary = struct {
 pub const Field = struct {
     expr: Expr,
     name: []const u8,
-    typ: Typ = undefined,
 };
 
 pub const Elem = struct {
