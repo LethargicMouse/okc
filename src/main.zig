@@ -8,10 +8,9 @@ const Memo = @import("memo.zig").Memo;
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
 
-pub fn main(init: std.process.Init) !u8 {
+pub fn main(init: std.process.Init) u8 {
     const code = run(init) catch |err| switch (err) {
         error.Handled => return 1,
-        else => return err,
     };
     return code;
 }
@@ -73,10 +72,10 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
 fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
     var child = try std.process.spawn(io, .{ .argv = argv });
     const term = try child.wait(io);
-    switch (term) {
-        .exited => |code| return code,
-        else => return 1,
-    }
+    return switch (term) {
+        .exited => |code| code,
+        .signal, .stopped, .unknown => 1,
+    };
 }
 
 fn testFile(comptime name: []const u8, output: []const u8) !void {

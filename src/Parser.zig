@@ -261,7 +261,7 @@ fn parseSep(parser: *Parser, T: type, parse: fn (*Parser) Error!T) ![]T {
         while (true) {
             parser.expectLoud(.comma) catch |err| switch (err) {
                 error.ParseFailed => break,
-                else => return err,
+                error.OutOfMemory => return error.OutOfMemory,
             };
             if (try parser.parseMaybe(T, parse)) |item| {
                 try vec.append(parser.gpa, item);
@@ -407,7 +407,7 @@ fn parseMaybe(parser: *Parser, T: type, parse: fn (*Parser) Error!T) !?T {
             parser.cursor = cursor_before;
             return null;
         },
-        else => return err,
+        error.OutOfMemory => return error.OutOfMemory,
     };
     return res;
 }
@@ -733,7 +733,7 @@ fn parseBinPostfix(parser: *Parser, prior: u8) !?BinPostfix {
             parser.cursor = cursor_before;
             return null;
         },
-        else => return err,
+        error.OutOfMemory => return error.OutOfMemory,
     };
     return .{
         .kind = kind,

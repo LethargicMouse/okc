@@ -185,7 +185,7 @@ fn genFunNamed(gen: *Codegen, name: Name) !void {
             return;
         },
         .fun => |fun| fun,
-        else => unreachable,
+        .constant, .struc => unreachable,
     };
     const was = try gen.generated.getOrPut(name);
     if (was.found_existing) {
@@ -240,26 +240,25 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
     var i: usize = 0;
     var len = str.len;
     while (i < str.len) : (i += 1) {
-        switch (str[i]) {
-            '\\' => {
-                i += 1;
-                len -= 1;
-                switch (str[i]) {
-                    'n' => try vec.appendSlice(gpa, "\\0A"),
-                    'x' => {
-                        try vec.append(gpa, '\\');
-                        try vec.appendSlice(gpa, str[i + 1 .. i + 3]);
-                        i += 2;
-                        len -= 2;
-                    },
-                    else => {
-                        std.log.err("bad escape symbol: `\\{c}`", .{str[i]});
-                        // supposed to be checked by `Checker`
-                        unreachable;
-                    },
-                }
-            },
-            else => try vec.append(gpa, str[i]),
+        if (str[i] == '\\') {
+            i += 1;
+            len -= 1;
+            switch (str[i]) {
+                'n' => try vec.appendSlice(gpa, "\\0A"),
+                'x' => {
+                    try vec.append(gpa, '\\');
+                    try vec.appendSlice(gpa, str[i + 1 .. i + 3]);
+                    i += 2;
+                    len -= 2;
+                },
+                else => {
+                    std.log.err("bad escape symbol: `\\{c}`", .{str[i]});
+                    // supposed to be checked by `Checker`
+                    unreachable;
+                },
+            }
+        } else {
+            try vec.append(gpa, str[i]);
         }
     }
     const repr = try vec.toOwnedSlice(gpa);

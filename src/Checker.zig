@@ -832,6 +832,10 @@ fn checkSubslice(checker: *Checker, subslice: *Ast.Expr.Subslice, location: Loca
             } },
             .mutable = false,
         },
+        .slice => return .{
+            .typ = info.typ,
+            .mutable = info.mutable,
+        },
         else => |typ| {
             checker.fail(location, "cannot take slice of `{f}`", .{typ});
             return .{
