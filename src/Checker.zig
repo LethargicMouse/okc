@@ -399,6 +399,7 @@ fn regStruct(checker: *Checker, struc: Ast.Struct, location: Location) !void {
         checker.failAlreadyDeclared(location, struc.name, prev.location);
         return;
     }
+    try checker.checkGenericsRedeclare(struc.generics);
     var res = Struct{
         .generics = struc.generics,
         .fields = .init(checker.gpa),
@@ -429,6 +430,19 @@ fn regStruct(checker: *Checker, struc: Ast.Struct, location: Location) !void {
         .location = location,
         .kind = .{ .struc = res },
     });
+}
+
+fn checkGenericsRedeclare(checker: *Checker, generics: []const Ast.Generic) !void {
+    var map = std.StringHashMap(Location).init(checker.gpa);
+    defer map.deinit();
+    for (generics) |generic| {
+        const entry = try map.getOrPut(generic.name);
+        if (entry.found_existing) {
+            checker.failAlreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
+        } else {
+            entry.value_ptr.* = generic.location;
+        }
+    }
 }
 
 fn checkGenericsUsage(checker: *Checker) void {
