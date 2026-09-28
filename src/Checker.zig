@@ -279,29 +279,29 @@ fn regConst(checker: *Checker, declare: *Ast.Declare, location: Location) !void 
 
 fn checkConstExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) !Typ {
     const info = try checker.checkExpr(expr, hint);
-    checker.checkComptime(expr.*);
+    checker.checkExprComptime(expr.*);
     return info.typ;
 }
 
-fn checkComptime(checker: *Checker, expr: Ast.Expr) void {
+fn checkExprComptime(checker: *Checker, expr: Ast.Expr) void {
     switch (expr.kind) {
         .str => {},
-        .array => |array| {
-            for (array.exprs) |elem| {
-                checker.checkComptime(elem);
-            }
-        },
-        .named_struc => |named| {
-            for (named.struc.fields) |field| {
-                checker.checkComptime(field.expr);
-            }
-        },
-        .struc => |struc| {
-            for (struc.fields) |field| {
-                checker.checkComptime(field.expr);
-            }
-        },
+        .array => |array| checker.checkArrayComptime(array),
+        .named_struc => |named| checker.checkStructExprComptime(named.struc),
+        .struc => |struc| checker.checkStructExprComptime(struc),
         else => checker.fail(expr.location, "cannot evaluate at compile time", .{}),
+    }
+}
+
+fn checkStructExprComptime(checker: *Checker, struc: Ast.Expr.Struct) void {
+    for (struc.fields) |field| {
+        checker.checkExprComptime(field.expr);
+    }
+}
+
+fn checkArrayComptime(checker: *Checker, array: Ast.Expr.Array) void {
+    for (array.exprs) |elem| {
+        checker.checkExprComptime(elem);
     }
 }
 
