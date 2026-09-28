@@ -1,5 +1,7 @@
 const Lexeme = @import("../Lexer.zig").Lexeme;
 const Location = @import("../Location.zig");
+pub const Binary = @import("Expr/Binary.zig");
+pub const Unary = @import("Expr/Unary.zig");
 const Typ = @import("typ.zig").Typ;
 
 const Expr = @This();
@@ -39,27 +41,6 @@ pub const Array = struct {
     typ: Typ = undefined,
 };
 
-pub const Unary = struct {
-    pub const Kind = enum {
-        ptr,
-        deref,
-        notb,
-        neg,
-
-        pub fn fromLexeme(lexeme: Lexeme) ?Unary.Kind {
-            return switch (lexeme) {
-                .amp => .ptr,
-                .star => .deref,
-                .tild => .notb,
-                .minus => .neg,
-                else => null,
-            };
-        }
-    };
-    kind: Unary.Kind,
-    expr: Expr,
-};
-
 pub const Struct = struct {
     fields: []Struct.Field,
     typ: Typ = undefined,
@@ -91,64 +72,6 @@ pub const Call = struct {
     args: []Expr,
     generics: []Typ = undefined,
     ret_typ: Typ = undefined,
-};
-
-pub const Binary = struct {
-    pub const Kind = enum {
-        pub const Class = enum {
-            arith,
-            bool,
-        };
-
-        orb,
-        andb,
-        equ,
-        neq,
-        add,
-        sub,
-        mul,
-        div,
-        les,
-        rem,
-        moreq,
-
-        pub fn getPrior(kind: Binary.Kind) u8 {
-            switch (kind) {
-                .equ, .neq, .les, .moreq => return 0,
-                .orb => return 1,
-                .andb => return 2,
-                .add, .sub => return 3,
-                .mul, .div, .rem => return 4,
-            }
-        }
-
-        pub fn fromLexeme(lexeme: Lexeme) ?Binary.Kind {
-            return switch (lexeme) {
-                .pipe => .orb,
-                .amp => .andb,
-                .equ2 => .equ,
-                .plus => .add,
-                .minus => .sub,
-                .star => .mul,
-                .slash => .div,
-                .les => .les,
-                .rem => .rem,
-                .moreq => .moreq,
-                else => null,
-            };
-        }
-
-        pub fn getClass(kind: Binary.Kind) Class {
-            return switch (kind) {
-                .orb, .andb, .add, .sub, .mul, .div, .rem => .arith,
-                .equ, .neq, .les, .moreq => .bool,
-            };
-        }
-    };
-
-    left: Expr,
-    kind: Binary.Kind,
-    right: Expr,
 };
 
 pub const Field = struct {
