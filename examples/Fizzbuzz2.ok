@@ -3,29 +3,29 @@ extern fn printf(fmt: &u8, n: i32) void;
 extern fn fflush(filePtrAsU64: u64) void;
 
 fn main() i32 {
-  while (i : 1..21) {
-    let mut printNumber = true;
-    if (i % 3 == 0) {
-      putStr("fizz");
-      printNumber = false;
+    while (i : 1..21) {
+        let mut printNumber = true;
+        if (i % 3 == 0) {
+            putStr("fizz");
+            printNumber = false;
+        }
+        if (i % 5 == 0) {
+            putStr("buzz");
+            printNumber = false;
+        }
+        if (printNumber) {
+            putI32(i);
+        }
+        putStr("\n");
     }
-    if (i % 5 == 0) {
-      putStr("buzz");
-      printNumber = false;
-    }
-    if (printNumber) {
-      putI32(i);
-    }
-    putStr("\n");
-  }
-  return 0;
+    return 0;
 }
 
 fn putStr(s: []u8) void {
-  write(1, s.ptr, s.len);
+    write(1, s.ptr, s.len);
 }
 
 fn putI32(n: i32) void {
-  printf("%d".ptr, n);
-  fflush(0);
+    printf("%d".ptr, n);
+    fflush(0);
 }

@@ -1,6 +1,6 @@
 fn main() i32 {
-  let a = 123;
-  let b = a + 321;
-  let c = -321 - a;
-  return b + c;
+    let a = 123;
+    let b = a + 321;
+    let c = -321 - a;
+    return b + c;
 }

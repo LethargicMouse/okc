@@ -1,19 +1,23 @@
 extern fn printf(fmt: &u8, a: u8, b: u8) void;
 
 struct Pair {
-  first: u8,
-  second: u8,
+    first: u8,
+    second: u8,
 }
 
 fn main() i32 {
-  let pair = makePair();
-  printf("%c-%c\n".ptr, pair.first, pair.second);
-  return 0;
+    let pair = makePair();
+    printf(
+        "%c-%c\n".ptr, 
+        pair.first, 
+        pair.second
+    );
+    return 0;
 }
 
 fn makePair() Pair {
-  return .{
-    first = '6',
-    second = '7',
-  };
+    return .{
+        first = '6',
+        second = '7',
+    };
 }

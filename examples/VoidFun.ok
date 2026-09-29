@@ -1,10 +1,10 @@
 extern fn puts(s: &u8) void;
 
 fn main() i32 {
-  putHello();
-  return 0;
+    putHello();
+    return 0;
 }
 
 fn putHello() void {
-  puts("hello".ptr);
+    puts("hello".ptr);
 }

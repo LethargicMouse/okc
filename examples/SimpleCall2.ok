@@ -1,10 +1,10 @@
 extern fn printf(fmt: &u8, n: i32) void;
 
 fn main() i32 {
-  printf("%d".ptr, calc());
-  return 0;
+    printf("%d".ptr, calc());
+    return 0;
 }
 
 fn calc() i32 {
-  return 123;
+    return 123;
 }

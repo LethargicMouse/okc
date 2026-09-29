@@ -1,10 +1,10 @@
 extern fn write(fd: i32, s: &u8, n: u64) void;
 
 fn main() i32 {
-  putStr("hello there\n");
-  return 0;
+    putStr("hello there\n");
+    return 0;
 }
 
 fn putStr(msg: []u8) void {
-  write(1, msg.ptr, msg.len);
+    write(1, msg.ptr, msg.len);
 }

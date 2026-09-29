@@ -1,8 +1,8 @@
 extern fn puts(s: &u8) void;
 
 fn main() i32 {
-  let mut msg = "wazzup niggas";
-  msg = "oh gotta go nvm bye";
-  puts(msg.ptr);
-  return 0;
+    let mut msg = "wazzup niggas";
+    msg = "oh gotta go nvm bye";
+    puts(msg.ptr);
+    return 0;
 }

@@ -1,16 +1,16 @@
 extern fn write(fd: i32, ptr: &u8, len: u64) void;
 
 fn main() i32 {
-  let list = [
-    "six ",
-    "seven\n",
-  ];
-  while (s : list) {
-    putStr(s);
-  }
-  return 0;
+    let list = [
+        "six ",
+        "seven\n",
+    ];
+    while (s : list) {
+        putStr(s);
+    }
+    return 0;
 }
 
 fn putStr(s: []u8) void {
-  write(1, s.ptr, s.len);
+    write(1, s.ptr, s.len);
 }

@@ -1,12 +1,12 @@
 struct termios {
-  _iflag: u32,
-  oflag: u32,
-  _cflag: u32,
-  lflag: u32,
-  _line: u8,
-  cc: [32]u8,
-  _ispeed: u32,
-  _ospeed: u32,
+    _iflag: u32,
+    oflag: u32,
+    _cflag: u32,
+    lflag: u32,
+    _line: u8,
+    cc: [32]u8,
+    _ispeed: u32,
+    _ospeed: u32,
 }
 
 extern fn tcgetattr(fd: i32, config: &mut termios) void;
@@ -15,35 +15,35 @@ extern fn read(fd: i32, ptr: &mut u8, len: u64) void;
 extern fn write(fd: i32, ptr: &u8, len: u64) void;
 
 fn main() i32 {
-  let mut config: termios = undefined;
-  let stdin = 0;
-  tcgetattr(stdin, &config);
-  let oldConfig = config;
-  let echo = 8;
-  let icanon = 2;
-  config.lflag &= ~(echo | icanon);
-  let opost = 1;
-  config.oflag &= ~(opost);
-  let vtime = 5;
-  config.cc[vtime] = 1;
-  let vmin = 6;
-  config.cc[vmin] = 0;
-  let flush = 2;
-  tcsetattr(stdin, flush, &config);
-  putStr("\x1b[2J    six seven");
-  while (true) {
-    let mut input = 0;
-    read(stdin, &input, 1);
-    if (input == 'q') {
-      break;
+    let mut config: termios = undefined;
+    let stdin = 0;
+    tcgetattr(stdin, &config);
+    let oldConfig = config;
+    let echo = 8;
+    let icanon = 2;
+    config.lflag &= ~(echo | icanon);
+    let opost = 1;
+    config.oflag &= ~(opost);
+    let vtime = 5;
+    config.cc[vtime] = 1;
+    let vmin = 6;
+    config.cc[vmin] = 0;
+    let flush = 2;
+    tcsetattr(stdin, flush, &config);
+    putStr("\x1b[2J    six seven");
+    while (true) {
+        let mut input = 0;
+        read(stdin, &input, 1);
+        if (input == 'q') {
+            break;
+        }
     }
-  }
-  tcsetattr(stdin, flush, &oldConfig);
+    tcsetattr(stdin, flush, &oldConfig);
 
-  return 0;
+    return 0;
 }
 
 fn putStr(str: []u8) void {
-  let stdout = 1;
-  write(stdout, str.ptr, str.len);
+    let stdout = 1;
+    write(stdout, str.ptr, str.len);
 }
