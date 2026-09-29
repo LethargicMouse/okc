@@ -140,7 +140,10 @@ pub fn init(
     write_buf: []u8,
     path: []const u8,
 ) !Codegen {
-    const file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    const file = std.Io.Dir.cwd().createFile(io, path, .{}) catch {
+        std.log.err("failed to create `{s}`", .{path});
+        return error.Handled;
+    };
     return .{
         .io = io,
         .gpa = gpa,
@@ -159,7 +162,7 @@ pub fn init(
 pub fn run(gen: *Codegen) !void {
     defer gen.deinit();
     try gen.genAll();
-    try gen.writer.flush();
+    try gen.writer.interface.flush();
 }
 
 fn genAll(gen: *Codegen) !void {

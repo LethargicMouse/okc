@@ -9,8 +9,12 @@ const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
 
 pub fn main(init: std.process.Init) u8 {
-    const code = run(init) catch |err| switch (err) {
-        error.Handled => return 1,
+    const code = run(init) catch |err| {
+        switch (err) {
+            error.Handled => {},
+            error.OutOfMemory => std.log.err("out of memory", .{}),
+        }
+        return 1;
     };
     return code;
 }
@@ -58,23 +62,53 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var checker = try Checker.init(gpa, &checker_arena, &ast_typ_memo);
     const items = try checker.run(ast);
 
-    try std.Io.Dir.cwd().createDirPath(io, build_dir_path);
+    std.Io.Dir.cwd().createDirPath(io, build_dir_path) catch {
+        std.log.err("failed to create `" ++ build_dir_path ++ "`", .{});
+        return error.Handled;
+    };
 
     var write_buf: [256]u8 = undefined;
     var gen = try Codegen.init(io, gpa, &ast_typ_memo, items, &write_buf, out_ll_path);
-    try gen.run();
+    gen.run() catch |err| switch (err) {
+        error.WriteFailed => {
+            std.log.err("failed to write to `" ++ out_ll_path ++ "`", .{});
+            return error.Handled;
+        },
+        error.OutOfMemory => return error.OutOfMemory,
+    };
 
     const code = try runCmd(io, &.{ "clang", "-o", out_path, out_ll_path });
     // `Checker` should prevent incorrect IR
     std.debug.assert(code == 0);
 }
 
-fn runCmd(io: std.Io, comptime argv: []const []const u8) !u8 {
-    var child = try std.process.spawn(io, .{ .argv = argv });
-    const term = try child.wait(io);
+fn runCmd(io: std.Io, argv: []const []const u8) !u8 {
+    var child = std.process.spawn(io, .{ .argv = argv }) catch {
+        std.log.err("failed to run `{f}`", .{ConcatStr(" "){ .items = argv }});
+        return error.Handled;
+    };
+    const term = child.wait(io) catch {
+        std.log.err("failed to wait for `{f}`", .{ConcatStr(" "){ .items = argv }});
+        return error.Handled;
+    };
     return switch (term) {
         .exited => |code| code,
         .signal, .stopped, .unknown => 1,
+    };
+}
+
+fn ConcatStr(sep: []const u8) type {
+    return struct {
+        items: []const []const u8,
+
+        pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+            if (self.items.len != 0) {
+                try writer.writeAll(self.items[0]);
+                for (self.items[1..]) |item| {
+                    try writer.print("{s}{s}", .{ sep, item });
+                }
+            }
+        }
     };
 }
 
