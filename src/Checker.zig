@@ -7,8 +7,6 @@ const Memo = @import("memo.zig").Memo;
 const Resolver = @import("resolver.zig").Resolver;
 const Typ = @import("typ.zig").Typ;
 
-const Error = error{OutOfMemory};
-
 const ConvertReq = struct {
     to: *Ast.Typ,
     from: Typ,
@@ -104,7 +102,7 @@ pub fn init(
     gpa: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
     ast_typ_memo: *Memo(Ast.Typ),
-) !Checker {
+) error{OutOfMemory}!Checker {
     return .{
         .gpa = gpa,
         .arena = arena,
@@ -119,7 +117,9 @@ pub fn init(
     };
 }
 
-pub fn run(checker: *Checker, ast: Ast) !std.StringHashMap(*const Ast.Item) {
+const CheckError = error{ OutOfMemory, Handled };
+
+pub fn run(checker: *Checker, ast: Ast) CheckError!std.StringHashMap(*const Ast.Item) {
     defer checker.deinit();
     errdefer checker.ast_items.deinit();
     try checker.checkAst(ast);
@@ -517,7 +517,7 @@ fn freeVars(checker: *Checker, rbp: usize) void {
     checker.vars_stack.shrinkRetainingCapacity(rbp);
 }
 
-fn checkStmt(checker: *Checker, stmt: *Ast.Stmt) Error!ControlFlow {
+fn checkStmt(checker: *Checker, stmt: *Ast.Stmt) error{OutOfMemory}!ControlFlow {
     switch (stmt.kind) {
         .for_range => |*forr| return checker.checkForRange(forr),
         .forr => |*forr| return checker.checkFor(forr),
@@ -586,7 +586,7 @@ fn checkIgnore(checker: *Checker, ignore: *Ast.Stmt.Ignore, location: Location) 
     return .cont;
 }
 
-fn checkBreak(checker: *Checker, location: Location) Error!ControlFlow {
+fn checkBreak(checker: *Checker, location: Location) error{OutOfMemory}!ControlFlow {
     if (checker.loops_nested == 0) {
         checker.fail(location, "`break` outside of loop", .{});
         return .cont;
@@ -790,7 +790,7 @@ fn declareVar(checker: *Checker, name: []const u8, vari: Var, location: Location
     });
 }
 
-fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) Error!ExprInfo {
+fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) error{OutOfMemory}!ExprInfo {
     switch (expr.kind) {
         .subslice => |subslice| return checker.checkSubslice(subslice, expr.location),
         .sizeof => |typ| return checker.checkSizeof(typ),
@@ -937,7 +937,7 @@ fn checkStructExpr(
     struc: *Ast.Expr.Struct,
     location: Location,
     hint: Typ,
-) Error!ExprInfo {
+) error{OutOfMemory}!ExprInfo {
     const err = ExprInfo{
         .typ = .err,
         .mutable = false,
@@ -1456,7 +1456,7 @@ pub fn checkTypDecl(checker: *Checker, name: Ast.Typ.Name) void {
     }
 }
 
-fn checkTyp(checker: *Checker, typ: Ast.Typ) Error!Typ {
+fn checkTyp(checker: *Checker, typ: Ast.Typ) error{OutOfMemory}!Typ {
     if (checker.checked_typs.get(typ)) |res| {
         return res;
     }

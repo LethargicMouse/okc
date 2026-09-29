@@ -5,7 +5,7 @@ const Pos = @This();
 line: u32,
 symbol: u32,
 
-pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) ![]const Pos {
+pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) error{OutOfMemory}![]const Pos {
     var vec = try std.ArrayList(Pos).initCapacity(gpa, code.len + 2);
     var current = start;
     for (code) |c| {

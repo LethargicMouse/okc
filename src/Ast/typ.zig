@@ -29,7 +29,7 @@ pub const Typ = union(enum) {
             };
         }
 
-        pub fn resolve(name: Name, resolver: *Resolver) !Name {
+        pub fn resolve(name: Name, resolver: *Resolver) error{OutOfMemory}!Name {
             const resolved = try name.delocate().resolve(resolver);
             return .{
                 .name = resolved.name,

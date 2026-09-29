@@ -6,7 +6,9 @@ code: []const u8,
 name: []const u8,
 lines: []const []const u8,
 
-pub fn read(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !Source {
+const Error = error{ OutOfMemory, Handled };
+
+pub fn read(io: std.Io, gpa: std.mem.Allocator, path: []const u8) Error!Source {
     const code = std.Io.Dir.cwd().readFileAlloc(io, path, gpa, .unlimited) catch {
         std.log.err("failed to read `{s}`", .{path});
         return error.Handled;

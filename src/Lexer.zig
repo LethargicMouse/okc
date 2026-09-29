@@ -124,7 +124,7 @@ source: Source,
 poses: []const Pos,
 cursor: usize = 0,
 
-pub fn init(gpa: std.mem.Allocator, source: Source) !Lexer {
+pub fn init(gpa: std.mem.Allocator, source: Source) error{OutOfMemory}!Lexer {
     const poses = try Pos.makePoses(gpa, source.code);
     return .{
         .source = source,
@@ -132,7 +132,7 @@ pub fn init(gpa: std.mem.Allocator, source: Source) !Lexer {
     };
 }
 
-pub fn lex(lexer: *Lexer, gpa: std.mem.Allocator) ![]const Token {
+pub fn lex(lexer: *Lexer, gpa: std.mem.Allocator) error{OutOfMemory}![]const Token {
     defer lexer.deinit(gpa);
     var vec = std.ArrayList(Token).empty;
     try lexer.populate(gpa, &vec);

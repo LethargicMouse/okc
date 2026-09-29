@@ -101,7 +101,7 @@ pub fn init(
     };
 }
 
-pub fn run(parser: *Parser) !Ast {
+pub fn run(parser: *Parser) error{ OutOfMemory, Handled }!Ast {
     defer parser.deinit();
     const ast = try parser.parseMaybe(Ast, parseAst) orelse {
         std.log.err("failed to parse {f}\n{f}\n        found  {s}", .{

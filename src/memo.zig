@@ -21,7 +21,7 @@ pub fn Memo(T: type) type {
             self.* = undefined;
         }
 
-        pub fn box(self: *Self, val: T) !*const T {
+        pub fn box(self: *Self, val: T) error{OutOfMemory}!*const T {
             const entry = try self.map.getOrPut(val);
             if (!entry.found_existing) {
                 const ptr = try self.arena.allocator().create(T);

@@ -7,7 +7,7 @@ pub fn Array(Typ: type) type {
         len: u64,
         typ: *const Typ,
 
-        pub fn resolve(array: @This(), resolver: *Resolver(Typ)) !@This() {
+        pub fn resolve(array: @This(), resolver: *Resolver(Typ)) error{OutOfMemory}!@This() {
             const new = try array.typ.resolve(resolver);
             const new_ptr = try resolver.memo.box(new);
             return .{
@@ -35,7 +35,7 @@ pub fn Name(Typ: type) type {
         name: []const u8,
         generics: []const Typ = &.{},
 
-        pub fn resolve(name: @This(), resolver: *Resolver(Typ)) !@This() {
+        pub fn resolve(name: @This(), resolver: *Resolver(Typ)) error{OutOfMemory}!@This() {
             const generics = try resolver.memo.arena.allocator().alloc(Typ, name.generics.len);
             for (generics, name.generics) |*target, generic| {
                 target.* = try generic.resolve(resolver);
@@ -84,7 +84,7 @@ pub fn Ptr(Typ: type) type {
         typ: *const Typ,
         mutable: bool,
 
-        pub fn resolve(ptr: @This(), resolver: *Resolver(Typ)) !@This() {
+        pub fn resolve(ptr: @This(), resolver: *Resolver(Typ)) error{OutOfMemory}!@This() {
             const new = try ptr.typ.resolve(resolver);
             const new_ptr = try resolver.memo.box(new);
             return .{
@@ -117,7 +117,7 @@ pub fn Slice(Typ: type) type {
         typ: *const Typ,
         mutable: bool,
 
-        pub fn resolve(slice: @This(), resolver: *Resolver(Typ)) !@This() {
+        pub fn resolve(slice: @This(), resolver: *Resolver(Typ)) error{OutOfMemory}!@This() {
             const new = try slice.typ.resolve(resolver);
             const ptr = try resolver.memo.box(new);
             return .{
@@ -150,7 +150,7 @@ pub fn Fun(Typ: type) type {
         params: []const Typ,
         ret_typ: *const Typ,
 
-        pub fn resolve(fun: @This(), resolver: *Resolver(Typ)) !@This() {
+        pub fn resolve(fun: @This(), resolver: *Resolver(Typ)) error{OutOfMemory}!@This() {
             const params = try resolver.memo.arena.allocator().alloc(Typ, fun.params.len);
             for (params, fun.params) |*target, param| {
                 target.* = try param.resolve(resolver);

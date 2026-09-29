@@ -139,7 +139,7 @@ pub fn init(
     items: std.StringHashMap(*const Ast.Item),
     write_buf: []u8,
     path: []const u8,
-) !Codegen {
+) error{ OutOfMemory, Handled }!Codegen {
     const file = std.Io.Dir.cwd().createFile(io, path, .{}) catch {
         std.log.err("failed to create `{s}`", .{path});
         return error.Handled;
@@ -159,7 +159,7 @@ pub fn init(
     };
 }
 
-pub fn run(gen: *Codegen) !void {
+pub fn run(gen: *Codegen) error{ WriteFailed, OutOfMemory }!void {
     defer gen.deinit();
     try gen.genAll();
     try gen.writer.interface.flush();
