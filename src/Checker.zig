@@ -1350,10 +1350,16 @@ fn checkCall(checker: *Checker, call: *Ast.Expr.Call, location: Location, hint: 
     const ret_typ = try header.ret_typ.resolve(&resolver);
     // to propagate hint to generics
     _ = ret_typ.unify(hint, true);
-    for (call.args, header.params) |*arg, param| {
+    call.params = try checker.arena.allocator().alloc(Ast.Typ, header.params.len);
+    for (call.args, header.params, call.params) |*arg, param, *target| {
         const param_typ = try param.resolve(&resolver);
         const info = try checker.checkExpr(arg, .{ .typ = param_typ.normalise() });
         _ = checker.unify(arg.location, param_typ, info.typ);
+        try checker.convert_queue.append(checker.gpa, .{
+            .location = arg.location,
+            .from = param_typ,
+            .to = target,
+        });
     }
     call.generics = try checker.ast_typ_memo.arena.allocator().alloc(Ast.Typ, header.generics.len);
     for (call.generics, header.generics) |*target, generic| {

@@ -127,10 +127,15 @@ structs: HashMap(Name, Struct),
 consts: std.StringHashMap(Typ),
 vars: std.StringHashMap(Ref),
 loop_ends: std.ArrayList(u32) = .empty,
-fun_queue: std.ArrayList(Name) = .empty,
+fun_queue: std.ArrayList(FunReq) = .empty,
 generated: HashMap(Name, void),
 resolver: Resolver,
 next_tmp: u32 = 0,
+
+const FunReq = struct {
+    name: Name,
+    fun: Typ.Fun,
+};
 
 pub fn init(
     io: std.Io,
@@ -168,20 +173,26 @@ pub fn run(gen: *Codegen) error{ WriteFailed, OutOfMemory }!void {
 fn genAll(gen: *Codegen) !void {
     try gen.print("target triple = \"x86_64-pc-linux-gnu\"", .{});
     try gen.genSliceDecl();
-    try gen.genFunNamed(.{ .name = "main" });
+    try gen.genFunNamed(.{
+        .name = .{ .name = "main" },
+        .fun = .{
+            .params = &.{},
+            .ret_typ = try gen.typ_memo.box(.{ .prime = .i32 }),
+        },
+    });
     while (gen.fun_queue.items.len != 0) {
-        const name = gen.fun_queue.pop().?;
-        try gen.genFunNamed(name);
+        const req = gen.fun_queue.pop().?;
+        try gen.genFunNamed(req);
     }
     try gen.print("\n", .{});
 }
 
-fn genFunNamed(gen: *Codegen, name: Name) !void {
-    const item = gen.items.get(name.name).?;
+fn genFunNamed(gen: *Codegen, req: FunReq) !void {
+    const item = gen.items.get(req.name.name).?;
     const fun = switch (item.kind) {
         .typ => unreachable,
         .ext_fun => |ext_fun| {
-            const was = try gen.generated.getOrPut(.{ .name = name.name });
+            const was = try gen.generated.getOrPut(req.name);
             if (was.found_existing) {
                 return;
             }
@@ -191,14 +202,14 @@ fn genFunNamed(gen: *Codegen, name: Name) !void {
         .fun => |fun| fun,
         .constant, .struc => unreachable,
     };
-    const was = try gen.generated.getOrPut(name);
+    const was = try gen.generated.getOrPut(req.name);
     if (was.found_existing) {
         return;
     }
-    for (fun.header.generics, name.generics) |generic, typ| {
+    for (fun.header.generics, req.name.generics) |generic, typ| {
         try gen.resolver.map.put(generic.name, typ);
     }
-    try gen.genFun(fun, name.generics);
+    try gen.genFun(fun, req.name.generics, req.fun);
 }
 
 const i8_typ: Typ = .i8;
@@ -272,12 +283,11 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
     };
 }
 
-fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
+fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ, fun_typ: Typ.Fun) !void {
     gen.buffer = gen.extra_buffer;
-    const ret_resolved = try fun.header.ret_typ.resolve(&gen.resolver);
     try gen.print(
         "\ndefine {f} @\"{f}\"(",
-        .{ LlvmTyp{ .inner = ret_resolved }, Name{
+        .{ LlvmTyp{ .inner = fun_typ.ret_typ.* }, Name{
             .name = fun.header.name,
             .generics = generics,
         } },
@@ -285,12 +295,10 @@ fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ) !void {
     var param_typ_vals = try gen.gpa.alloc(TypVal, fun.header.params.len);
     defer gen.gpa.free(param_typ_vals);
     if (fun.header.params.len != 0) {
-        const first_resolved = try fun.header.params[0].typ.resolve(&gen.resolver);
-        param_typ_vals[0] = try gen.genParam(first_resolved);
-        for (param_typ_vals[1..], fun.header.params[1..]) |*target, param| {
+        param_typ_vals[0] = try gen.genParam(fun_typ.params[0]);
+        for (param_typ_vals[1..], fun_typ.params[1..]) |*target, param_typ| {
             try gen.print(", ", .{});
-            const resolved = try param.typ.resolve(&gen.resolver);
-            target.* = try gen.genParam(resolved);
+            target.* = try gen.genParam(param_typ);
         }
     }
     try gen.print(
@@ -621,8 +629,14 @@ fn genCall(gen: *Codegen, call: Ast.Expr.Call) !TypVal {
             name.generics = call.generics;
         }
         try gen.fun_queue.append(gen.gpa, .{
-            .name = call.name,
-            .generics = call.generics,
+            .name = .{
+                .name = call.name,
+                .generics = call.generics,
+            },
+            .fun = .{
+                .params = call.params,
+                .ret_typ = try gen.typ_memo.box(call.ret_typ),
+            },
         });
         params = item.getHeader().?.params;
     }
@@ -1219,17 +1233,21 @@ fn genVar(gen: *Codegen, name: []const u8) !TypVal {
 
 fn genFnPtr(gen: *Codegen, name: []const u8) !TypVal {
     const item = gen.items.get(name).?;
-    try gen.fun_queue.append(gen.gpa, .{ .name = name, .generics = &.{} });
     const header = item.getHeader().?;
     const params = try gen.typ_memo.arena.allocator().alloc(Typ, header.params.len);
     for (params, header.params) |*target, param| {
         target.* = param.typ;
     }
+    const fun = Typ.Fun{
+        .params = params,
+        .ret_typ = try gen.typ_memo.box(header.ret_typ),
+    };
+    try gen.fun_queue.append(gen.gpa, .{
+        .name = .{ .name = name },
+        .fun = fun,
+    });
     return .{
-        .typ = .{ .fun = .{
-            .params = params,
-            .ret_typ = try gen.typ_memo.box(header.ret_typ),
-        } },
+        .typ = .{ .fun = fun },
         .val = .{ .global = name },
     };
 }

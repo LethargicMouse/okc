@@ -71,6 +71,7 @@ pub const Call = struct {
     name: []const u8,
     args: []Expr,
     generics: []Typ = undefined,
+    params: []Typ = undefined,
     ret_typ: Typ = undefined,
 };
 
