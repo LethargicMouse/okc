@@ -294,3 +294,7 @@ test "Subslice.ok" {
 test "TypeAlias.ok" {
     try testFile("TypeAlias", "hello world");
 }
+
+test "Method.ok" {
+    try testFile("Method", "kitkat says six\nkitkat says seven\n");
+}
