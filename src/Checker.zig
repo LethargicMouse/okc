@@ -65,6 +65,7 @@ const Item = struct {
         fun: Header,
         vari: Var,
         struc: Struct,
+        typ: Typ,
     };
     kind: Kind,
     location: Location,
@@ -73,8 +74,7 @@ const Item = struct {
     fn deinit(item: *Item) void {
         switch (item.kind) {
             .struc => |*struc| struc.deinit(),
-            .fun => {},
-            .vari => {},
+            .fun, .vari, .typ => {},
         }
     }
 };
@@ -232,7 +232,7 @@ fn checkItems(checker: *Checker) void {
 fn checkItemUsage(checker: *Checker, item: Item) void {
     if (item.used) {
         switch (item.kind) {
-            .fun => {},
+            .fun, .typ => {},
             .vari => |vari| checker.checkVarUsage(vari, item.location),
             .struc => |struc| checker.checkStructUsage(struc),
         }
@@ -252,12 +252,23 @@ fn checkStructUsage(checker: *Checker, struc: Struct) void {
 
 fn regItem(checker: *Checker, item: *Ast.Item) !void {
     switch (item.kind) {
-        .typ => unreachable,
+        .typ_alias => |alias| try checker.regTypAlias(alias, item.location),
         .ext_fun => |ext_fun| try checker.regHeader(ext_fun.header, item.location),
         .struc => |struc| try checker.regStruct(struc, item.location),
         .fun => |fun| try checker.regHeader(fun.header, item.location),
         .constant => |*declare| try checker.regConst(declare, item.location),
     }
+}
+
+fn regTypAlias(checker: *Checker, alias: Ast.TypAlias, location: Location) !void {
+    if (checker.items.get(alias.name)) |prev| {
+        checker.failAlreadyDeclared(location, alias.name, prev.location);
+    }
+    const typ = try checker.checkTyp(alias.typ);
+    try checker.items.put(alias.name, .{
+        .location = location,
+        .kind = .{ .typ = typ },
+    });
 }
 
 fn regConst(checker: *Checker, declare: *Ast.Stmt.Declare, location: Location) !void {
@@ -330,10 +341,7 @@ fn checkArrayComptime(checker: *Checker, array: Ast.Expr.Array) void {
 
 fn checkItem(checker: *Checker, item: Ast.Item) !void {
     switch (item.kind) {
-        .typ => unreachable,
-        .ext_fun => {},
-        .struc => {},
-        .constant => {},
+        .typ_alias, .ext_fun, .struc, .constant => {},
         .fun => |fun| try checker.checkFun(fun, item.location),
     }
 }
@@ -1303,7 +1311,7 @@ fn checkVar(
                 .mutable = false,
             };
         },
-        .struc => {
+        .struc, .typ => {
             checker.fail(expr.location, "it is a type", .{});
             return err;
         },
@@ -1396,7 +1404,7 @@ fn getHeader(checker: *Checker, name: []const u8, location: Location) ?Header {
                 return null;
             },
         },
-        .struc => {
+        .struc, .typ => {
             checker.fail(location, "expected function, found type", .{});
             return null;
         },
@@ -1442,14 +1450,18 @@ fn fail(checker: *Checker, location: Location, comptime msg: []const u8, args: a
     checker.errors_cnt += 1;
 }
 
-pub fn checkTypDecl(checker: *Checker, name: Ast.Typ.Name) void {
+pub fn checkTypDecl(checker: *Checker, name: Ast.Typ.Name) ?Typ {
     const item = checker.items.getPtr(name.name) orelse {
         checker.fail(name.location, "item `{s}` is not declared", .{name.name});
-        return;
+        return null;
     };
     switch (item.kind) {
         .fun, .vari => {
             checker.fail(name.location, "`{s}` is not a type", .{name.name});
+        },
+        .typ => |typ| {
+            item.used = true;
+            return typ;
         },
         .struc => |struc| {
             item.used = true;
@@ -1462,6 +1474,7 @@ pub fn checkTypDecl(checker: *Checker, name: Ast.Typ.Name) void {
             }
         },
     }
+    return null;
 }
 
 fn checkTyp(checker: *Checker, typ: Ast.Typ) error{OutOfMemory}!Typ {
@@ -1506,7 +1519,9 @@ fn checkTypFirstTime(checker: *Checker, typ: Ast.Typ) !Typ {
                 }
             }
             if (check_decl) {
-                checker.checkTypDecl(name);
+                if (checker.checkTypDecl(name)) |resolved| {
+                    return resolved;
+                }
             }
             const generics = try checker.arena.allocator().alloc(Typ, name.generics.len);
             for (generics, name.generics) |*target, generic| {

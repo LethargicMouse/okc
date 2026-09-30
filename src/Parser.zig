@@ -152,7 +152,7 @@ fn parseTypItem(parser: *Parser) !Ast.Item {
     try parser.expectLoud(.semi);
     return .{
         .location = location,
-        .kind = .{ .typ = .{
+        .kind = .{ .typ_alias = .{
             .name = name,
             .typ = typ,
         } },

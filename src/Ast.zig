@@ -66,7 +66,7 @@ pub const Item = struct {
         struc: Struct,
         fun: Fun,
         constant: Stmt.Declare,
-        typ: TypAlias,
+        typ_alias: TypAlias,
     };
 
     pub fn getName(item: Item) []const u8 {
@@ -75,7 +75,7 @@ pub const Item = struct {
             .struc => |struc| struc.name,
             .fun => |fun| fun.header.name,
             .constant => |declare| declare.name,
-            .typ => |typ| typ.name,
+            .typ_alias => |typ| typ.name,
         };
     }
 
@@ -83,7 +83,7 @@ pub const Item = struct {
         return switch (item.kind) {
             .ext_fun => |ext_fun| ext_fun.header,
             .fun => |fun| fun.header,
-            .constant, .struc, .typ => null,
+            .constant, .struc, .typ_alias => null,
         };
     }
 };

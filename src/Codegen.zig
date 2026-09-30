@@ -190,7 +190,7 @@ fn genAll(gen: *Codegen) !void {
 fn genFunNamed(gen: *Codegen, req: FunReq) !void {
     const item = gen.items.get(req.name.name).?;
     const fun = switch (item.kind) {
-        .typ => unreachable,
+        .typ_alias => unreachable,
         .ext_fun => |ext_fun| {
             const was = try gen.generated.getOrPut(req.name);
             if (was.found_existing) {
