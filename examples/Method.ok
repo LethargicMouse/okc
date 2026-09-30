@@ -3,7 +3,7 @@ extern fn printf(fmt: &u8, a: &u8, b: &u8) void;
 struct Cat {
     name: []u8,
 
-    fn say(self, phrase: []u8) void {
+    fn say(self: Self, phrase: []u8) void {
         printf("%s says %s\n", self.name, phrase);
     }
 }

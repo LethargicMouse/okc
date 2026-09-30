@@ -298,7 +298,7 @@ fn checkConstExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) !Typ {
 fn checkExprComptime(checker: *Checker, expr: Ast.Expr) void {
     switch (expr.kind) {
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
-        .call => checker.fail(expr.location, "cannot evaluate at compile time", .{}),
+        .call, .method => checker.fail(expr.location, "cannot evaluate at compile time", .{}),
         .fn_ptr => unreachable,
         .field => |field| checker.checkExprComptime(field.expr),
         .unary => |unary| checker.checkExprComptime(unary.expr),
@@ -802,6 +802,7 @@ fn declareVar(checker: *Checker, name: []const u8, vari: Var, location: Location
 
 fn checkExpr(checker: *Checker, expr: *Ast.Expr, hint: ExprHint) error{OutOfMemory}!ExprInfo {
     switch (expr.kind) {
+        .method => unreachable,
         .subslice => |subslice| return checker.checkSubslice(subslice, expr.location),
         .sizeof => |typ| return checker.checkSizeof(typ),
         .array => |*array| return checker.checkArray(array, expr.location, hint.typ),

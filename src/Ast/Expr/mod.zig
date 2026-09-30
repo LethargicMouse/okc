@@ -10,6 +10,7 @@ location: Location,
 kind: Kind,
 
 pub const Kind = union(enum) {
+    method: Call,
     subslice: *Subslice,
     sizeof: Typ,
     array: Array,

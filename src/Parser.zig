@@ -130,7 +130,7 @@ fn parseAst(parser: *Parser) !Ast {
     };
 }
 
-fn parseItemLoud(parser: *Parser) !Ast.Item {
+fn parseItemLoud(parser: *Parser) Error!Ast.Item {
     return parser.parseEither(Ast.Item, &.{
         parseFunItem,
         parseStructItem,
@@ -198,11 +198,16 @@ fn parseStruct(parser: *Parser) !Ast.Item.Struct {
     const generics = try parser.parseMaybe([]const Ast.Item.Generic, parseGenerics) orelse &.{};
     try parser.expectLoud(.curl);
     const fields = try parser.parseSep(Ast.Item.Struct.Field, parseFieldDeclLoud);
+    var items: []Ast.Item = &.{};
+    if (parser.cursor != 0 and parser.tokens[parser.cursor - 1].lexeme == .comma) {
+        items = try parser.parseMany(Ast.Item, parseItemLoud);
+    }
     try parser.expect(.curr);
     return .{
         .name = name,
         .generics = generics,
         .fields = fields,
+        .items = items,
     };
 }
 

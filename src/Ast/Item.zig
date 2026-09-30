@@ -37,6 +37,7 @@ pub const Struct = struct {
     name: []const u8,
     generics: []const Generic,
     fields: []Field,
+    items: []Item,
 
     pub const Field = struct {
         name: []const u8,
