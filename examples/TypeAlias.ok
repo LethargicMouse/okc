@@ -1,0 +1,12 @@
+extern fn write(fd: i32, ptr: &u8, size: u64) void;
+
+type Str = []u8;
+
+fn main() i32 {
+    putStr("hello world");
+    return 0;
+}
+
+fn putStr(str: Str) void {
+    write(1, str.ptr, str.len);
+}

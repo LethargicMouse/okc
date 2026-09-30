@@ -52,16 +52,22 @@ pub const FieldDecl = struct {
     location: Location,
 };
 
+pub const TypAlias = struct {
+    name: []const u8,
+    typ: Typ,
+};
+
 pub const Item = struct {
+    kind: Kind,
+    location: Location,
+
     pub const Kind = union(enum) {
         ext_fun: ExtFun,
         struc: Struct,
         fun: Fun,
         constant: Stmt.Declare,
+        typ: TypAlias,
     };
-
-    kind: Kind,
-    location: Location,
 
     pub fn getName(item: Item) []const u8 {
         return switch (item.kind) {
@@ -69,6 +75,7 @@ pub const Item = struct {
             .struc => |struc| struc.name,
             .fun => |fun| fun.header.name,
             .constant => |declare| declare.name,
+            .typ => |typ| typ.name,
         };
     }
 
@@ -76,7 +83,7 @@ pub const Item = struct {
         return switch (item.kind) {
             .ext_fun => |ext_fun| ext_fun.header,
             .fun => |fun| fun.header,
-            .constant, .struc => null,
+            .constant, .struc, .typ => null,
         };
     }
 };

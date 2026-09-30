@@ -11,6 +11,7 @@ pub const Lexeme = union(enum) {
     int: u64,
     str: []const u8,
     char: u8,
+    typ,
     fals,
     dot2,
     int_too_big,
@@ -61,6 +62,7 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .typ => "`type`",
             .fals => "`false`",
             .dot2 => "`..`",
             .forr => "`for`",
@@ -262,6 +264,7 @@ fn lexVerbal(lexer: *Lexer) ?Token {
 }
 
 const verbal_list = [_]LexPair{
+    .{ .str = "type", .lexeme = .typ },
     .{ .str = "false", .lexeme = .fals },
     .{ .str = "for", .lexeme = .forr },
     .{ .str = "unreachable", .lexeme = .unre },

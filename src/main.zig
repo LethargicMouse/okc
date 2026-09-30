@@ -290,3 +290,7 @@ test "Fizzbuzz2.ok" {
 test "Subslice.ok" {
     try testFile("Subslice", "6\n7\n");
 }
+
+test "TypeAlias.ok" {
+    try testFile("TypeAlias", "hello world");
+}

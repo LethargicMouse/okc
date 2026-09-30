@@ -136,9 +136,26 @@ fn parseItemLoud(parser: *Parser) !Ast.Item {
         parseStructItem,
         parseExtFunItem,
         parseConstantItem,
+        parseTypItem,
     }) catch |err| {
         try parser.fail("<item>");
         return err;
+    };
+}
+
+fn parseTypItem(parser: *Parser) !Ast.Item {
+    try parser.expect(.typ);
+    const location = parser.getLocation();
+    const name = try parser.parseNameLoud();
+    try parser.expectLoud(.equ);
+    const typ = try parser.parseTypLoud();
+    try parser.expectLoud(.semi);
+    return .{
+        .location = location,
+        .kind = .{ .typ = .{
+            .name = name,
+            .typ = typ,
+        } },
     };
 }
 
