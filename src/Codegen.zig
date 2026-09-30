@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Ast = @import("Ast.zig");
+const Ast = @import("Ast/mod.zig");
 const Typ = Ast.Typ;
 const HashMap = @import("hash_map.zig").HashMap;
 const Memo = @import("memo.zig").Memo;

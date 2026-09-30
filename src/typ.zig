@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Ast = @import("Ast.zig");
+const Ast = @import("Ast/mod.zig");
 const Memo = @import("memo.zig").Memo;
 const Resolver = @import("resolver.zig").Resolver(Typ);
 const typ_kinds = @import("typ_kinds.zig");

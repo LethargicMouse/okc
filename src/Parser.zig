@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Ast = @import("Ast.zig");
+const Ast = @import("Ast/mod.zig");
 const Lexer = @import("Lexer.zig");
 const Lexeme = Lexer.Lexeme;
 const Location = @import("Location.zig");
