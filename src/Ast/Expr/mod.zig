@@ -1,8 +1,8 @@
-const Lexeme = @import("../Lexer.zig").Lexeme;
-const Location = @import("../Location.zig");
-pub const Binary = @import("Expr/Binary.zig");
-pub const Unary = @import("Expr/Unary.zig");
-const Typ = @import("typ.zig").Typ;
+const Lexeme = @import("../../Lexer.zig").Lexeme;
+const Location = @import("../../Location.zig");
+pub const Binary = @import("Binary.zig");
+pub const Unary = @import("Unary.zig");
+const Typ = @import("../typ.zig").Typ;
 
 const Expr = @This();
 

@@ -1,5 +1,5 @@
 const Location = @import("../Location.zig");
-const Expr = @import("Expr.zig");
+const Expr = @import("Expr/mod.zig");
 const Typ = @import("typ.zig").Typ;
 
 const Stmt = @This();
