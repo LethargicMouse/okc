@@ -179,6 +179,7 @@ fn genAll(gen: *Codegen) !void {
 fn genFunNamed(gen: *Codegen, name: Name) !void {
     const item = gen.items.get(name.name).?;
     const fun = switch (item.kind) {
+        .typ => unreachable,
         .ext_fun => |ext_fun| {
             const was = try gen.generated.getOrPut(.{ .name = name.name });
             if (was.found_existing) {

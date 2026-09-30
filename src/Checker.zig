@@ -252,6 +252,7 @@ fn checkStructUsage(checker: *Checker, struc: Struct) void {
 
 fn regItem(checker: *Checker, item: *Ast.Item) !void {
     switch (item.kind) {
+        .typ => unreachable,
         .ext_fun => |ext_fun| try checker.regHeader(ext_fun.header, item.location),
         .struc => |struc| try checker.regStruct(struc, item.location),
         .fun => |fun| try checker.regHeader(fun.header, item.location),
@@ -329,6 +330,7 @@ fn checkArrayComptime(checker: *Checker, array: Ast.Expr.Array) void {
 
 fn checkItem(checker: *Checker, item: Ast.Item) !void {
     switch (item.kind) {
+        .typ => unreachable,
         .ext_fun => {},
         .struc => {},
         .constant => {},
