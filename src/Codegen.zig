@@ -218,7 +218,7 @@ fn genSliceDecl(gen: *Codegen) !void {
     try gen.print("\n%\"[]\" = type {{ ptr, i64 }}", .{});
 }
 
-fn genExtFun(gen: *Codegen, ext_fun: Ast.ExtFun) !void {
+fn genExtFun(gen: *Codegen, ext_fun: Ast.Item.Fun.Extern) !void {
     try gen.print("\ndeclare {f} @{s}(", .{
         LlvmTyp{ .inner = ext_fun.header.ret_typ },
         ext_fun.header.name,
@@ -283,7 +283,7 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
     };
 }
 
-fn genFun(gen: *Codegen, fun: Ast.Fun, generics: []const Typ, fun_typ: Typ.Fun) !void {
+fn genFun(gen: *Codegen, fun: Ast.Item.Fun, generics: []const Typ, fun_typ: Typ.Fun) !void {
     gen.buffer = gen.extra_buffer;
     try gen.print(
         "\ndefine {f} @\"{f}\"(",
@@ -623,7 +623,7 @@ fn genCall(gen: *Codegen, call: Ast.Expr.Call) !TypVal {
         .name = call.name,
         .generics = &.{},
     };
-    var params: []const Ast.Param = &.{};
+    var params: []const Ast.Item.Fun.Header.Param = &.{};
     if (gen.items.get(call.name)) |item| {
         if (item.kind == .fun) {
             name.generics = call.generics;

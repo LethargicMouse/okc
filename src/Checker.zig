@@ -38,7 +38,7 @@ const Field = struct {
 };
 
 const Struct = struct {
-    generics: []const Ast.Generic,
+    generics: []const Ast.Item.Generic,
     fields: std.StringHashMap(Field),
 
     fn deinit(struc: *Struct) void {
@@ -55,7 +55,7 @@ const Var = struct {
 };
 
 const Header = struct {
-    generics: []const Ast.Generic,
+    generics: []const Ast.Item.Generic,
     params: []const Typ,
     ret_typ: Typ,
 };
@@ -92,7 +92,7 @@ items: std.StringHashMap(Item),
 ret_typ: Typ = undefined,
 errors_cnt: u16 = 0,
 loops_nested: u16 = 0,
-current_generics: []const Ast.Generic = &.{},
+current_generics: []const Ast.Item.Generic = &.{},
 generics_usage: std.DynamicBitSetUnmanaged,
 convert_queue: std.ArrayList(ConvertReq) = .empty,
 checked_typs: HashMap(Ast.Typ, Typ),
@@ -260,7 +260,7 @@ fn regItem(checker: *Checker, item: *Ast.Item) !void {
     }
 }
 
-fn regTypAlias(checker: *Checker, alias: Ast.TypAlias, location: Location) !void {
+fn regTypAlias(checker: *Checker, alias: Ast.Item.TypAlias, location: Location) !void {
     if (checker.items.get(alias.name)) |prev| {
         checker.failAlreadyDeclared(location, alias.name, prev.location);
     }
@@ -368,7 +368,7 @@ fn checkMain(checker: *Checker, location: Location) void {
     item.used = true;
 }
 
-fn regHeader(checker: *Checker, header: Ast.Header, location: Location) !void {
+fn regHeader(checker: *Checker, header: Ast.Item.Fun.Header, location: Location) !void {
     checker.current_generics = header.generics;
     try checker.generics_usage.resize(checker.gpa, header.generics.len, false);
     if (checker.items.get(header.name)) |prev| {
@@ -404,7 +404,7 @@ fn failAlreadyDeclared(
     );
 }
 
-fn regStruct(checker: *Checker, struc: Ast.Struct, location: Location) !void {
+fn regStruct(checker: *Checker, struc: Ast.Item.Struct, location: Location) !void {
     if (checker.items.get(struc.name)) |prev| {
         checker.failAlreadyDeclared(location, struc.name, prev.location);
         return;
@@ -442,7 +442,7 @@ fn regStruct(checker: *Checker, struc: Ast.Struct, location: Location) !void {
     });
 }
 
-fn checkGenericsRedeclare(checker: *Checker, generics: []const Ast.Generic) !void {
+fn checkGenericsRedeclare(checker: *Checker, generics: []const Ast.Item.Generic) !void {
     var map = std.StringHashMap(Location).init(checker.gpa);
     defer map.deinit();
     for (generics) |generic| {
@@ -463,7 +463,7 @@ fn checkGenericsUsage(checker: *Checker) void {
     }
 }
 
-fn checkFun(checker: *Checker, fun: Ast.Fun, location: Location) !void {
+fn checkFun(checker: *Checker, fun: Ast.Item.Fun, location: Location) !void {
     checker.ret_typ = checker.items.get(fun.header.name).?.kind.fun.ret_typ;
     const rbp = checker.vars_stack.items.len;
     for (fun.header.params) |param| {

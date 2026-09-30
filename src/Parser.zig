@@ -191,13 +191,13 @@ fn parseStructItem(parser: *Parser) !Ast.Item {
     };
 }
 
-fn parseStruct(parser: *Parser) !Ast.Struct {
+fn parseStruct(parser: *Parser) !Ast.Item.Struct {
     try parser.expect(.struc);
     parser.tmp_location = parser.getLocation();
     const name = try parser.parseNameLoud();
-    const generics = try parser.parseMaybe([]const Ast.Generic, parseGenerics) orelse &.{};
+    const generics = try parser.parseMaybe([]const Ast.Item.Generic, parseGenerics) orelse &.{};
     try parser.expectLoud(.curl);
-    const fields = try parser.parseSep(Ast.FieldDecl, parseFieldDeclLoud);
+    const fields = try parser.parseSep(Ast.Item.Struct.Field, parseFieldDeclLoud);
     try parser.expect(.curr);
     return .{
         .name = name,
@@ -206,14 +206,14 @@ fn parseStruct(parser: *Parser) !Ast.Struct {
     };
 }
 
-fn parseGenerics(parser: *Parser) ![]const Ast.Generic {
+fn parseGenerics(parser: *Parser) ![]const Ast.Item.Generic {
     try parser.expect(.les);
-    const res = try parser.parseSep(Ast.Generic, parseGenericLoud);
+    const res = try parser.parseSep(Ast.Item.Generic, parseGenericLoud);
     try parser.expect(.mor);
     return res;
 }
 
-fn parseGenericLoud(parser: *Parser) !Ast.Generic {
+fn parseGenericLoud(parser: *Parser) !Ast.Item.Generic {
     const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     return .{
@@ -222,7 +222,7 @@ fn parseGenericLoud(parser: *Parser) !Ast.Generic {
     };
 }
 
-fn parseFieldDeclLoud(parser: *Parser) !Ast.FieldDecl {
+fn parseFieldDeclLoud(parser: *Parser) !Ast.Item.Struct.Field {
     const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.colon);
@@ -236,7 +236,7 @@ fn parseFieldDeclLoud(parser: *Parser) !Ast.FieldDecl {
     };
 }
 
-fn parseExtFun(parser: *Parser) !Ast.ExtFun {
+fn parseExtFun(parser: *Parser) !Ast.Item.Fun.Extern {
     try parser.expect(.ext);
     const header = try parser.parseHeaderLoud();
     try parser.expectLoud(.semi);
@@ -245,21 +245,21 @@ fn parseExtFun(parser: *Parser) !Ast.ExtFun {
     };
 }
 
-fn parseHeaderLoud(parser: *Parser) !Ast.Header {
-    const header = try parser.parseMaybe(Ast.Header, parseHeader);
+fn parseHeaderLoud(parser: *Parser) !Ast.Item.Fun.Header {
+    const header = try parser.parseMaybe(Ast.Item.Fun.Header, parseHeader);
     return header orelse {
         try parser.fail("`fn`");
         return error.ParseFailed;
     };
 }
 
-fn parseHeader(parser: *Parser) !Ast.Header {
+fn parseHeader(parser: *Parser) !Ast.Item.Fun.Header {
     try parser.expect(.fun);
     parser.tmp_location = parser.getLocation();
     const name = try parser.parseNameLoud();
-    const generics = try parser.parseMaybe([]const Ast.Generic, parseGenerics) orelse &.{};
+    const generics = try parser.parseMaybe([]const Ast.Item.Generic, parseGenerics) orelse &.{};
     try parser.expectLoud(.parl);
-    const params = try parser.parseSep(Ast.Param, parseParamLoud);
+    const params = try parser.parseSep(Ast.Item.Fun.Header.Param, parseParamLoud);
     try parser.expect(.parr);
     const ret_typ = try parser.parseTypLoud();
     return .{
@@ -290,7 +290,7 @@ fn parseSep(parser: *Parser, T: type, parse: fn (*Parser) Error!T) ![]T {
     return slice;
 }
 
-fn parseParamLoud(parser: *Parser) !Ast.Param {
+fn parseParamLoud(parser: *Parser) !Ast.Item.Fun.Header.Param {
     const location = parser.getLocation();
     const name = try parser.parseNameLoud();
     try parser.expectLoud(.colon);
@@ -429,7 +429,7 @@ fn parseMaybe(parser: *Parser, T: type, parse: fn (*Parser) Error!T) !?T {
     return res;
 }
 
-fn parseFun(parser: *Parser) !Ast.Fun {
+fn parseFun(parser: *Parser) !Ast.Item.Fun {
     const header = try parser.parseHeader();
     const location = parser.tmp_location;
     const block = try parser.parseBlockLoud();
