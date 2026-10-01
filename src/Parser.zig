@@ -717,22 +717,22 @@ fn parseExprPosted(self: *Self, loud: bool) Error!Ast.Expr {
     var res = try self.parseExprAtom(loud);
     while (try self.parseMaybe(Postfix, parsePostfix)) |postfix| {
         switch (postfix.kind) {
-            .field => |field_postfix| {
+            .field => |name| {
                 const field = try self.ast_arena.allocator().create(Ast.Expr.Field);
                 field.* = .{
                     .expr = res,
-                    .name = field_postfix.name,
+                    .name = name,
                 };
                 res = .{
                     .location = res.location.combine(postfix.location),
                     .kind = .{ .field = field },
                 };
             },
-            .elem => |elem_postfix| {
+            .elem => |index| {
                 const elem = try self.ast_arena.allocator().create(Ast.Expr.Elem);
                 elem.* = .{
                     .expr = res,
-                    .index = elem_postfix.index,
+                    .index = index,
                 };
                 res = .{
                     .location = res.location.combine(postfix.location),
@@ -787,7 +787,7 @@ fn parseElemPostfix(self: *Self) !Postfix {
     try self.expectLoud(.brar);
     return .{
         .location = location,
-        .kind = .{ .elem = .{ .index = index } },
+        .kind = .{ .elem = index },
     };
 }
 
@@ -797,7 +797,7 @@ fn parseFieldPostfix(self: *Self) !Postfix {
     const name = try self.parseNameLoud();
     return .{
         .location = location,
-        .kind = .{ .field = .{ .name = name } },
+        .kind = .{ .field = name },
     };
 }
 
@@ -1124,22 +1124,14 @@ const Postfix = struct {
     location: Location,
 
     const Kind = union(enum) {
-        field: Field,
-        elem: Elem,
+        field: []const u8,
+        elem: Ast.Expr,
         subslice: Subslice,
+    };
 
-        const Elem = struct {
-            index: Ast.Expr,
-        };
-
-        const Field = struct {
-            name: []const u8,
-        };
-
-        const Subslice = struct {
-            start: Ast.Expr,
-            end: Ast.Expr,
-        };
+    const Subslice = struct {
+        start: Ast.Expr,
+        end: Ast.Expr,
     };
 };
 
