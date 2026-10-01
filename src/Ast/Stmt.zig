@@ -11,7 +11,7 @@ pub const Kind = union(enum) {
     for_range: ForRange,
     ret: Return,
     expr: Expr,
-    declare: Declare,
+    declare: Declare.Named,
     assign: Assign,
     op_assign: OpAssign,
     iff: If,
@@ -65,10 +65,14 @@ pub const Assign = struct {
 };
 
 pub const Declare = struct {
-    name: []const u8,
     typ: ?Typ,
     expr: Expr,
     mutable: bool,
+
+    pub const Named = struct {
+        name: []const u8,
+        declare: Declare,
+    };
 };
 
 pub const OpAssign = struct {

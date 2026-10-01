@@ -89,7 +89,7 @@ fn genFunNamed(self: *Self, req: FunReq) !void {
             if (was.found_existing) {
                 return;
             }
-            try self.genExtFun(ext_fun);
+            try self.genExtFun(req.name.name, ext_fun);
             return;
         },
         .fun => |fun| fun,
@@ -102,7 +102,7 @@ fn genFunNamed(self: *Self, req: FunReq) !void {
     for (fun.header.generics, req.name.generics) |generic, typ| {
         try self.resolver.map.put(generic.name, typ);
     }
-    try self.genFun(fun, req.name.generics, req.fun);
+    try self.genFun(req.name, fun, req.fun);
 }
 
 const i8_typ: Typ = .i8;
@@ -111,10 +111,10 @@ fn genSliceDecl(self: *Self) !void {
     try self.print("\n%\"[]\" = type {{ ptr, i64 }}", .{});
 }
 
-fn genExtFun(self: *Self, ext_fun: Ast.Item.Fun.Extern) !void {
+fn genExtFun(self: *Self, name: []const u8, ext_fun: Ast.Item.Fun.Extern) !void {
     try self.print("\ndeclare {f} @{s}(", .{
         LlvmTyp{ .inner = ext_fun.header.ret_typ },
-        ext_fun.header.name,
+        name,
     });
     if (ext_fun.header.params.len != 0) {
         try self.print("{f}", .{LlvmTyp{ .inner = ext_fun.header.params[0].typ }});
@@ -176,14 +176,16 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
     };
 }
 
-fn genFun(self: *Self, fun: Ast.Item.Fun, generics: []const Typ, fun_typ: Typ.Fun) !void {
+fn genFun(
+    self: *Self,
+    name: Name,
+    fun: Ast.Item.Fun,
+    fun_typ: Typ.Fun,
+) !void {
     self.buffer = self.extra_buffer;
     try self.print(
         "\ndefine {f} @\"{f}\"(",
-        .{ LlvmTyp{ .inner = fun_typ.ret_typ.* }, Name{
-            .name = fun.header.name,
-            .generics = generics,
-        } },
+        .{ LlvmTyp{ .inner = fun_typ.ret_typ.* }, name },
     );
     var param_typ_vals = try self.gpa.alloc(TypVal, fun.header.params.len);
     defer self.gpa.free(param_typ_vals);
@@ -297,7 +299,7 @@ fn genStmt(self: *Self, stmt: Ast.Stmt) Error!void {
         .unre => try self.genUnreachable(),
         .ret => |ret| try self.genRet(ret),
         .expr => |expr| _ = try self.genExpr(expr),
-        .declare => |declare| try self.genDeclare(declare),
+        .declare => |named| try self.genDeclare(named.name, named.declare),
         .assign => |assign| try self.genAssign(assign),
         .iff => |iff| try self.genIf(iff),
         .whi => |whi| try self.genWhile(whi),
@@ -327,8 +329,7 @@ fn genWhile(self: *Self, whi: Ast.Stmt.While) !void {
 
 fn genForRange(self: *Self, forr: Ast.Stmt.ForRange) !void {
     // int i = start
-    try self.genDeclare(.{
-        .name = forr.vari,
+    try self.genDeclare(forr.vari, .{
         .expr = forr.start,
         .typ = null,
         .mutable = false,
@@ -477,10 +478,10 @@ fn genAssign(self: *Self, assign: Ast.Stmt.Assign) !void {
     try self.storeInto(vari.val, typ_val);
 }
 
-fn genDeclare(self: *Self, declare: Ast.Stmt.Declare) !void {
+fn genDeclare(self: *Self, name: []const u8, declare: Ast.Stmt.Declare) !void {
     const typ_val = try self.genExpr(declare.expr);
     const vari = try self.toStack(typ_val);
-    try self.vars.put(declare.name, vari);
+    try self.vars.put(name, vari);
 }
 
 fn toStack(self: *Self, typ_val: TypVal) !Ref {

@@ -3,7 +3,8 @@ const Expr = @import("Expr/mod.zig");
 const Stmt = @import("Stmt.zig");
 const Typ = @import("typ.zig").Typ;
 
-const Item = @This();
+const Self = @This();
+name: []const u8,
 kind: Kind,
 location: Location,
 
@@ -15,18 +16,8 @@ pub const Kind = union(enum) {
     typ_alias: TypAlias,
 };
 
-pub fn getName(item: Item) []const u8 {
-    return switch (item.kind) {
-        .ext_fun => |ext_fun| ext_fun.header.name,
-        .struc => |struc| struc.name,
-        .fun => |fun| fun.header.name,
-        .constant => |declare| declare.name,
-        .typ_alias => |typ| typ.name,
-    };
-}
-
-pub fn getHeader(item: Item) ?Fun.Header {
-    return switch (item.kind) {
+pub fn getHeader(self: Self) ?Fun.Header {
+    return switch (self.kind) {
         .ext_fun => |ext_fun| ext_fun.header,
         .fun => |fun| fun.header,
         .constant, .struc, .typ_alias => null,
@@ -34,10 +25,9 @@ pub fn getHeader(item: Item) ?Fun.Header {
 }
 
 pub const Struct = struct {
-    name: []const u8,
     generics: []const Generic,
     fields: []Field,
-    items: []Item,
+    items: []Self,
 
     pub const Field = struct {
         name: []const u8,
@@ -56,7 +46,6 @@ pub const Fun = struct {
     };
 
     pub const Header = struct {
-        name: []const u8,
         generics: []const Generic,
         params: []const Param,
         ret_typ: Typ,
@@ -70,7 +59,6 @@ pub const Fun = struct {
 };
 
 pub const TypAlias = struct {
-    name: []const u8,
     typ: Typ,
 };
 

@@ -60,7 +60,7 @@ pub fn run(self: *Self, ast: Ast) CheckError!std.StringHashMap(*const Ast.Item) 
 
 fn checkAst(self: *Self, ast: Ast) !void {
     for (ast.items) |*item| {
-        try self.ast_items.put(item.getName(), item);
+        try self.ast_items.put(item.name, item);
         try self.regItem(item);
     }
     for (ast.items) |item| {
@@ -180,37 +180,37 @@ fn checkStructUsage(self: *Self, struc: Struct) void {
 
 fn regItem(self: *Self, item: *Ast.Item) !void {
     switch (item.kind) {
-        .typ_alias => |alias| try self.regTypAlias(alias, item.location),
-        .ext_fun => |ext_fun| try self.regHeader(ext_fun.header, item.location),
-        .struc => |struc| try self.regStruct(struc, item.location),
-        .fun => |fun| try self.regHeader(fun.header, item.location),
-        .constant => |*declare| try self.regConst(declare, item.location),
+        .typ_alias => |alias| try self.regTypAlias(item.name, alias, item.location),
+        .ext_fun => |ext_fun| try self.regHeader(item.name, ext_fun.header, item.location),
+        .struc => |struc| try self.regStruct(item.name, struc, item.location),
+        .fun => |fun| try self.regHeader(item.name, fun.header, item.location),
+        .constant => |*declare| try self.regConst(item.name, declare, item.location),
     }
 }
 
-fn regTypAlias(self: *Self, alias: Ast.Item.TypAlias, location: Location) !void {
-    if (self.items.get(alias.name)) |prev| {
-        self.failAlreadyDeclared(location, alias.name, prev.location);
+fn regTypAlias(self: *Self, name: []const u8, alias: Ast.Item.TypAlias, location: Location) !void {
+    if (self.items.get(name)) |prev| {
+        self.failAlreadyDeclared(location, name, prev.location);
     }
     const typ = try self.checkTyp(alias.typ);
-    try self.items.put(alias.name, .{
+    try self.items.put(name, .{
         .location = location,
         .kind = .{ .typ = typ },
     });
 }
 
-fn regConst(self: *Self, declare: *Ast.Stmt.Declare, location: Location) !void {
+fn regConst(self: *Self, name: []const u8, declare: *Ast.Stmt.Declare, location: Location) !void {
     const hint_typ = if (declare.typ) |typ| try self.checkTyp(typ) else .any;
     const typ = try self.checkConstExpr(&declare.expr, .{ .typ = hint_typ });
     if (declare.typ) |typ_decl| {
         const decl_typ = try self.checkTyp(typ_decl);
         _ = self.unify(location, decl_typ, typ);
     }
-    if (self.items.get(declare.name)) |prev| {
-        self.failAlreadyDeclared(location, declare.name, prev.location);
+    if (self.items.get(name)) |prev| {
+        self.failAlreadyDeclared(location, name, prev.location);
         return;
     }
-    try self.items.put(declare.name, .{ .location = location, .kind = .{ .vari = .{
+    try self.items.put(name, .{ .location = location, .kind = .{ .vari = .{
         .mutable = false,
         .typ = typ,
         .can_be_mutable = true,
@@ -270,7 +270,7 @@ fn checkArrayComptime(self: *Self, array: Ast.Expr.Array) void {
 fn checkItem(self: *Self, item: Ast.Item) !void {
     switch (item.kind) {
         .typ_alias, .ext_fun, .struc, .constant => {},
-        .fun => |fun| try self.checkFun(fun, item.location),
+        .fun => |fun| try self.checkFun(item.name, fun, item.location),
     }
 }
 
@@ -296,11 +296,11 @@ fn checkMain(self: *Self, location: Location) void {
     item.used = true;
 }
 
-fn regHeader(self: *Self, header: Ast.Item.Fun.Header, location: Location) !void {
+fn regHeader(self: *Self, name: []const u8, header: Ast.Item.Fun.Header, location: Location) !void {
     self.current_generics = header.generics;
     try self.generics_usage.resize(self.gpa, header.generics.len, false);
-    if (self.items.get(header.name)) |prev| {
-        self.failAlreadyDeclared(location, header.name, prev.location);
+    if (self.items.get(name)) |prev| {
+        self.failAlreadyDeclared(location, name, prev.location);
         return;
     }
     const params = try self.arena.allocator().alloc(Typ, header.params.len);
@@ -309,7 +309,7 @@ fn regHeader(self: *Self, header: Ast.Item.Fun.Header, location: Location) !void
     }
     const ret_typ = try self.checkTyp(header.ret_typ);
     self.checkGenericsUsage();
-    try self.items.put(header.name, .{
+    try self.items.put(name, .{
         .location = location,
         .kind = .{ .fun = .{
             .generics = header.generics,
@@ -332,9 +332,9 @@ fn failAlreadyDeclared(
     );
 }
 
-fn regStruct(self: *Self, struc: Ast.Item.Struct, location: Location) !void {
-    if (self.items.get(struc.name)) |prev| {
-        self.failAlreadyDeclared(location, struc.name, prev.location);
+fn regStruct(self: *Self, name: []const u8, struc: Ast.Item.Struct, location: Location) !void {
+    if (self.items.get(name)) |prev| {
+        self.failAlreadyDeclared(location, name, prev.location);
         return;
     }
     try self.checkGenericsRedeclare(struc.generics);
@@ -364,7 +364,7 @@ fn regStruct(self: *Self, struc: Ast.Item.Struct, location: Location) !void {
         });
     }
     self.checkGenericsUsage();
-    try self.items.put(struc.name, .{
+    try self.items.put(name, .{
         .location = location,
         .kind = .{ .struc = res },
     });
@@ -391,8 +391,8 @@ fn checkGenericsUsage(self: *Self) void {
     }
 }
 
-fn checkFun(self: *Self, fun: Ast.Item.Fun, location: Location) !void {
-    self.ret_typ = self.items.get(fun.header.name).?.kind.fun.ret_typ;
+fn checkFun(self: *Self, name: []const u8, fun: Ast.Item.Fun, location: Location) !void {
+    self.ret_typ = self.items.get(name).?.kind.fun.ret_typ;
     const rbp = self.vars_stack.items.len;
     for (fun.header.params) |param| {
         try self.declareVar(param.name, .{
@@ -463,7 +463,7 @@ fn checkStmt(self: *Self, stmt: *Ast.Stmt) error{OutOfMemory}!ControlFlow {
         .brek => return self.checkBreak(stmt.location),
         .ret => |*ret| return self.checkRet(ret, stmt.location),
         .expr => |*expr| return self.checkExprStmt(expr),
-        .declare => |*declare| return self.checkDeclare(declare, stmt.location),
+        .declare => |*named| return self.checkDeclare(named.name, &named.declare, stmt.location),
         .op_assign => |*op_assign| return self.checkOpAssign(op_assign),
         .assign => |*assign| return self.checkAssign(assign),
         .iff => |*iff| return self.checkIf(iff),
@@ -701,14 +701,19 @@ fn failWrongTyp(self: *Self, location: Location, a: Typ, b: Typ) void {
     , .{ a, b });
 }
 
-fn checkDeclare(self: *Self, declare: *Ast.Stmt.Declare, location: Location) !ControlFlow {
+fn checkDeclare(
+    self: *Self,
+    name: []const u8,
+    declare: *Ast.Stmt.Declare,
+    location: Location,
+) !ControlFlow {
     var decl_typ: Typ = .any;
     if (declare.typ) |typ_decl| {
         decl_typ = try self.checkTyp(typ_decl);
     }
     const info = try self.checkExpr(&declare.expr, .{ .typ = decl_typ });
     const typ = self.unify(declare.expr.location, decl_typ, info.typ);
-    try self.declareVar(declare.name, .{
+    try self.declareVar(name, .{
         .typ = typ,
         .mutable = declare.mutable,
         .can_be_mutable = true,

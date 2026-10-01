@@ -12,6 +12,7 @@ tokens: []const Lexer.Token,
 ast_arena: *std.heap.ArenaAllocator,
 ast_typ_memo: *Memo(Ast.Typ),
 err_msgs: ErrMsgs = .empty,
+tmp_name: []const u8 = "<unknown>",
 tmp_location: Location = .fake,
 cursor: usize = 0,
 err_cursor: usize = 0,
@@ -80,25 +81,27 @@ fn parseTypItem(self: *Self) !Ast.Item {
     const typ = try self.parseTypLoud();
     try self.expectLoud(.semi);
     return .{
+        .name = name,
         .location = location,
         .kind = .{ .typ_alias = .{
-            .name = name,
             .typ = typ,
         } },
     };
 }
 
 fn parseConstantItem(self: *Self) !Ast.Item {
-    const declare = try self.parseDeclare();
+    const named = try self.parseDeclare();
     return .{
+        .name = named.name,
         .location = self.tmp_location,
-        .kind = .{ .constant = declare },
+        .kind = .{ .constant = named.declare },
     };
 }
 
 fn parseExtFunItem(self: *Self) !Ast.Item {
     const ext_fun = try self.parseExtFun();
     return .{
+        .name = self.tmp_name,
         .location = self.tmp_location,
         .kind = .{ .ext_fun = ext_fun },
     };
@@ -107,6 +110,7 @@ fn parseExtFunItem(self: *Self) !Ast.Item {
 fn parseFunItem(self: *Self) !Ast.Item {
     const fun = try self.parseFun();
     return .{
+        .name = self.tmp_name,
         .location = self.tmp_location,
         .kind = .{ .fun = fun },
     };
@@ -115,6 +119,7 @@ fn parseFunItem(self: *Self) !Ast.Item {
 fn parseStructItem(self: *Self) !Ast.Item {
     const struc = try self.parseStruct();
     return .{
+        .name = self.tmp_name,
         .location = self.tmp_location,
         .kind = .{ .struc = struc },
     };
@@ -123,7 +128,7 @@ fn parseStructItem(self: *Self) !Ast.Item {
 fn parseStruct(self: *Self) !Ast.Item.Struct {
     try self.expect(.struc);
     self.tmp_location = self.getLocation();
-    const name = try self.parseNameLoud();
+    self.tmp_name = try self.parseNameLoud();
     const generics = try self.parseMaybe([]const Ast.Item.Generic, parseGenerics) orelse &.{};
     try self.expectLoud(.curl);
     const fields = try self.parseSep(Ast.Item.Struct.Field, parseFieldDeclLoud);
@@ -133,7 +138,6 @@ fn parseStruct(self: *Self) !Ast.Item.Struct {
     }
     try self.expect(.curr);
     return .{
-        .name = name,
         .generics = generics,
         .fields = fields,
         .items = items,
@@ -190,14 +194,13 @@ fn parseHeaderLoud(self: *Self) !Ast.Item.Fun.Header {
 fn parseHeader(self: *Self) !Ast.Item.Fun.Header {
     try self.expect(.fun);
     self.tmp_location = self.getLocation();
-    const name = try self.parseNameLoud();
+    self.tmp_name = try self.parseNameLoud();
     const generics = try self.parseMaybe([]const Ast.Item.Generic, parseGenerics) orelse &.{};
     try self.expectLoud(.parl);
     const params = try self.parseSep(Ast.Item.Fun.Header.Param, parseParamLoud);
     try self.expect(.parr);
     const ret_typ = try self.parseTypLoud();
     return .{
-        .name = name,
         .generics = generics,
         .params = params,
         .ret_typ = ret_typ,
@@ -366,8 +369,10 @@ fn parseMaybe(self: *Self, T: type, parse: fn (*Self) Error!T) !?T {
 fn parseFun(self: *Self) !Ast.Item.Fun {
     const header = try self.parseHeader();
     const location = self.tmp_location;
+    const name = self.tmp_name;
     const block = try self.parseBlockLoud();
     self.tmp_location = location;
+    self.tmp_name = name;
     return .{
         .header = header,
         .body = block,
@@ -558,7 +563,7 @@ fn parseDeclareStmt(self: *Self) !Ast.Stmt {
     };
 }
 
-fn parseDeclare(self: *Self) !Ast.Stmt.Declare {
+fn parseDeclare(self: *Self) !Ast.Stmt.Declare.Named {
     try self.expect(.let);
     const mutable = try self.parseMaybe(bool, parseMutable) orelse false;
     const location = self.getLocation();
@@ -570,9 +575,11 @@ fn parseDeclare(self: *Self) !Ast.Stmt.Declare {
     self.tmp_location = location;
     return .{
         .name = name,
-        .typ = typ,
-        .expr = expr,
-        .mutable = mutable,
+        .declare = .{
+            .typ = typ,
+            .expr = expr,
+            .mutable = mutable,
+        },
     };
 }
 
