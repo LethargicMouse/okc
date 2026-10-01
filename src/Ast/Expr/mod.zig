@@ -4,7 +4,7 @@ pub const Binary = @import("Binary.zig");
 pub const Unary = @import("Unary.zig");
 const Typ = @import("../typ.zig").Typ;
 
-const Expr = @This();
+const Self = @This();
 
 location: Location,
 kind: Kind,
@@ -31,14 +31,14 @@ pub const Kind = union(enum) {
 };
 
 pub const Subslice = struct {
-    expr: Expr,
-    start: Expr,
-    end: Expr,
+    expr: Self,
+    start: Self,
+    end: Self,
 };
 
 pub const Array = struct {
     mtyp: ?Typ,
-    exprs: []Expr,
+    exprs: []Self,
     typ: Typ = undefined,
 };
 
@@ -48,7 +48,7 @@ pub const Struct = struct {
 
     pub const Field = struct {
         name: []const u8,
-        expr: Expr,
+        expr: Self,
         location: Location,
     };
 
@@ -70,18 +70,18 @@ pub const Undef = struct {
 
 pub const Call = struct {
     name: []const u8,
-    args: []Expr,
+    args: []Self,
     generics: []Typ = undefined,
     params: []Typ = undefined,
     ret_typ: Typ = undefined,
 };
 
 pub const Field = struct {
-    expr: Expr,
+    expr: Self,
     name: []const u8,
 };
 
 pub const Elem = struct {
-    expr: Expr,
-    index: Expr,
+    expr: Self,
+    index: Self,
 };

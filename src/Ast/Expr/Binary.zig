@@ -1,9 +1,9 @@
 const Expr = @import("mod.zig");
 const Lexeme = @import("../../Lexer.zig").Lexeme;
 
-const Binary = @This();
+const Self = @This();
 left: Expr,
-kind: Binary.Kind,
+kind: Kind,
 right: Expr,
 
 pub const Kind = enum {
@@ -24,7 +24,7 @@ pub const Kind = enum {
     rem,
     moreq,
 
-    pub fn getPrior(kind: Binary.Kind) u8 {
+    pub fn getPrior(kind: Kind) u8 {
         switch (kind) {
             .equ, .neq, .les, .moreq => return 0,
             .orb => return 1,
@@ -34,7 +34,7 @@ pub const Kind = enum {
         }
     }
 
-    pub fn fromLexeme(lexeme: Lexeme) ?Binary.Kind {
+    pub fn fromLexeme(lexeme: Lexeme) ?Kind {
         return switch (lexeme) {
             .pipe => .orb,
             .amp => .andb,
@@ -50,7 +50,7 @@ pub const Kind = enum {
         };
     }
 
-    pub fn getClass(kind: Binary.Kind) Class {
+    pub fn getClass(kind: Kind) Class {
         return switch (kind) {
             .orb, .andb, .add, .sub, .mul, .div, .rem => .arith,
             .equ, .neq, .les, .moreq => .bool,

@@ -1,8 +1,8 @@
 const Expr = @import("mod.zig");
 const Lexeme = @import("../../Lexer.zig").Lexeme;
 
-const Unary = @This();
-kind: Unary.Kind,
+const Self = @This();
+kind: Kind,
 expr: Expr,
 
 pub const Kind = enum {
@@ -11,7 +11,7 @@ pub const Kind = enum {
     notb,
     neg,
 
-    pub fn fromLexeme(lexeme: Lexeme) ?Unary.Kind {
+    pub fn fromLexeme(lexeme: Lexeme) ?Kind {
         return switch (lexeme) {
             .amp => .ptr,
             .star => .deref,

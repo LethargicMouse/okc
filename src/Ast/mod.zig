@@ -4,5 +4,6 @@ pub const Stmt = @import("Stmt.zig");
 pub const Typ = @import("typ.zig").Typ;
 const Location = @import("../Location.zig");
 
+const Self = @This();
 items: []Item,
 location: Location,

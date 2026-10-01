@@ -2,28 +2,27 @@ const std = @import("std");
 
 const Pos = @import("Pos.zig");
 
-const Location = @This();
-
+const Self = @This();
 name: []const u8,
 start: Pos,
 end: Pos,
 lines: []const []const u8,
 
-pub fn format(location: Location, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
     try writer.print(
         \\`{s}` at {f}:
         \\     |
-    , .{ location.name, location.start });
-    try line(writer, location.start.line, location.lines);
-    if (location.start.line == location.end.line) {
-        try underline(writer, location.start.symbol, location.end.symbol);
+    , .{ self.name, self.start });
+    try line(writer, self.start.line, self.lines);
+    if (self.start.line == self.end.line) {
+        try underline(writer, self.start.symbol, self.end.symbol);
         return;
     }
-    try underline(writer, location.start.symbol, location.lines[location.start.line - 1].len + 1);
-    for (location.start.line + 1..location.end.line + 1) |i| {
-        try line(writer, i, location.lines);
+    try underline(writer, self.start.symbol, self.lines[self.start.line - 1].len + 1);
+    for (self.start.line + 1..self.end.line + 1) |i| {
+        try line(writer, i, self.lines);
     }
-    try underline(writer, 0, location.end.symbol);
+    try underline(writer, 0, self.end.symbol);
 }
 
 fn line(writer: *std.Io.Writer, number: usize, lines: []const []const u8) std.Io.Writer.Error!void {
@@ -40,7 +39,7 @@ fn underline(writer: *std.Io.Writer, start: usize, end: usize) std.Io.Writer.Err
     }
 }
 
-pub fn combine(a: Location, b: Location) Location {
+pub fn combine(a: Self, b: Self) Self {
     return .{
         .name = a.name,
         .lines = a.lines,
@@ -49,7 +48,7 @@ pub fn combine(a: Location, b: Location) Location {
     };
 }
 
-pub const fake = Location{
+pub const fake = Self{
     .lines = &.{},
     .name = "<unknown>",
     .start = .start,
