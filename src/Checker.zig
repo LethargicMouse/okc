@@ -179,42 +179,40 @@ fn checkStructUsage(self: *Self, struc: Struct) void {
 }
 
 fn regItem(self: *Self, item: *Ast.Item) !void {
-    switch (item.kind) {
-        .typ_alias => |alias| try self.regTypAlias(item.name, alias, item.location),
-        .ext_fun => |ext_fun| try self.regHeader(item.name, ext_fun.header, item.location),
-        .struc => |struc| try self.regStruct(item.name, struc, item.location),
-        .fun => |fun| try self.regHeader(item.name, fun.header, item.location),
-        .constant => |*declare| try self.regConst(item.name, declare, item.location),
+    const kind = switch (item.kind) {
+        .typ_alias => |alias| try self.regTypAlias(alias),
+        .ext_fun => |ext_fun| try self.regHeader(ext_fun.header),
+        .struc => |struc| try self.regStruct(struc),
+        .fun => |fun| try self.regHeader(fun.header),
+        .constant => |*declare| try self.regConst(declare),
+    };
+    if (self.items.get(item.name)) |prev| {
+        self.failAlreadyDeclared(item.location, item.name, prev.location);
+        return;
     }
-}
-
-fn regTypAlias(self: *Self, name: []const u8, alias: Ast.Item.TypAlias, location: Location) !void {
-    if (self.items.get(name)) |prev| {
-        self.failAlreadyDeclared(location, name, prev.location);
-    }
-    const typ = try self.checkTyp(alias.typ);
-    try self.items.put(name, .{
-        .location = location,
-        .kind = .{ .typ = typ },
+    try self.items.put(item.name, .{
+        .location = item.location,
+        .kind = kind,
     });
 }
 
-fn regConst(self: *Self, name: []const u8, declare: *Ast.Stmt.Declare, location: Location) !void {
+fn regTypAlias(self: *Self, alias: Ast.Item.TypAlias) !Item.Kind {
+    const typ = try self.checkTyp(alias.typ);
+    return .{ .typ = typ };
+}
+
+fn regConst(self: *Self, declare: *Ast.Stmt.Declare) !Item.Kind {
     const hint_typ = if (declare.typ) |typ| try self.checkTyp(typ) else .any;
     const typ = try self.checkConstExpr(&declare.expr, .{ .typ = hint_typ });
     if (declare.typ) |typ_decl| {
         const decl_typ = try self.checkTyp(typ_decl);
-        _ = self.unify(location, decl_typ, typ);
+        _ = self.unify(declare.expr.location, decl_typ, typ);
     }
-    if (self.items.get(name)) |prev| {
-        self.failAlreadyDeclared(location, name, prev.location);
-        return;
-    }
-    try self.items.put(name, .{ .location = location, .kind = .{ .vari = .{
+    return .{ .vari = .{
         .mutable = false,
         .typ = typ,
         .can_be_mutable = true,
-    } } });
+    } };
 }
 
 fn checkConstExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) !Typ {
@@ -296,27 +294,20 @@ fn checkMain(self: *Self, location: Location) void {
     item.used = true;
 }
 
-fn regHeader(self: *Self, name: []const u8, header: Ast.Item.Fun.Header, location: Location) !void {
+fn regHeader(self: *Self, header: Ast.Item.Fun.Header) !Item.Kind {
     self.current_generics = header.generics;
     try self.generics_usage.resize(self.gpa, header.generics.len, false);
-    if (self.items.get(name)) |prev| {
-        self.failAlreadyDeclared(location, name, prev.location);
-        return;
-    }
     const params = try self.arena.allocator().alloc(Typ, header.params.len);
     for (header.params, 0..) |param, i| {
         params[i] = try self.checkTyp(param.typ);
     }
     const ret_typ = try self.checkTyp(header.ret_typ);
     self.checkGenericsUsage();
-    try self.items.put(name, .{
-        .location = location,
-        .kind = .{ .fun = .{
-            .generics = header.generics,
-            .params = params,
-            .ret_typ = ret_typ,
-        } },
-    });
+    return .{ .fun = .{
+        .generics = header.generics,
+        .params = params,
+        .ret_typ = ret_typ,
+    } };
 }
 
 fn failAlreadyDeclared(
@@ -332,11 +323,7 @@ fn failAlreadyDeclared(
     );
 }
 
-fn regStruct(self: *Self, name: []const u8, struc: Ast.Item.Struct, location: Location) !void {
-    if (self.items.get(name)) |prev| {
-        self.failAlreadyDeclared(location, name, prev.location);
-        return;
-    }
+fn regStruct(self: *Self, struc: Ast.Item.Struct) !Item.Kind {
     try self.checkGenericsRedeclare(struc.generics);
     var res = Struct{
         .generics = struc.generics,
@@ -345,16 +332,16 @@ fn regStruct(self: *Self, name: []const u8, struc: Ast.Item.Struct, location: Lo
     self.current_generics = struc.generics;
     try self.generics_usage.resize(self.gpa, struc.generics.len, false);
     for (struc.fields) |*field| {
-        if (res.fields.get(field.name)) |prev| {
-            self.failAlreadyDeclared(field.location, field.name, prev.location);
-            continue;
-        }
         const typ = try self.checkTyp(field.typ);
         var defaulted = false;
         if (field.default) |*expr| {
             const expr_typ = try self.checkConstExpr(expr, .{ .typ = typ });
             _ = self.unify(expr.location, typ, expr_typ);
             defaulted = true;
+        }
+        if (res.fields.get(field.name)) |prev| {
+            self.failAlreadyDeclared(field.location, field.name, prev.location);
+            continue;
         }
         try res.fields.put(field.name, .{
             .location = field.location,
@@ -364,10 +351,7 @@ fn regStruct(self: *Self, name: []const u8, struc: Ast.Item.Struct, location: Lo
         });
     }
     self.checkGenericsUsage();
-    try self.items.put(name, .{
-        .location = location,
-        .kind = .{ .struc = res },
-    });
+    return .{ .struc = res };
 }
 
 fn checkGenericsRedeclare(self: *Self, generics: []const Ast.Item.Generic) !void {
