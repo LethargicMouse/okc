@@ -224,7 +224,7 @@ fn checkConstExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) !Typ {
 fn checkExprComptime(self: *Self, expr: Ast.Expr) void {
     switch (expr.kind) {
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
-        .call, .method => self.fail(expr.location, "cannot evaluate at compile time", .{}),
+        .call => self.fail(expr.location, "cannot evaluate at compile time", .{}),
         .fn_ptr => unreachable,
         .field => |field| self.checkExprComptime(field.expr),
         .unary => |unary| self.checkExprComptime(unary.expr),
@@ -719,7 +719,6 @@ fn declareVar(self: *Self, name: []const u8, vari: Var, location: Location) !voi
 
 fn checkExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) error{OutOfMemory}!ExprInfo {
     switch (expr.kind) {
-        .method => unreachable,
         .subslice => |subslice| return self.checkSubslice(subslice, expr.location),
         .sizeof => |typ| return self.checkSizeof(typ),
         .array => |*array| return self.checkArray(array, expr.location, hint.typ),

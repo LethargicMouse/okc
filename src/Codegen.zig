@@ -606,7 +606,6 @@ fn genRet(self: *Self, ret: Ast.Stmt.Return) !void {
 
 fn genExpr(self: *Self, expr: Ast.Expr) Error!TypVal {
     switch (expr.kind) {
-        .method => unreachable,
         .subslice => |subslice| return self.genSubslice(subslice.*),
         .sizeof => |typ| return self.genSizeof(typ),
         .array => |array| return self.genArray(array),
@@ -846,7 +845,6 @@ fn genSubslice(self: *Self, subslice: Ast.Expr.Subslice) !TypVal {
 
 fn genExprRef(self: *Self, expr: Ast.Expr) Error!Ref {
     switch (expr.kind) {
-        .method => unreachable,
         .unary => |unary| return self.genUnaryRef(unary.*),
         .vari => |name| return self.genVarRef(name),
         .field => |field| return self.genFieldRef(field.*),
