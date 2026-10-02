@@ -223,7 +223,6 @@ fn checkExprComptime(self: *Self, expr: Ast.Expr) void {
     switch (expr.kind) {
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
         .call, .method => self.fail(expr.location, "cannot evaluate at compile time", .{}),
-        .fun_ptr => unreachable,
         .field => |field| self.checkExprComptime(field.expr),
         .unary => |unary| self.checkExprComptime(unary.expr),
         .elem => |elem| self.checkElemComptime(elem.*),
@@ -753,7 +752,7 @@ fn checkExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) error{OutOfMemory}!Ex
         .struc => |*struc| return self.checkStructExpr(struc, expr.location, hint.typ),
         .int => |*int| return self.checkInt(expr.location, int),
         .str => return self.checkStr(),
-        .vari => return self.checkVar(expr, hint.mutable),
+        .vari => |*vari| return self.checkVar(vari, expr.location, hint.mutable),
         .char => return .{
             .typ = .{ .prime = .u8 },
             .mutable = false,
@@ -768,7 +767,6 @@ fn checkExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) error{OutOfMemory}!Ex
         .field => |field| return self.checkField(field, expr.location, hint.mutable),
         .named_struc => |*struc| return self.checkNamedStructExpr(struc, expr.location),
         .elem => |elem| return self.checkElem(elem, expr.location),
-        .fun_ptr => unreachable,
     }
 }
 
@@ -1231,50 +1229,53 @@ fn checkBinary(self: *Self, binary: *Ast.Expr.Binary) !ExprInfo {
 
 fn checkVar(
     self: *Self,
-    expr: *Ast.Expr,
+    vari: *Ast.Expr.Var,
+    location: Location,
     hint_mutable: bool,
 ) !ExprInfo {
     const err = ExprInfo{
         .typ = .err,
         .mutable = true,
     };
-    const name = expr.kind.vari;
-    const item = self.items.getPtr(name) orelse {
-        self.failNotDeclared(expr.location, name);
+    const item = self.items.getPtr(vari.name) orelse {
+        self.failNotDeclared(location, vari.name);
         return err;
     };
     switch (item.kind) {
         .fun => |header| {
             item.used = true;
-            expr.kind = .{ .fun_ptr = .{
-                .name = name,
-            } };
-            return self.checkFunPtrWith(header, expr);
+            vari.fun_meta = .{};
+            return self.fillFunMetaHeader(&vari.fun_meta.?, header, location);
         },
         .struc, .typ => {
-            self.fail(expr.location, "it is a type", .{});
+            self.fail(location, "it is a type", .{});
             return err;
         },
-        .vari => |*vari| {
+        .vari => |*vari_decl| {
             item.used = true;
             if (hint_mutable) {
-                if (vari.mutable) {
-                    vari.mutated = true;
+                if (vari_decl.mutable) {
+                    vari_decl.mutated = true;
                 } else {
-                    if (vari.can_be_mutable) {
+                    if (vari_decl.can_be_mutable) {
                         std.log.info("add `mut` before name in {f}", .{item.location});
                     }
                 }
             }
             return .{
-                .typ = vari.typ,
-                .mutable = vari.mutable,
+                .typ = vari_decl.typ,
+                .mutable = vari_decl.mutable,
             };
         },
     }
 }
 
-fn checkFunPtrWith(self: *Self, header: Header, expr: *Ast.Expr) !ExprInfo {
+fn fillFunMetaHeader(
+    self: *Self,
+    fun_meta: *Ast.Expr.FunMeta,
+    header: Header,
+    location: Location,
+) !ExprInfo {
     var resolver = Resolver(Typ).init(self.gpa, &self.typ_memo);
     defer resolver.map.deinit();
     for (header.generics) |generic| {
@@ -1288,25 +1289,25 @@ fn checkFunPtrWith(self: *Self, header: Header, expr: *Ast.Expr) !ExprInfo {
     for (header.params, params, resolved_params) |param, *ast_target, *target| {
         target.* = try param.resolve(&resolver);
         try self.convert_queue.append(self.gpa, .{
-            .location = expr.location,
+            .location = location,
             .from = target.*,
             .to = ast_target,
         });
     }
     for (generics, header.generics) |*target, generic| {
         try self.convert_queue.append(self.gpa, .{
-            .location = expr.location,
+            .location = location,
             .from = resolver.map.get(generic.name).?,
             .to = target,
         });
     }
-    expr.kind.fun_ptr.generics = generics;
-    expr.kind.fun_ptr.params = params;
+    fun_meta.generics = generics;
+    fun_meta.params = params;
     const resolved_ret_typ = try header.ret_typ.resolve(&resolver);
     try self.convert_queue.append(self.gpa, .{
-        .location = expr.location,
+        .location = location,
         .from = resolved_ret_typ,
-        .to = &expr.kind.fun_ptr.ret_typ,
+        .to = &fun_meta.ret_typ,
     });
     return .{
         .typ = .{ .fun = .{

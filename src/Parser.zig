@@ -970,7 +970,7 @@ fn parseVarExpr(self: *Self) !Ast.Expr {
     const name = try self.parseName();
     return .{
         .location = location,
-        .kind = .{ .vari = name },
+        .kind = .{ .vari = .{ .name = name } },
     };
 }
 

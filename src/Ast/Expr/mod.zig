@@ -19,8 +19,7 @@ pub const Kind = union(enum) {
     named_struc: Struct.Named,
     int: Int,
     str: []const u8,
-    vari: []const u8,
-    fun_ptr: FunPtr,
+    vari: Var,
     char: u8,
     undef: Undef,
     bool: bool,
@@ -30,14 +29,18 @@ pub const Kind = union(enum) {
     elem: *Elem,
 };
 
+pub const Var = struct {
+    name: []const u8,
+    fun_meta: ?FunMeta = null,
+};
+
 pub const Method = struct {
     expr: Self,
-    fun_ptr: FunPtr,
+    vari: Var,
     args: []Self,
 };
 
-pub const FunPtr = struct {
-    name: []const u8,
+pub const FunMeta = struct {
     generics: []const Typ = undefined,
     params: []const Typ = undefined,
     ret_typ: Typ = undefined,

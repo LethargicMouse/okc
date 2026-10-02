@@ -341,7 +341,7 @@ fn genForRange(self: *Self, forr: Ast.Stmt.ForRange) !void {
     const cond_label = self.newTmp();
     try self.uncond(cond_label, start_label);
     // i++
-    const ival = try self.genVar(forr.vari);
+    const ival = try self.genVar(.{ .name = forr.vari });
     const inew = try self.genBinary(.add, ival.typ, ival.val, .{ .int = 1 });
     try self.storeInto(self.vars.get(forr.vari).?.val, .{ .typ = ival.typ, .val = .{ .tmp = inew } });
     // goto cond
@@ -591,8 +591,7 @@ fn genExpr(self: *Self, expr: Ast.Expr) Error!TypVal {
         .struc => |struc| return self.genStructExpr(struc),
         .int => |int| return genInt(int),
         .str => |str| return self.genStr(str),
-        .vari => |name| return self.genVar(name),
-        .fun_ptr => |fun_ptr| return self.genFunPtr(fun_ptr),
+        .vari => |vari| return self.genVar(vari),
         .char => |char| return genChar(char),
         .bool => |boo| return genBool(boo),
         .undef => |undef| return genUndef(undef),
@@ -829,7 +828,6 @@ fn genExprRef(self: *Self, expr: Ast.Expr) Error!Ref {
         .elem => |elem| return self.genElemExprRef(elem.*),
         .subslice,
         .sizeof,
-        .fun_ptr,
         .call,
         .method,
         .binary,
@@ -989,12 +987,37 @@ fn genBinOp(self: *Self, kind: Ast.Expr.Binary.Kind) !void {
     }
 }
 
-fn genVarRef(self: *Self, name: []const u8) !Ref {
-    return self.vars.get(name) orelse {
-        try self.genConst(name);
+fn genFunPtr(self: *Self, fun_name: []const u8, fun_meta: Ast.Expr.FunMeta) !TypVal {
+    const fun = Typ.Fun{
+        .params = fun_meta.params,
+        .ret_typ = try self.typ_memo.box(fun_meta.ret_typ),
+    };
+    var name = Name{
+        .name = fun_name,
+        .generics = fun_meta.generics,
+    };
+    if (self.items.get(fun_name).?.kind == .ext_fun) {
+        name.generics = &.{};
+    }
+    try self.fun_queue.append(self.gpa, .{
+        .name = name,
+        .fun = fun,
+    });
+    return .{
+        .typ = .{ .fun = fun },
+        .val = .{ .global = name },
+    };
+}
+
+fn genVarRef(self: *Self, vari: Ast.Expr.Var) !Ref {
+    if (vari.fun_meta) |fun_meta| {
+        return self.toStack(try self.genFunPtr(vari.name, fun_meta));
+    }
+    return self.vars.get(vari.name) orelse {
+        try self.genConst(vari.name);
         return .{
-            .inner_typ = self.consts.get(name).?,
-            .val = .{ .global = .{ .name = name } },
+            .inner_typ = self.consts.get(vari.name).?,
+            .val = .{ .global = .{ .name = vari.name } },
         };
     };
 }
@@ -1099,31 +1122,12 @@ fn genConstStr(self: *Self, str: []const u8) !Typ {
     } };
 }
 
-fn genVar(self: *Self, name: []const u8) !TypVal {
-    const ref = try self.genVarRef(name);
-    return self.loadTypVal(ref);
-}
-
-fn genFunPtr(self: *Self, fun_ptr: Ast.Expr.FunPtr) !TypVal {
-    const fun = Typ.Fun{
-        .params = fun_ptr.params,
-        .ret_typ = try self.typ_memo.box(fun_ptr.ret_typ),
-    };
-    var name = Name{
-        .name = fun_ptr.name,
-        .generics = fun_ptr.generics,
-    };
-    if (self.items.get(fun_ptr.name).?.kind == .ext_fun) {
-        name.generics = &.{};
+fn genVar(self: *Self, vari: Ast.Expr.Var) !TypVal {
+    if (vari.fun_meta) |fun_meta| {
+        return self.genFunPtr(vari.name, fun_meta);
     }
-    try self.fun_queue.append(self.gpa, .{
-        .name = name,
-        .fun = fun,
-    });
-    return .{
-        .typ = .{ .fun = fun },
-        .val = .{ .global = name },
-    };
+    const ref = try self.genVarRef(vari);
+    return self.loadTypVal(ref);
 }
 
 fn print(self: *Self, comptime fmt: []const u8, args: anytype) !void {
