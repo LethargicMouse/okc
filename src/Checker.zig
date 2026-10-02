@@ -222,7 +222,7 @@ fn checkConstExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) !Typ {
 fn checkExprComptime(self: *Self, expr: Ast.Expr) void {
     switch (expr.kind) {
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
-        .call => self.fail(expr.location, "cannot evaluate at compile time", .{}),
+        .call, .method => self.fail(expr.location, "cannot evaluate at compile time", .{}),
         .fun_ptr => unreachable,
         .field => |field| self.checkExprComptime(field.expr),
         .unary => |unary| self.checkExprComptime(unary.expr),
@@ -745,6 +745,7 @@ fn declareVar(self: *Self, name: []const u8, vari: Var, location: Location) !voi
 
 fn checkExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) error{OutOfMemory}!ExprInfo {
     switch (expr.kind) {
+        .method => unreachable,
         .subslice => |subslice| return self.checkSubslice(subslice, expr.location),
         .sizeof => |typ| return self.checkSizeof(typ),
         .array => |*array| return self.checkArray(array, expr.location, hint.typ),
@@ -1245,7 +1246,10 @@ fn checkVar(
     switch (item.kind) {
         .fun => |header| {
             item.used = true;
-            return self.checkFunPtr(expr, header);
+            expr.kind = .{ .fun_ptr = .{
+                .name = name,
+            } };
+            return self.checkFunPtrWith(header, expr);
         },
         .struc, .typ => {
             self.fail(expr.location, "it is a type", .{});
@@ -1270,7 +1274,7 @@ fn checkVar(
     }
 }
 
-fn checkFunPtr(self: *Self, expr: *Ast.Expr, header: Header) !ExprInfo {
+fn checkFunPtrWith(self: *Self, header: Header, expr: *Ast.Expr) !ExprInfo {
     var resolver = Resolver(Typ).init(self.gpa, &self.typ_memo);
     defer resolver.map.deinit();
     for (header.generics) |generic| {
@@ -1278,15 +1282,8 @@ fn checkFunPtr(self: *Self, expr: *Ast.Expr, header: Header) !ExprInfo {
         ptr.* = .any;
         try resolver.map.put(generic.name, .{ .lazy = ptr });
     }
-    const name = expr.kind.vari;
     const generics = try self.ast_typ_memo.arena.allocator().alloc(Ast.Typ, header.generics.len);
     const params = try self.ast_typ_memo.arena.allocator().alloc(Ast.Typ, header.params.len);
-    expr.kind = .{ .fun_ptr = .{
-        .name = name,
-        .generics = generics,
-        .params = params,
-        .ret_typ = undefined,
-    } };
     const resolved_params = try self.arena.allocator().alloc(Typ, header.params.len);
     for (header.params, params, resolved_params) |param, *ast_target, *target| {
         target.* = try param.resolve(&resolver);
@@ -1303,6 +1300,8 @@ fn checkFunPtr(self: *Self, expr: *Ast.Expr, header: Header) !ExprInfo {
             .to = target,
         });
     }
+    expr.kind.fun_ptr.generics = generics;
+    expr.kind.fun_ptr.params = params;
     const resolved_ret_typ = try header.ret_typ.resolve(&resolver);
     try self.convert_queue.append(self.gpa, .{
         .location = expr.location,

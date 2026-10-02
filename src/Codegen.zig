@@ -583,6 +583,7 @@ fn genRet(self: *Self, ret: Ast.Stmt.Return) !void {
 
 fn genExpr(self: *Self, expr: Ast.Expr) Error!TypVal {
     switch (expr.kind) {
+        .method => unreachable,
         .subslice => |subslice| return self.genSubslice(subslice.*),
         .sizeof => |typ| return self.genSizeof(typ),
         .array => |array| return self.genArray(array),
@@ -830,6 +831,7 @@ fn genExprRef(self: *Self, expr: Ast.Expr) Error!Ref {
         .sizeof,
         .fun_ptr,
         .call,
+        .method,
         .binary,
         .named_struc,
         .int,

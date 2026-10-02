@@ -10,6 +10,7 @@ location: Location,
 kind: Kind,
 
 pub const Kind = union(enum) {
+    method: *Method,
     subslice: *Subslice,
     sizeof: Typ,
     array: Array,
@@ -29,11 +30,17 @@ pub const Kind = union(enum) {
     elem: *Elem,
 };
 
+pub const Method = struct {
+    expr: Self,
+    fun_ptr: FunPtr,
+    args: []Self,
+};
+
 pub const FunPtr = struct {
     name: []const u8,
-    generics: []const Typ,
-    params: []const Typ,
-    ret_typ: Typ,
+    generics: []const Typ = undefined,
+    params: []const Typ = undefined,
+    ret_typ: Typ = undefined,
 };
 
 pub const Subslice = struct {
