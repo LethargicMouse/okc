@@ -19,14 +19,21 @@ pub const Kind = union(enum) {
     int: Int,
     str: []const u8,
     vari: []const u8,
-    fn_ptr: []const u8,
+    fun_ptr: FunPtr,
     char: u8,
     undef: Undef,
     bool: bool,
-    call: Call,
+    call: *Call,
     binary: *Binary,
     field: *Field,
     elem: *Elem,
+};
+
+pub const FunPtr = struct {
+    name: []const u8,
+    generics: []const Typ,
+    params: []const Typ,
+    ret_typ: Typ,
 };
 
 pub const Subslice = struct {
@@ -68,11 +75,8 @@ pub const Undef = struct {
 };
 
 pub const Call = struct {
-    name: []const u8,
+    expr: Self,
     args: []Self,
-    generics: []Typ = undefined,
-    params: []Typ = undefined,
-    ret_typ: Typ = undefined,
 };
 
 pub const Field = struct {

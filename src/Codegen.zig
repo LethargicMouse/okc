@@ -513,51 +513,25 @@ fn storeInto(self: *Self, val: Val, typ_val: TypVal) !void {
 }
 
 fn genCall(self: *Self, call: Ast.Expr.Call) !TypVal {
-    var name = Typ.Name{
-        .name = call.name,
-        .generics = &.{},
-    };
-    var params: []const Ast.Item.Fun.Header.Param = &.{};
-    if (self.items.get(call.name)) |item| {
-        if (item.kind == .fun) {
-            name.generics = call.generics;
-        }
-        try self.fun_queue.append(self.gpa, .{
-            .name = .{
-                .name = call.name,
-                .generics = call.generics,
-            },
-            .fun = .{
-                .params = call.params,
-                .ret_typ = try self.typ_memo.box(call.ret_typ),
-            },
-        });
-        params = item.getHeader().?.params;
-    }
-    const mtmp = if (self.vars.get(name.name)) |vari| try self.load(vari) else null;
+    const typ_val = try self.genExpr(call.expr);
     var arg_typ_vals = try self.gpa.alloc(TypVal, call.args.len);
     defer self.gpa.free(arg_typ_vals);
-    for (arg_typ_vals, call.args, 0..) |*target, arg, i| {
+    for (arg_typ_vals, call.args, typ_val.typ.fun.params) |*target, arg, param| {
         target.* = try self.genExpr(arg);
-        if (params.len != 0) {
-            if (params[i].typ == .slice and target.typ == .ptr) {
-                target.* = try self.genArrayToSlice(target.typ.ptr.typ.array, target.val);
-            }
+        if (param == .slice and target.typ == .ptr) {
+            target.* = try self.genArrayToSlice(target.typ.ptr.typ.array, target.val);
         }
     }
     const ret_tmp = self.newTmp();
-    if (call.ret_typ != .prime or call.ret_typ.prime != .void) {
+    if (typ_val.typ.fun.ret_typ.* != .prime or typ_val.typ.fun.ret_typ.prime != .void) {
         try self.print("\n  %t{} = ", .{ret_tmp});
     } else {
         try self.print("\n  ", .{});
     }
-    try self.print("call {f} ", .{LlvmTyp{ .inner = call.ret_typ }});
-    if (mtmp) |tmp| {
-        try self.print("%t{}", .{tmp});
-    } else {
-        try self.print("@\"{f}\"", .{name.delocate()});
-    }
-    try self.print("(", .{});
+    try self.print("call {f} {f} (", .{
+        LlvmTyp{ .inner = typ_val.typ.fun.ret_typ.* },
+        typ_val.val,
+    });
     if (call.args.len != 0) {
         try self.print("{f}", .{arg_typ_vals[0]});
         for (arg_typ_vals[1..]) |val| {
@@ -565,7 +539,10 @@ fn genCall(self: *Self, call: Ast.Expr.Call) !TypVal {
         }
     }
     try self.print(")", .{});
-    return .{ .val = .{ .tmp = ret_tmp }, .typ = call.ret_typ };
+    return .{
+        .val = .{ .tmp = ret_tmp },
+        .typ = typ_val.typ.fun.ret_typ.*,
+    };
 }
 
 fn genArrayToSlice(self: *Self, array: Ast.Typ.Array, val: Val) !TypVal {
@@ -614,11 +591,11 @@ fn genExpr(self: *Self, expr: Ast.Expr) Error!TypVal {
         .int => |int| return genInt(int),
         .str => |str| return self.genStr(str),
         .vari => |name| return self.genVar(name),
-        .fn_ptr => |name| return self.genFnPtr(name),
+        .fun_ptr => |fun_ptr| return self.genFunPtr(fun_ptr),
         .char => |char| return genChar(char),
         .bool => |boo| return genBool(boo),
         .undef => |undef| return genUndef(undef),
-        .call => |call| return self.genCall(call),
+        .call => |call| return self.genCall(call.*),
         .binary => |binary| return self.genBinaryExpr(binary.*),
         .field => |field| return self.genField(field.*),
         .named_struc => |struc| return self.genNamedStructExpr(struc),
@@ -851,7 +828,7 @@ fn genExprRef(self: *Self, expr: Ast.Expr) Error!Ref {
         .elem => |elem| return self.genElemExprRef(elem.*),
         .subslice,
         .sizeof,
-        .fn_ptr,
+        .fun_ptr,
         .call,
         .binary,
         .named_struc,
@@ -1015,7 +992,7 @@ fn genVarRef(self: *Self, name: []const u8) !Ref {
         try self.genConst(name);
         return .{
             .inner_typ = self.consts.get(name).?,
-            .val = .{ .global = name },
+            .val = .{ .global = .{ .name = name } },
         };
     };
 }
@@ -1125,19 +1102,20 @@ fn genVar(self: *Self, name: []const u8) !TypVal {
     return self.loadTypVal(ref);
 }
 
-fn genFnPtr(self: *Self, name: []const u8) !TypVal {
-    const item = self.items.get(name).?;
-    const header = item.getHeader().?;
-    const params = try self.typ_memo.arena.allocator().alloc(Typ, header.params.len);
-    for (params, header.params) |*target, param| {
-        target.* = param.typ;
-    }
+fn genFunPtr(self: *Self, fun_ptr: Ast.Expr.FunPtr) !TypVal {
     const fun = Typ.Fun{
-        .params = params,
-        .ret_typ = try self.typ_memo.box(header.ret_typ),
+        .params = fun_ptr.params,
+        .ret_typ = try self.typ_memo.box(fun_ptr.ret_typ),
     };
+    var name = Name{
+        .name = fun_ptr.name,
+        .generics = fun_ptr.generics,
+    };
+    if (self.items.get(fun_ptr.name).?.kind == .ext_fun) {
+        name.generics = &.{};
+    }
     try self.fun_queue.append(self.gpa, .{
-        .name = .{ .name = name },
+        .name = name,
         .fun = fun,
     });
     return .{
@@ -1284,7 +1262,7 @@ const Val = union(enum) {
     int: u64,
     str: usize,
     tmp: u32,
-    global: []const u8,
+    global: Name,
     undef,
 
     pub fn format(val: Val, writer: *std.Io.Writer) std.Io.Writer.Error!void {
@@ -1292,7 +1270,7 @@ const Val = union(enum) {
             .int => |int| try writer.print("{d}", .{int}),
             .str => |str| try writer.print("@.s{}", .{str}),
             .tmp => |tmp| try writer.print("%t{}", .{tmp}),
-            .global => |name| try writer.print("@\"{s}\"", .{name}),
+            .global => |name| try writer.print("@\"{f}\"", .{name}),
             .undef => try writer.writeAll("poison"),
         }
     }

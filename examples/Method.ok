@@ -4,7 +4,7 @@ struct Cat {
     name: []u8,
 
     fn say(self: Self, phrase: []u8) void {
-        printf("%s says %s\n", self.name, phrase);
+        printf("%s says %s\n".ptr, self.name.ptr, phrase.ptr);
     }
 }
 

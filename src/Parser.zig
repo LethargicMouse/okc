@@ -127,8 +127,8 @@ fn parseStructItem(self: *Self) !Ast.Item {
 
 fn parseStruct(self: *Self) !Ast.Item.Struct {
     try self.expect(.struc);
-    self.tmp_location = self.getLocation();
-    self.tmp_name = try self.parseNameLoud();
+    const location = self.getLocation();
+    const name = try self.parseNameLoud();
     const generics = try self.parseMaybe([]const Ast.Item.Generic, parseGenerics) orelse &.{};
     try self.expectLoud(.curl);
     const fields = try self.parseSep(Ast.Item.Struct.Field, parseFieldDeclLoud);
@@ -137,6 +137,8 @@ fn parseStruct(self: *Self) !Ast.Item.Struct {
         items = try self.parseMany(Ast.Item, parseItemLoud);
     }
     try self.expect(.curr);
+    self.tmp_location = location;
+    self.tmp_name = name;
     return .{
         .generics = generics,
         .fields = fields,
@@ -630,14 +632,14 @@ fn parseExprStmtPostfix(self: *Self) !ExprStmtPostfix {
     }) catch .none;
 }
 
-fn parseCall(self: *Self) !Ast.Expr.Call {
-    const name = try self.parseName();
+fn parseCallPostfix(self: *Self) !Postfix {
     try self.expect(.parl);
     const args = try self.parseSep(Ast.Expr, parseExprLoud);
+    const location = self.getLocation();
     try self.expect(.parr);
     return .{
-        .name = name,
-        .args = args,
+        .location = location,
+        .kind = .{ .call = args },
     };
 }
 
@@ -717,6 +719,17 @@ fn parseExprPosted(self: *Self, loud: bool) Error!Ast.Expr {
     var res = try self.parseExprAtom(loud);
     while (try self.parseMaybe(Postfix, parsePostfix)) |postfix| {
         switch (postfix.kind) {
+            .call => |args| {
+                const call = try self.ast_arena.allocator().create(Ast.Expr.Call);
+                call.* = .{
+                    .expr = res,
+                    .args = args,
+                };
+                res = .{
+                    .location = res.location.combine(postfix.location),
+                    .kind = .{ .call = call },
+                };
+            },
             .field => |name| {
                 const field = try self.ast_arena.allocator().create(Ast.Expr.Field);
                 field.* = .{
@@ -758,6 +771,7 @@ fn parseExprPosted(self: *Self, loud: bool) Error!Ast.Expr {
 
 fn parsePostfix(self: *Self) !Postfix {
     return self.parseEither(Postfix, .{
+        parseCallPostfix,
         parseFieldPostfix,
         parseSubslicePostfix,
         parseElemPostfix,
@@ -813,7 +827,6 @@ fn parseExprAtom(self: *Self, loud: bool) Error!Ast.Expr {
         parseUnaryExpr,
         parseInferStructExpr,
         parseStructExpr,
-        parseCallExpr,
         parseIntExpr,
         parseStrExpr,
         parseCharExpr,
@@ -958,15 +971,6 @@ fn parseVarExpr(self: *Self) !Ast.Expr {
     return .{
         .location = location,
         .kind = .{ .vari = name },
-    };
-}
-
-fn parseCallExpr(self: *Self) !Ast.Expr {
-    const location = self.getLocation();
-    const call = try self.parseCall();
-    return .{
-        .location = location,
-        .kind = .{ .call = call },
     };
 }
 
@@ -1127,6 +1131,7 @@ const Postfix = struct {
         field: []const u8,
         elem: Ast.Expr,
         subslice: Subslice,
+        call: []Ast.Expr,
     };
 
     const Subslice = struct {
