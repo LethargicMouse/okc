@@ -14,6 +14,7 @@ pub const Kind = union(enum) {
     fun: Fun,
     constant: Stmt.Declare,
     typ_alias: TypAlias,
+    use: []const u8,
 };
 
 pub fn getHeader(self: Self) ?Fun.Header {

@@ -183,6 +183,7 @@ fn regItem(self: *Self, item: *Ast.Item) !void {
         .struc => |struc| try self.regStruct(struc),
         .fun => |fun| try self.regHeader(fun.header),
         .constant => |*declare| try self.regConst(declare),
+        .use => unreachable,
     };
     if (self.items.get(item.name)) |prev| {
         self.failAlreadyDeclared(item.location, item.name, prev.location);
@@ -266,6 +267,7 @@ fn checkItem(self: *Self, item: Ast.Item) error{OutOfMemory}!void {
     switch (item.kind) {
         .typ_alias, .ext_fun, .constant, .struc => {},
         .fun => |fun| try self.checkFun(fun, item.location),
+        .use => unreachable,
     }
 }
 

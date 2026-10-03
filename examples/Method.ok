@@ -1,12 +1,6 @@
 extern fn printf(fmt: &u8, a: &u8, b: &u8) void;
 
-struct Cat {
-    name: []u8,
-
-    fn say(self: Self, phrase: []u8) void {
-        printf("%s says %s\n".ptr, self.name.ptr, phrase.ptr);
-    }
-}
+use Cat;
 
 fn main() i32 {
     let cat = Cat {

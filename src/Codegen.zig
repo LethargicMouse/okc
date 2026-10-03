@@ -83,7 +83,7 @@ fn genAll(self: *Self) !void {
 fn genFunNamed(self: *Self, req: FunReq) !void {
     const item = self.items.get(req.name.name).?;
     const fun = switch (item.kind) {
-        .typ_alias => unreachable,
+        .typ_alias, .use => unreachable,
         .ext_fun => |ext_fun| {
             const was = try self.generated.getOrPut(req.name);
             if (was.found_existing) {
