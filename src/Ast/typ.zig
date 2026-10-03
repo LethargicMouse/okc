@@ -46,6 +46,7 @@ pub const Typ = union(enum) {
         u64,
         bool,
         void,
+        type,
 
         pub fn format(prime: Prime, writer: *std.Io.Writer) !void {
             try writer.writeAll(@tagName(prime));
@@ -54,7 +55,7 @@ pub const Typ = union(enum) {
         pub fn isNumber(prime: Prime) bool {
             switch (prime) {
                 .i32, .u8, .u32, .u64 => return true,
-                .bool, .void => return false,
+                .bool, .void, .type => return false,
             }
         }
 

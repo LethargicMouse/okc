@@ -1282,8 +1282,11 @@ fn checkVarIn(
             return self.fillFunMetaHeader(&vari.fun_meta.?, header, location);
         },
         .struc, .typ => {
-            self.fail(location, "it is a type", .{});
-            return err;
+            item.used = true;
+            return .{
+                .typ = .{ .prime = .type },
+                .mutable = false,
+            };
         },
         .vari => |*vari_decl| {
             item.used = true;
@@ -1359,16 +1362,21 @@ fn failNotDeclared(self: *Self, location: Location, name: []const u8, mod_name: 
 fn checkMethod(self: *Self, method: *Ast.Expr.Method, hint: Typ) !ExprInfo {
     const caller = try self.checkExpr(&method.expr, .{});
     var norm = caller.typ.normalise();
-    if (norm == .ptr) {
-        norm = norm.ptr.typ.normalise();
-    }
     if (norm == .err) {
         return self.checkBadCall(method.args);
     }
-    const name = getTypName(norm) orelse {
-        self.failNoMethod(method.name_location, norm, method.vari.name);
-        return self.checkBadCall(method.args);
-    };
+    var name: Typ.Name = undefined;
+    if (norm == .prime and norm.prime == .type) {
+        name = .{ .name = method.expr.kind.vari.name };
+    } else {
+        if (norm == .ptr) {
+            norm = norm.ptr.typ.normalise();
+        }
+        name = getTypName(norm) orelse {
+            self.failNoMethod(method.name_location, norm, method.vari.name);
+            return self.checkBadCall(method.args);
+        };
+    }
     const members = self.getNameMembers(name.name) orelse {
         self.failNoMethod(method.name_location, norm, method.vari.name);
         return self.checkBadCall(method.args);
@@ -1380,9 +1388,13 @@ fn checkMethod(self: *Self, method: *Ast.Expr.Method, hint: Typ) !ExprInfo {
         method.name_location,
         false,
     );
+    const first: ?FirstArg = if (norm == .prime and norm.prime == .type)
+        null
+    else
+        .{ .typ = caller.typ, .location = method.expr.location };
     return self.checkCall(
         callee_info.typ,
-        .{ .typ = caller.typ, .location = method.expr.location },
+        first,
         method.args,
         method.name_location,
         hint,
@@ -1412,10 +1424,15 @@ fn checkCallExpr(self: *Self, call: *Ast.Expr.Call, hint: Typ) !ExprInfo {
     return self.checkCall(callee_info.typ, null, call.args, call.expr.location, hint);
 }
 
+const FirstArg = struct {
+    typ: Typ,
+    location: Location,
+};
+
 fn checkCall(
     self: *Self,
     typ: Typ,
-    mfirst: ?struct { typ: Typ, location: Location },
+    mfirst: ?FirstArg,
     args: []Ast.Expr,
     location: Location,
     hint: Typ,

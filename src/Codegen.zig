@@ -1176,7 +1176,7 @@ fn primeLayout(prime: Ast.Typ.Prime) !Layout {
     return switch (prime) {
         .u8, .bool => .make(1, 1),
         .i32, .u32 => .make(4, 4),
-        .u64 => .make(8, 8),
+        .u64, .type => .make(8, 8),
         .void => .make(0, 1),
     };
 }
@@ -1224,7 +1224,7 @@ const LlvmTyp = struct {
                     .u8 => "i8",
                     .i32 => "i32",
                     .u32 => "i32",
-                    .u64 => "i64",
+                    .u64, .type => "i64",
                     .bool => "i1",
                     .void => "void",
                 };
