@@ -24,6 +24,7 @@ current_generics: []const Ast.Item.Generic = &.{},
 generics_usage: std.DynamicBitSetUnmanaged,
 convert_queue: std.ArrayList(ConvertReq) = .empty,
 converted_typs: HashMap(Typ, Ast.Typ),
+self_typ: Typ = undefined,
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -177,18 +178,26 @@ fn checkStructUsage(self: *Self, struc: Struct) void {
 }
 
 fn regItem(self: *Self, item: *Ast.Item) !void {
+    try self.regItemTo(&self.items, item);
+}
+
+fn regItemTo(
+    self: *Self,
+    items: *std.StringHashMap(Item),
+    item: *Ast.Item,
+) error{OutOfMemory}!void {
     const kind = switch (item.kind) {
         .typ_alias => |alias| try self.regTypAlias(alias),
         .ext_fun => |ext_fun| try self.regHeader(ext_fun.header),
-        .struc => |struc| try self.regStruct(struc),
+        .struc => |struc| try self.regStruct(item.name, struc),
         .fun => |fun| try self.regHeader(fun.header),
         .constant => |*declare| try self.regConst(declare),
     };
-    if (self.items.get(item.name)) |prev| {
+    if (items.get(item.name)) |prev| {
         self.failAlreadyDeclared(item.location, item.name, prev.location);
         return;
     }
-    try self.items.put(item.name, .{
+    try items.put(item.name, .{
         .location = item.location,
         .kind = kind,
     });
@@ -265,33 +274,30 @@ fn checkArrayComptime(self: *Self, array: Ast.Expr.Array) void {
 fn checkItem(self: *Self, item: Ast.Item) error{OutOfMemory}!void {
     switch (item.kind) {
         .typ_alias, .ext_fun, .constant => {},
-        .struc => |struc| try self.checkStruct(item.name, struc, item.location),
+        .struc => |struc| try self.checkStruct(item.name, struc),
         .fun => |fun| try self.checkFun(fun, item.location),
     }
 }
 
-fn checkStruct(self: *Self, name: []const u8, struc: Ast.Item.Struct, location: Location) !void {
-    const generics = try self.arena.allocator().alloc(Typ, struc.generics.len);
-    for (generics, struc.generics) |*target, generic| {
-        target.* = .{ .name = .{ .name = generic.name } };
-    }
-    const self_typ: Typ = .{ .name = .{
+fn checkStruct(self: *Self, name: []const u8, struc: Ast.Item.Struct) !void {
+    const generics = try self.makeNamedGenerics(struc.generics);
+    const prev_self_typ = self.self_typ;
+    defer self.self_typ = prev_self_typ;
+    self.self_typ = .{ .name = .{
         .name = name,
         .generics = generics,
     } };
-    const maybe_self_before = self.items.get("Self");
-    try self.items.put("Self", .{
-        .location = location,
-        .kind = .{ .typ = self_typ },
-    });
     for (struc.items) |item| {
         try self.checkItem(item);
     }
-    if (maybe_self_before) |self_before| {
-        try self.items.put("Self", self_before);
-    } else {
-        _ = self.items.remove("Self");
+}
+
+fn makeNamedGenerics(self: *Self, generics: []const Ast.Item.Generic) ![]const Typ {
+    const res = try self.arena.allocator().alloc(Typ, generics.len);
+    for (res, generics) |*target, generic| {
+        target.* = .{ .name = .{ .name = generic.name } };
     }
+    return res;
 }
 
 fn checkVarUsage(self: *Self, vari: Var, location: Location) void {
@@ -345,14 +351,21 @@ fn failAlreadyDeclared(
     );
 }
 
-fn regStruct(self: *Self, struc: Ast.Item.Struct) !Item.Kind {
+fn regStruct(self: *Self, name: []const u8, struc: Ast.Item.Struct) !Item.Kind {
     try self.checkGenericsRedeclare(struc.generics);
     var res = Struct{
         .generics = struc.generics,
         .fields = .init(self.gpa),
+        .items = .init(self.gpa),
     };
     self.current_generics = struc.generics;
     try self.generics_usage.resize(self.gpa, struc.generics.len, false);
+    const prev_self_typ = self.self_typ;
+    defer self.self_typ = prev_self_typ;
+    self.self_typ = .{ .name = .{
+        .name = name,
+        .generics = try self.makeNamedGenerics(struc.generics),
+    } };
     for (struc.fields) |*field| {
         const typ = try self.checkTyp(field.typ);
         var defaulted = false;
@@ -371,6 +384,9 @@ fn regStruct(self: *Self, struc: Ast.Item.Struct) !Item.Kind {
             .defaulted = defaulted,
             .used = field.name[0] == '_',
         });
+    }
+    for (struc.items) |*item| {
+        try self.regItemTo(&res.items, item);
     }
     self.checkGenericsUsage();
     return .{ .struc = res };
@@ -449,7 +465,7 @@ fn checkBlock(self: *Self, block: []Ast.Stmt) !ControlFlow {
                 res = cf;
             }
             if (i + 1 != block.len) {
-                self.fail(block[i + 1].location, "Stmt is unreachable", .{});
+                self.fail(block[i + 1].location, "statement is unreachable", .{});
             }
         }
     }
@@ -744,7 +760,7 @@ fn declareVar(self: *Self, name: []const u8, vari: Var, location: Location) !voi
 
 fn checkExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) error{OutOfMemory}!ExprInfo {
     switch (expr.kind) {
-        .method => unreachable,
+        .method => |method| return self.checkMethod(method, hint.typ),
         .subslice => |subslice| return self.checkSubslice(subslice, expr.location),
         .sizeof => |typ| return self.checkSizeof(typ),
         .array => |*array| return self.checkArray(array, expr.location, hint.typ),
@@ -762,7 +778,7 @@ fn checkExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) error{OutOfMemory}!Ex
             .mutable = false,
         },
         .undef => |*undef| return self.checkUndef(undef, expr.location, hint.typ),
-        .call => |call| return self.checkCall(call, hint.typ),
+        .call => |call| return self.checkCallExpr(call, hint.typ),
         .binary => |binary| return self.checkBinary(binary),
         .field => |field| return self.checkField(field, expr.location, hint.mutable),
         .named_struc => |*struc| return self.checkNamedStructExpr(struc, expr.location),
@@ -979,7 +995,7 @@ fn checkTypedStruc(
         .mutable = false,
     };
     const item = self.items.getPtr(name.name) orelse {
-        self.failNotDeclared(location, name.name);
+        self.failNotDeclared(location, name.name, location.name);
         return err;
     };
     item.used = true;
@@ -1120,17 +1136,19 @@ fn checkField(
             location,
         );
     }
-    const name = self.getTypName(norm, field.expr.location) orelse return err;
-    const item = self.items.get(name.name) orelse {
-        self.failNotStruct(field.expr.location, norm);
+    if (norm == .err) {
+        return err;
+    }
+    const name = getTypName(norm) orelse {
+        self.failNoField(location, field.name, norm);
         return err;
     };
-    const struc = if (item.kind == .struc) item.kind.struc else {
-        self.failNotStruct(field.expr.location, norm);
+    const struc = self.getNameStruct(name.name) orelse {
+        self.failNoField(location, field.name, norm);
         return err;
     };
     const fiel = struc.fields.getPtr(field.name) orelse {
-        self.failNoField(location, field.name, .{ .name = name });
+        self.failNoField(location, field.name, norm);
         return err;
     };
     fiel.used = true;
@@ -1143,6 +1161,11 @@ fn checkField(
         .typ = try fiel.typ.resolve(&resolver),
         .mutable = info.mutable,
     };
+}
+
+fn getNameStruct(self: Self, name: []const u8) ?Struct {
+    const item = self.getNameItem(name);
+    return if (item.kind == .struc) item.kind.struc else null;
 }
 
 fn checkSliceField(
@@ -1174,19 +1197,19 @@ fn checkSliceField(
     };
 }
 
-fn getTypName(self: *Self, norm: Typ, location: Location) ?Typ.Name {
-    switch (norm) {
-        .err => return null,
+fn getTypName(typ: Typ) ?Typ.Name {
+    switch (typ) {
+        .fun, .prime, .ptr, .int, .slice, .array => return null,
         .name => |name| return name,
-        .slice, .array, .any, .lazy, .int => {
-            std.log.err("getTypName: {f}", .{norm});
+        .any, .lazy, .err => {
+            std.log.err("getTypName: {f}", .{typ});
             unreachable;
         },
-        .fun, .prime, .ptr => {
-            self.failNotStruct(location, norm);
-            return null;
-        },
     }
+}
+
+fn failNoMembers(self: *Self, location: Location, typ: Typ) void {
+    self.fail(location, "type `{f}` does not have members", .{typ});
 }
 
 fn failNoField(
@@ -1233,12 +1256,23 @@ fn checkVar(
     location: Location,
     hint_mutable: bool,
 ) !ExprInfo {
+    return self.checkVarIn(location.name, self.items, vari, location, hint_mutable);
+}
+
+fn checkVarIn(
+    self: *Self,
+    mod_name: []const u8,
+    items: std.StringHashMap(Item),
+    vari: *Ast.Expr.Var,
+    location: Location,
+    hint_mutable: bool,
+) !ExprInfo {
     const err = ExprInfo{
         .typ = .err,
         .mutable = true,
     };
-    const item = self.items.getPtr(vari.name) orelse {
-        self.failNotDeclared(location, vari.name);
+    const item = items.getPtr(vari.name) orelse {
+        self.failNotDeclared(location, vari.name, mod_name);
         return err;
     };
     switch (item.kind) {
@@ -1318,17 +1352,84 @@ fn fillFunMetaHeader(
     };
 }
 
-fn failNotDeclared(self: *Self, location: Location, name: []const u8) void {
-    self.fail(location, "item `{s}` is not declared", .{name});
+fn failNotDeclared(self: *Self, location: Location, name: []const u8, mod_name: []const u8) void {
+    self.fail(location, "item `{s}` is not declared in `{s}`", .{ name, mod_name });
 }
 
-fn checkCall(self: *Self, call: *Ast.Expr.Call, hint: Typ) !ExprInfo {
+fn checkMethod(self: *Self, method: *Ast.Expr.Method, hint: Typ) !ExprInfo {
+    const caller = try self.checkExpr(&method.expr, .{});
+    var norm = caller.typ.normalise();
+    if (norm == .ptr) {
+        norm = norm.ptr.typ.normalise();
+    }
+    if (norm == .err) {
+        return self.checkBadCall(method.args);
+    }
+    const name = getTypName(norm) orelse {
+        self.failNoMethod(method.name_location, norm, method.vari.name);
+        return self.checkBadCall(method.args);
+    };
+    const members = self.getNameMembers(name.name) orelse {
+        self.failNoMethod(method.name_location, norm, method.vari.name);
+        return self.checkBadCall(method.args);
+    };
+    const callee_info = try self.checkVarIn(
+        name.name,
+        members,
+        &method.vari,
+        method.name_location,
+        false,
+    );
+    return self.checkCall(
+        callee_info.typ,
+        .{ .typ = caller.typ, .location = method.expr.location },
+        method.args,
+        method.name_location,
+        hint,
+    );
+}
+
+fn failNoMethod(self: *Self, location: Location, typ: Typ, name: []const u8) void {
+    self.fail(location, "type `{f}` has no method named `{s}`", .{ typ, name });
+}
+
+fn getNameMembers(self: Self, name: []const u8) ?std.StringHashMap(Item) {
+    const item = self.getNameItem(name);
+    return item.getMembers();
+}
+
+fn getTypItem(self: Self, typ: Typ) ?Item {
+    const name = getTypName(typ) orelse return null;
+    return self.getNameItem(name.name);
+}
+
+fn getNameItem(self: Self, name: []const u8) Item {
+    return self.items.get(name).?;
+}
+
+fn checkCallExpr(self: *Self, call: *Ast.Expr.Call, hint: Typ) !ExprInfo {
     const callee_info = try self.checkExpr(&call.expr, .{});
-    const fun = self.getFunTyp(callee_info.typ, call.expr.location) orelse
-        return self.checkBadCall(call);
+    return self.checkCall(callee_info.typ, null, call.args, call.expr.location, hint);
+}
+
+fn checkCall(
+    self: *Self,
+    typ: Typ,
+    mfirst: ?struct { typ: Typ, location: Location },
+    args: []Ast.Expr,
+    location: Location,
+    hint: Typ,
+) !ExprInfo {
+    const fun = self.getFunTyp(typ, location) orelse
+        return self.checkBadCall(args);
     // to propagate hint to generics
     _ = fun.ret_typ.unify(hint, true);
-    for (call.args, fun.params) |*arg, param| {
+    var params = fun.params;
+    if (mfirst) |first| {
+        params = fun.params[1..];
+        _ = self.unify(first.location, fun.params[0], first.typ);
+    }
+    for (args, params) |*arg, param| {
         const info = try self.checkExpr(arg, .{ .typ = param.normalise() });
         _ = self.unify(arg.location, param, info.typ);
     }
@@ -1349,8 +1450,8 @@ fn getFunTyp(self: *Self, typ: Typ, location: Location) ?Typ.Fun {
     }
 }
 
-fn checkBadCall(self: *Self, call: *Ast.Expr.Call) !ExprInfo {
-    for (call.args) |*arg| {
+fn checkBadCall(self: *Self, args: []Ast.Expr) !ExprInfo {
+    for (args) |*arg| {
         _ = try self.checkExpr(arg, .{});
     }
     return .{
@@ -1397,8 +1498,14 @@ pub fn checkTypDecl(self: *Self, name: Ast.Typ.Name) error{BadType}!?Typ {
     if (debug_check_typ) {
         std.debug.print("checkTypDecl {f}\n", .{name.delocate()});
     }
+    if (std.mem.eql(u8, name.name, "Self")) {
+        if (name.generics.len != 0) {
+            self.failWrongCount(name.location, "generic", 0, name.generics.len);
+        }
+        return self.self_typ;
+    }
     const item = self.items.getPtr(name.name) orelse {
-        self.fail(name.location, "item `{s}` is not declared", .{name.name});
+        self.failNotDeclared(name.location, name.name, name.location.name);
         return error.BadType;
     };
     switch (item.kind) {
@@ -1416,15 +1523,20 @@ pub fn checkTypDecl(self: *Self, name: Ast.Typ.Name) error{BadType}!?Typ {
                 std.debug.print("item {s} used\n", .{name.name});
             }
             if (struc.generics.len != name.generics.len) {
-                self.fail(
+                self.failWrongCount(
                     name.location,
-                    "expected {} generics\n        found {}",
-                    .{ struc.generics.len, name.generics.len },
+                    "generic",
+                    struc.generics.len,
+                    name.generics.len,
                 );
             }
             return null;
         },
     }
+}
+
+fn failWrongCount(self: *Self, location: Location, kind: []const u8, a: usize, b: usize) void {
+    self.fail(location, "expected {} {s}s\n        found {}", .{ a, kind, b });
 }
 
 const debug_check_typ = false;
@@ -1532,10 +1644,12 @@ const Field = struct {
 
 const Struct = struct {
     generics: []const Ast.Item.Generic,
+    items: std.StringHashMap(Item),
     fields: std.StringHashMap(Field),
 
     fn deinit(struc: *Struct) void {
         struc.fields.deinit();
+        struc.items.deinit();
         struc.* = undefined;
     }
 };
@@ -1569,5 +1683,12 @@ const Item = struct {
             .struc => |*struc| struc.deinit(),
             .fun, .vari, .typ => {},
         }
+    }
+
+    fn getMembers(item: Item) ?std.StringHashMap(Item) {
+        return switch (item.kind) {
+            .fun, .vari, .typ => null,
+            .struc => |struc| struc.items,
+        };
     }
 };
