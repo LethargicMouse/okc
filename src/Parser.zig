@@ -719,6 +719,19 @@ fn parseExprPosted(self: *Self, loud: bool) Error!Ast.Expr {
     var res = try self.parseExprAtom(loud);
     while (try self.parseMaybe(Postfix, parsePostfix)) |postfix| {
         switch (postfix.kind) {
+            .method => |method_postfix| {
+                const method = try self.ast_arena.allocator().create(Ast.Expr.Method);
+                method.* = .{
+                    .expr = res,
+                    .vari = method_postfix.vari,
+                    .args = method_postfix.args,
+                    .name_location = method_postfix.name_location,
+                };
+                res = .{
+                    .location = res.location.combine(postfix.location),
+                    .kind = .{ .method = method },
+                };
+            },
             .call => |args| {
                 const call = try self.ast_arena.allocator().create(Ast.Expr.Call);
                 call.* = .{
@@ -771,11 +784,27 @@ fn parseExprPosted(self: *Self, loud: bool) Error!Ast.Expr {
 
 fn parsePostfix(self: *Self) !Postfix {
     return self.parseEither(Postfix, .{
+        parseMethodPostfix,
         parseCallPostfix,
         parseFieldPostfix,
         parseSubslicePostfix,
         parseElemPostfix,
     });
+}
+
+fn parseMethodPostfix(self: *Self) !Postfix {
+    try self.expect(.dot);
+    const location = self.getLocation();
+    const name = try self.parseName();
+    const call_postfix = try self.parseCallPostfix();
+    return .{
+        .location = call_postfix.location,
+        .kind = .{ .method = .{
+            .vari = .{ .name = name },
+            .args = call_postfix.kind.call,
+            .name_location = location,
+        } },
+    };
 }
 
 fn parseSubslicePostfix(self: *Self) !Postfix {
@@ -1132,6 +1161,13 @@ const Postfix = struct {
         elem: Ast.Expr,
         subslice: Subslice,
         call: []Ast.Expr,
+        method: Method,
+    };
+
+    const Method = struct {
+        vari: Ast.Expr.Var,
+        args: []Ast.Expr,
+        name_location: Location,
     };
 
     const Subslice = struct {

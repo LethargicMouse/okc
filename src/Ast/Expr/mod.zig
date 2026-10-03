@@ -38,6 +38,7 @@ pub const Method = struct {
     expr: Self,
     vari: Var,
     args: []Self,
+    name_location: Location,
 };
 
 pub const FunMeta = struct {
