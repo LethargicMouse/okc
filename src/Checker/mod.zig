@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const Ast = @import("Ast/mod.zig");
-const HashMap = @import("hash_map.zig").HashMap;
-const Location = @import("Location.zig");
-const Memo = @import("memo.zig").Memo;
-const Resolver = @import("resolver.zig").Resolver;
+const Ast = @import("../Ast/mod.zig");
+const HashMap = @import("../hash_map.zig").HashMap;
+const Location = @import("../Location.zig");
+const Memo = @import("../memo.zig").Memo;
+const Resolver = @import("../resolver.zig").Resolver;
 const Typ = @import("typ.zig").Typ;
 
 const Self = @This();
