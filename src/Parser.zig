@@ -132,17 +132,12 @@ fn parseStruct(self: *Self) !Ast.Item.Struct {
     const generics = try self.parseMaybe([]const Ast.Item.Generic, parseGenerics) orelse &.{};
     try self.expectLoud(.curl);
     const fields = try self.parseSep(Ast.Item.Struct.Field, parseFieldDeclLoud);
-    var items: []Ast.Item = &.{};
-    if (self.cursor != 0 and self.tokens[self.cursor - 1].lexeme == .comma) {
-        items = try self.parseMany(Ast.Item, parseItemLoud);
-    }
     try self.expect(.curr);
     self.tmp_location = location;
     self.tmp_name = name;
     return .{
         .generics = generics,
         .fields = fields,
-        .items = items,
     };
 }
 

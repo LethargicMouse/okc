@@ -27,7 +27,6 @@ pub fn getHeader(self: Self) ?Fun.Header {
 pub const Struct = struct {
     generics: []const Generic,
     fields: []Field,
-    items: []Self,
 
     pub const Field = struct {
         name: []const u8,

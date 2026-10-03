@@ -264,33 +264,8 @@ fn checkArrayComptime(self: *Self, array: Ast.Expr.Array) void {
 
 fn checkItem(self: *Self, item: Ast.Item) error{OutOfMemory}!void {
     switch (item.kind) {
-        .typ_alias, .ext_fun, .constant => {},
-        .struc => |struc| try self.checkStruct(item.name, struc, item.location),
+        .typ_alias, .ext_fun, .constant, .struc => {},
         .fun => |fun| try self.checkFun(fun, item.location),
-    }
-}
-
-fn checkStruct(self: *Self, name: []const u8, struc: Ast.Item.Struct, location: Location) !void {
-    const generics = try self.arena.allocator().alloc(Typ, struc.generics.len);
-    for (generics, struc.generics) |*target, generic| {
-        target.* = .{ .name = .{ .name = generic.name } };
-    }
-    const self_typ: Typ = .{ .name = .{
-        .name = name,
-        .generics = generics,
-    } };
-    const maybe_self_before = self.items.get("Self");
-    try self.items.put("Self", .{
-        .location = location,
-        .kind = .{ .typ = self_typ },
-    });
-    for (struc.items) |item| {
-        try self.checkItem(item);
-    }
-    if (maybe_self_before) |self_before| {
-        try self.items.put("Self", self_before);
-    } else {
-        _ = self.items.remove("Self");
     }
 }
 
