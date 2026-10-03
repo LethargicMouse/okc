@@ -6,9 +6,9 @@ const Location = @import("../Location.zig");
 const Memo = @import("../memo.zig").Memo;
 const Resolver = @import("../resolver.zig").Resolver;
 const Typ = @import("typ.zig").Typ;
+const Failer = @import("Failer.zig");
 
 const Self = @This();
-
 gpa: std.mem.Allocator,
 arena: *std.heap.ArenaAllocator,
 typ_memo: Memo(Typ),
@@ -18,7 +18,7 @@ vars_stack: std.ArrayList([]const u8) = .empty,
 ast_items: std.StringHashMap(*const Ast.Item),
 items: std.StringHashMap(Item),
 ret_typ: Typ = undefined,
-errors_cnt: u16 = 0,
+failer: Failer = .init(),
 loops_nested: u16 = 0,
 current_generics: []const Ast.Item.Generic = &.{},
 generics_usage: std.DynamicBitSetUnmanaged,
@@ -49,10 +49,7 @@ pub fn run(self: *Self, ast: Ast) CheckError!std.StringHashMap(*const Ast.Item) 
     defer self.deinit();
     errdefer self.ast_items.deinit();
     try self.checkAst(ast);
-    if (self.errors_cnt != 0) {
-        std.log.err("check failed with {} errors", .{self.errors_cnt});
-        return error.Handled;
-    }
+    try self.failer.ensureNoErrors();
     return self.ast_items;
 }
 
@@ -73,7 +70,7 @@ fn convertTypOrFail(self: *Self, typ: Typ, location: ?Location) !?Ast.Typ {
         error.BadConvert => return null,
         error.ConvertAny => {
             if (location) |loc| {
-                self.failCannotInfer(typ, loc);
+                self.failer.cannotInfer(typ, loc);
             }
             return null;
         },
@@ -163,7 +160,7 @@ fn checkItemUsage(self: *Self, item: Item) void {
             .struc => |struc| self.checkStructUsage(struc),
         }
     } else {
-        self.failUnused(item.location);
+        self.failer.unused(item.location);
     }
 }
 
@@ -171,7 +168,7 @@ fn checkStructUsage(self: *Self, struc: Struct) void {
     var iter = struc.fields.valueIterator();
     while (iter.next()) |field| {
         if (!field.used) {
-            self.failUnused(field.location);
+            self.failer.unused(field.location);
         }
     }
 }
@@ -186,7 +183,7 @@ fn regItem(self: *Self, item: *Ast.Item) !void {
         .use => unreachable,
     };
     if (self.items.get(item.name)) |prev| {
-        self.failAlreadyDeclared(item.location, item.name, prev.location);
+        self.failer.alreadyDeclared(item.location, item.name, prev.location);
         return;
     }
     try self.items.put(item.name, .{
@@ -223,7 +220,7 @@ fn checkConstExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) !Typ {
 fn checkExprComptime(self: *Self, expr: Ast.Expr) void {
     switch (expr.kind) {
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
-        .call, .method => self.fail(expr.location, "cannot evaluate at compile time", .{}),
+        .call, .method => self.failer.fail(expr.location, "cannot evaluate at compile time", .{}),
         .field => |field| self.checkExprComptime(field.expr),
         .unary => |unary| self.checkExprComptime(unary.expr),
         .elem => |elem| self.checkElemComptime(elem.*),
@@ -273,22 +270,18 @@ fn checkItem(self: *Self, item: Ast.Item) error{OutOfMemory}!void {
 
 fn checkVarUsage(self: *Self, vari: Var, location: Location) void {
     if (vari.mutable and !vari.mutated) {
-        self.fail(location, "variable is never mutated", .{});
+        self.failer.fail(location, "variable is never mutated", .{});
         std.log.info("remove `mut` before name\n", .{});
     }
 }
 
-fn failUnused(self: *Self, location: Location) void {
-    self.fail(location, "item is never used", .{});
-}
-
 fn checkMain(self: *Self, location: Location) void {
     const item = self.items.getPtr("main") orelse {
-        self.fail(location, "`main` function not found", .{});
+        self.failer.fail(location, "`main` function not found", .{});
         return;
     };
     if (item.kind != .fun) {
-        self.fail(item.location, "item `main` is not a function", .{});
+        self.failer.fail(item.location, "item `main` is not a function", .{});
     }
     item.used = true;
 }
@@ -309,19 +302,6 @@ fn regHeader(self: *Self, header: Ast.Item.Fun.Header) !Item.Kind {
     } };
 }
 
-fn failAlreadyDeclared(
-    self: *Self,
-    location: Location,
-    name: []const u8,
-    prev: Location,
-) void {
-    self.fail(
-        location,
-        "item `{s}` is already declared in {f}",
-        .{ name, prev },
-    );
-}
-
 fn regStruct(self: *Self, struc: Ast.Item.Struct) !Item.Kind {
     try self.checkGenericsRedeclare(struc.generics);
     var res = Struct{
@@ -339,7 +319,7 @@ fn regStruct(self: *Self, struc: Ast.Item.Struct) !Item.Kind {
             defaulted = true;
         }
         if (res.fields.get(field.name)) |prev| {
-            self.failAlreadyDeclared(field.location, field.name, prev.location);
+            self.failer.alreadyDeclared(field.location, field.name, prev.location);
             continue;
         }
         try res.fields.put(field.name, .{
@@ -358,11 +338,11 @@ fn checkGenericsRedeclare(self: *Self, generics: []const Ast.Item.Generic) !void
     defer map.deinit();
     for (generics) |generic| {
         if (self.items.get(generic.name)) |prev| {
-            self.failAlreadyDeclared(generic.location, generic.name, prev.location);
+            self.failer.alreadyDeclared(generic.location, generic.name, prev.location);
         }
         const entry = try map.getOrPut(generic.name);
         if (entry.found_existing) {
-            self.failAlreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
+            self.failer.alreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
         } else {
             entry.value_ptr.* = generic.location;
         }
@@ -372,7 +352,7 @@ fn checkGenericsRedeclare(self: *Self, generics: []const Ast.Item.Generic) !void
 fn checkGenericsUsage(self: *Self) void {
     for (self.current_generics, 0..) |generic, i| {
         if (!self.generics_usage.isSet(i)) {
-            self.failUnused(generic.location);
+            self.failer.unused(generic.location);
         }
     }
 }
@@ -389,7 +369,7 @@ fn checkFun(self: *Self, fun: Ast.Item.Fun, location: Location) !void {
     }
     const cf = try self.checkBlock(fun.body);
     if (cf != .ret and !fun.header.ret_typ.isVoid()) {
-        self.fail(location, "function may not return", .{});
+        self.failer.fail(location, "function may not return", .{});
     }
     self.freeVars(rbp);
     try self.flushConvertQueue();
@@ -426,7 +406,7 @@ fn checkBlock(self: *Self, block: []Ast.Stmt) !ControlFlow {
                 res = cf;
             }
             if (i + 1 != block.len) {
-                self.fail(block[i + 1].location, "Stmt is unreachable", .{});
+                self.failer.fail(block[i + 1].location, "Stmt is unreachable", .{});
             }
         }
     }
@@ -461,7 +441,7 @@ fn checkStmt(self: *Self, stmt: *Ast.Stmt) error{OutOfMemory}!ControlFlow {
 fn checkForRange(self: *Self, forr: *Ast.Stmt.ForRange) !ControlFlow {
     var start = try self.checkExpr(&forr.start, .{});
     if (!start.typ.isNumber()) {
-        self.failWrongTyp(forr.start.location, .int, start.typ);
+        self.failer.wrongTyp(forr.start.location, .int, start.typ);
         start.typ = .err;
     }
     const end = try self.checkExpr(&forr.end, .{});
@@ -504,7 +484,7 @@ fn freeVar(self: *Self, name: []const u8) void {
 fn checkIgnore(self: *Self, ignore: *Ast.Stmt.Ignore, location: Location) !ControlFlow {
     const info = try self.checkExpr(&ignore.expr, .{});
     if (info.typ == .prime and info.typ.prime == .void) {
-        self.fail(location, "redundant ignore", .{});
+        self.failer.fail(location, "redundant ignore", .{});
         std.log.info("remove `_ =` before expr\n", .{});
     }
     return .cont;
@@ -512,7 +492,7 @@ fn checkIgnore(self: *Self, ignore: *Ast.Stmt.Ignore, location: Location) !Contr
 
 fn checkBreak(self: *Self, location: Location) error{OutOfMemory}!ControlFlow {
     if (self.loops_nested == 0) {
-        self.fail(location, "`break` outside of loop", .{});
+        self.failer.fail(location, "`break` outside of loop", .{});
         return .cont;
     }
     return .brek;
@@ -560,11 +540,11 @@ fn checkBranch(self: *Self, branch: *Ast.Stmt.Branch, loop: bool) !ControlFlow {
 fn checkOpAssign(self: *Self, op_assign: *Ast.Stmt.OpAssign) !ControlFlow {
     var left = try self.checkExpr(&op_assign.left, .{ .mutable = true });
     if (!left.mutable) {
-        self.failNotMut(op_assign.left.location);
+        self.failer.notMut(op_assign.left.location);
     }
     std.debug.assert(op_assign.kind.getClass() == .arith);
     if (!left.typ.isNumber()) {
-        self.failWrongTyp(op_assign.left.location, .int, left.typ);
+        self.failer.wrongTyp(op_assign.left.location, .int, left.typ);
         left.typ = .err;
     }
     const right = try self.checkExpr(&op_assign.right, .{});
@@ -575,7 +555,7 @@ fn checkOpAssign(self: *Self, op_assign: *Ast.Stmt.OpAssign) !ControlFlow {
 fn checkAssign(self: *Self, assign: *Ast.Stmt.Assign) !ControlFlow {
     const left = try self.checkExpr(&assign.left, .{ .mutable = true });
     if (!left.mutable) {
-        self.failNotMut(assign.left.location);
+        self.failer.notMut(assign.left.location);
     }
     const info = try self.checkExpr(&assign.expr, .{ .typ = left.typ });
     _ = self.unify(assign.expr.location, left.typ, info.typ);
@@ -594,7 +574,7 @@ fn checkUnary(self: *Self, unary: *Ast.Expr.Unary, location: Location, hint: Typ
 fn checkNeg(self: *Self, expr: *Ast.Expr) !ExprInfo {
     var info = try self.checkExpr(expr, .{});
     if (!info.typ.isNumber()) {
-        self.failWrongTyp(expr.location, .int, info.typ);
+        self.failer.wrongTyp(expr.location, .int, info.typ);
         info.typ = .err;
     }
     return .{
@@ -619,15 +599,11 @@ fn checkDeref(self: *Self, expr: *Ast.Expr, location: Location) !ExprInfo {
         },
         .err => return err,
         .prime, .name, .any, .array, .slice, .fun, .int => {
-            self.fail(location, "cannot dereference type `{f}`", .{info.typ});
+            self.failer.fail(location, "cannot dereference type `{f}`", .{info.typ});
             return err;
         },
         .lazy => unreachable,
     }
-}
-
-fn failNotMut(self: *Self, location: Location) void {
-    self.fail(location, "it is immutable", .{});
 }
 
 fn checkElem(self: *Self, elem: *Ast.Expr.Elem, location: Location) !ExprInfo {
@@ -652,7 +628,7 @@ fn getElemExprInfo(self: *Self, info: ExprInfo, location: Location) ?ExprInfo {
         },
         .err => return null,
         .prime, .name, .ptr, .any, .fun, .int => {
-            self.fail(location, "type `{f}` does not support indexing", .{info.typ});
+            self.failer.fail(location, "type `{f}` does not support indexing", .{info.typ});
             return null;
         },
         .lazy => unreachable,
@@ -666,7 +642,7 @@ fn unify(self: *Self, location: Location, a: Typ, b: Typ) Typ {
         }
         return typ;
     }
-    self.failWrongTyp(location, a, b);
+    self.failer.wrongTyp(location, a, b);
     if (a == .ptr and
         a.ptr.typ.* == .prime and
         a.ptr.typ.prime == .u8 and
@@ -677,14 +653,6 @@ fn unify(self: *Self, location: Location, a: Typ, b: Typ) Typ {
         std.log.info("append `.ptr` to get C-style string\n", .{});
     }
     return .err;
-}
-
-fn failWrongTyp(self: *Self, location: Location, a: Typ, b: Typ) void {
-    self.fail(location,
-        \\wrong type:
-        \\         expected  {f}
-        \\            found  {f}
-    , .{ a, b });
 }
 
 fn checkDeclare(
@@ -709,7 +677,7 @@ fn checkDeclare(
 
 fn declareVar(self: *Self, name: []const u8, vari: Var, location: Location) !void {
     if (self.items.get(name)) |prev| {
-        self.failAlreadyDeclared(location, name, prev.location);
+        self.failer.alreadyDeclared(location, name, prev.location);
         return;
     }
     try self.vars_stack.append(self.gpa, name);
@@ -766,7 +734,7 @@ fn checkSubslice(self: *Self, subslice: *Ast.Expr.Subslice, location: Location) 
             .mutable = info.mutable,
         },
         else => |typ| {
-            self.fail(location, "cannot take slice of `{f}`", .{typ});
+            self.failer.fail(location, "cannot take slice of `{f}`", .{typ});
             return .{
                 .typ = .{ .slice = .{
                     .typ = try self.typ_memo.box(.err),
@@ -839,7 +807,7 @@ fn checkStr(self: *Self) !ExprInfo {
 fn checkNotb(self: *Self, expr: *Ast.Expr) !ExprInfo {
     var info = try self.checkExpr(expr, .{});
     if (!info.typ.isNumber()) {
-        self.failWrongTyp(expr.location, .int, info.typ);
+        self.failer.wrongTyp(expr.location, .int, info.typ);
         info.typ = .err;
     }
     return .{
@@ -882,7 +850,7 @@ fn checkStructExpr(
         .err => return err,
         .lazy => unreachable,
         .prime, .ptr, .any, .array, .fun, .int => {
-            self.failCannotInfer(.any, location);
+            self.failer.cannotInfer(.any, location);
             for (struc.fields) |*field| {
                 _ = try self.checkExpr(&field.expr, .{});
             }
@@ -904,7 +872,7 @@ fn checkSliceStruc(
     for (fields) |*field| {
         if (std.mem.eql(u8, field.name, "ptr")) {
             if (was_ptr) |_| {
-                self.failNewFieldSecond(field.location, field.name);
+                self.failer.newFieldSecond(field.location, field.name);
             }
             const expected = Typ{ .ptr = .{
                 .typ = slice.typ,
@@ -915,7 +883,7 @@ fn checkSliceStruc(
             was_ptr = if (typ == .ptr) typ.ptr.typ else try self.typ_memo.box(.err);
         } else if (std.mem.eql(u8, field.name, "len")) {
             if (was_len) {
-                self.failNewFieldSecond(field.location, field.name);
+                self.failer.newFieldSecond(field.location, field.name);
             }
             const info = try self.checkExpr(&field.expr, .{ .typ = .{ .prime = .u64 } });
             _ = self.unify(field.expr.location, .{ .prime = .u64 }, info.typ);
@@ -923,10 +891,10 @@ fn checkSliceStruc(
         }
     }
     if (!was_len) {
-        self.failNotInit(location, "len");
+        self.failer.notInit(location, "len");
     }
     if (was_ptr == null) {
-        self.failNotInit(location, "ptr");
+        self.failer.notInit(location, "ptr");
     }
     const typ = Typ{ .slice = .{
         .typ = was_ptr.?,
@@ -941,10 +909,6 @@ fn checkSliceStruc(
     };
 }
 
-fn failNewFieldSecond(self: *Self, location: Location, name: []const u8) void {
-    self.fail(location, "field `{s}` initialized second time", .{name});
-}
-
 fn checkTypedStruc(
     self: *Self,
     name: Typ.Name,
@@ -956,12 +920,12 @@ fn checkTypedStruc(
         .mutable = false,
     };
     const item = self.items.getPtr(name.name) orelse {
-        self.failNotDeclared(location, name.name);
+        self.failer.notDeclared(location, name.name);
         return err;
     };
     item.used = true;
     const decl = if (item.kind == .struc) item.kind.struc else {
-        self.failNotStruct(location, .{ .name = name });
+        self.failer.notStruct(location, .{ .name = name });
         return err;
     };
     var generics = name.generics;
@@ -1019,7 +983,7 @@ fn checkFieldsInitialised(
             }
         }
         if (not_init) {
-            self.failNotInit(location, entry.key_ptr.*);
+            self.failer.notInit(location, entry.key_ptr.*);
         }
     }
 }
@@ -1032,16 +996,12 @@ fn checkNewField(
     resolver: *Resolver(Typ),
 ) !void {
     const f_decl = decl_fields.get(field.name) orelse {
-        self.failNoField(field.location, field.name, struc_typ);
+        self.failer.noField(field.location, field.name, struc_typ);
         return;
     };
     const decl_typ = try f_decl.typ.resolve(resolver);
     const info = try self.checkExpr(&field.expr, .{ .typ = decl_typ });
     _ = self.unify(field.expr.location, decl_typ, info.typ);
-}
-
-fn failNotInit(self: *Self, location: Location, name: []const u8) void {
-    self.fail(location, "field `{s}` is not initialized", .{name});
 }
 
 fn checkNamedStructExpr(self: *Self, named: *Ast.Expr.Struct.Named, location: Location) !ExprInfo {
@@ -1099,15 +1059,15 @@ fn checkField(
     }
     const name = self.getTypName(norm, field.expr.location) orelse return err;
     const item = self.items.get(name.name) orelse {
-        self.failNotStruct(field.expr.location, norm);
+        self.failer.notStruct(field.expr.location, norm);
         return err;
     };
     const struc = if (item.kind == .struc) item.kind.struc else {
-        self.failNotStruct(field.expr.location, norm);
+        self.failer.notStruct(field.expr.location, norm);
         return err;
     };
     const fiel = struc.fields.getPtr(field.name) orelse {
-        self.failNoField(location, field.name, .{ .name = name });
+        self.failer.noField(location, field.name, .{ .name = name });
         return err;
     };
     fiel.used = true;
@@ -1144,7 +1104,7 @@ fn checkSliceField(
             .mutable = mutable,
         };
     }
-    self.failNoField(location, name, .{ .slice = slice });
+    self.failer.noField(location, name, .{ .slice = slice });
     return .{
         .typ = .err,
         .mutable = true,
@@ -1160,36 +1120,16 @@ fn getTypName(self: *Self, norm: Typ, location: Location) ?Typ.Name {
             unreachable;
         },
         .fun, .prime, .ptr => {
-            self.failNotStruct(location, norm);
+            self.failer.notStruct(location, norm);
             return null;
         },
-    }
-}
-
-fn failNoField(
-    self: *Self,
-    location: Location,
-    field: []const u8,
-    typ: Typ,
-) void {
-    self.fail(location, "type `{f}` has no field named `{s}`", .{ typ, field });
-}
-
-fn failNotStruct(self: *Self, location: Location, typ: Typ) void {
-    self.fail(location, "type `{f}` is not a struct", .{typ});
-}
-
-fn failCannotInfer(self: *Self, typ: Typ, location: Location) void {
-    self.fail(location, "cannot infer type", .{});
-    if (typ != .any) {
-        std.log.info("best guess is `{f}`\n", .{typ});
     }
 }
 
 fn checkBinary(self: *Self, binary: *Ast.Expr.Binary) !ExprInfo {
     var left = try self.checkExpr(&binary.left, .{});
     if (!left.typ.isNumber()) {
-        self.failWrongTyp(binary.left.location, .int, left.typ);
+        self.failer.wrongTyp(binary.left.location, .int, left.typ);
         left.typ = .err;
     }
     const right = try self.checkExpr(&binary.right, .{});
@@ -1215,7 +1155,7 @@ fn checkVar(
         .mutable = true,
     };
     const item = self.items.getPtr(vari.name) orelse {
-        self.failNotDeclared(location, vari.name);
+        self.failer.notDeclared(location, vari.name);
         return err;
     };
     switch (item.kind) {
@@ -1225,7 +1165,7 @@ fn checkVar(
             return self.fillFunMetaHeader(&vari.fun_meta.?, header, location);
         },
         .struc, .typ => {
-            self.fail(location, "it is a type", .{});
+            self.failer.fail(location, "it is a type", .{});
             return err;
         },
         .vari => |*vari_decl| {
@@ -1295,10 +1235,6 @@ fn fillFunMetaHeader(
     };
 }
 
-fn failNotDeclared(self: *Self, location: Location, name: []const u8) void {
-    self.fail(location, "item `{s}` is not declared", .{name});
-}
-
 fn checkCall(self: *Self, call: *Ast.Expr.Call, hint: Typ) !ExprInfo {
     const callee_info = try self.checkExpr(&call.expr, .{});
     const fun = self.getFunTyp(callee_info.typ, call.expr.location) orelse
@@ -1320,7 +1256,7 @@ fn getFunTyp(self: *Self, typ: Typ, location: Location) ?Typ.Fun {
         .fun => |fun| return fun,
         .err => return null,
         else => {
-            self.fail(location, "value of type `{f}` is not a function", .{typ});
+            self.failer.fail(location, "value of type `{f}` is not a function", .{typ});
             return null;
         },
     }
@@ -1341,7 +1277,7 @@ fn checkRet(self: *Self, ret: *Ast.Stmt.Return, location: Location) !ControlFlow
         const info = try self.checkExpr(expr, .{ .typ = self.ret_typ });
         _ = self.unify(expr.location, self.ret_typ, info.typ);
     } else if (self.ret_typ != .prime or self.ret_typ.prime != .void) {
-        self.fail(location, "should return a value", .{});
+        self.failer.fail(location, "should return a value", .{});
     }
     return .ret;
 }
@@ -1365,22 +1301,17 @@ fn deinitItems(self: *Self) void {
     self.items.deinit();
 }
 
-fn fail(self: *Self, location: Location, comptime msg: []const u8, args: anytype) void {
-    std.log.err("in {f}\n     " ++ msg ++ "\n", .{location} ++ args);
-    self.errors_cnt += 1;
-}
-
 pub fn checkTypDecl(self: *Self, name: Ast.Typ.Name) error{BadType}!?Typ {
     if (debug_check_typ) {
         std.debug.print("checkTypDecl {f}\n", .{name.delocate()});
     }
     const item = self.items.getPtr(name.name) orelse {
-        self.fail(name.location, "item `{s}` is not declared", .{name.name});
+        self.failer.fail(name.location, "item `{s}` is not declared", .{name.name});
         return error.BadType;
     };
     switch (item.kind) {
         .fun, .vari => {
-            self.fail(name.location, "item `{s}` is not a type", .{name.name});
+            self.failer.fail(name.location, "item `{s}` is not a type", .{name.name});
             return error.BadType;
         },
         .typ => |typ| {
@@ -1393,7 +1324,7 @@ pub fn checkTypDecl(self: *Self, name: Ast.Typ.Name) error{BadType}!?Typ {
                 std.debug.print("item {s} used\n", .{name.name});
             }
             if (struc.generics.len != name.generics.len) {
-                self.fail(
+                self.failer.fail(
                     name.location,
                     "expected {} generics\n        found {}",
                     .{ struc.generics.len, name.generics.len },
