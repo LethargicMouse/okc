@@ -1,11 +1,11 @@
 const std = @import("std");
 
-const Ast = @import("../Ast/mod.zig");
+const Ast = @import("Ast/mod.zig");
 const Typ = @import("typ.zig").Typ;
-const Location = @import("../Location.zig");
-const HashMap = @import("../hash_map.zig").HashMap;
+const Location = @import("Location.zig");
+const HashMap = @import("hash_map.zig").HashMap;
 const Failer = @import("Failer.zig");
-const Memo = @import("../memo.zig").Memo;
+const Memo = @import("memo.zig").Memo;
 
 const Self = @This();
 gpa: std.mem.Allocator,

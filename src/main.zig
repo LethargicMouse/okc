@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Ast = @import("Ast/mod.zig");
-const Checker = @import("Checker/mod.zig");
+const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
 const Lexer = @import("Lexer.zig");
 const Memo = @import("memo.zig").Memo;
