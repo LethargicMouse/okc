@@ -6,40 +6,40 @@ const Location = @import("../Location.zig");
 const Memo = @import("../memo.zig").Memo;
 const Resolver = @import("../resolver.zig").Resolver;
 const Typ = @import("typ.zig").Typ;
-const Failer = @import("Failer.zig");
+pub const Failer = @import("Failer.zig");
+const TypConverter = @import("TypConverter.zig");
 
 const Self = @This();
 gpa: std.mem.Allocator,
 arena: *std.heap.ArenaAllocator,
 typ_memo: Memo(Typ),
-ast_typ_memo: *Memo(Ast.Typ),
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
 ast_items: std.StringHashMap(*const Ast.Item),
 items: std.StringHashMap(Item),
 ret_typ: Typ = undefined,
-failer: Failer = .init(),
+failer: *Failer,
 loops_nested: u16 = 0,
 current_generics: []const Ast.Item.Generic = &.{},
 generics_usage: std.DynamicBitSetUnmanaged,
-convert_queue: std.ArrayList(ConvertReq) = .empty,
-converted_typs: HashMap(Typ, Ast.Typ),
+typ_converter: TypConverter,
 
 pub fn init(
     gpa: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
     ast_typ_memo: *Memo(Ast.Typ),
+    failer: *Failer,
 ) error{OutOfMemory}!Self {
     return .{
         .gpa = gpa,
         .arena = arena,
-        .ast_typ_memo = ast_typ_memo,
+        .failer = failer,
         .fun_arena = .init(gpa),
         .typ_memo = .init(arena),
         .ast_items = .init(gpa),
         .items = .init(gpa),
         .generics_usage = try .initEmpty(gpa, 0),
-        .converted_typs = .init(gpa),
+        .typ_converter = .init(gpa, failer, ast_typ_memo),
     };
 }
 
@@ -63,84 +63,6 @@ fn checkAst(self: *Self, ast: Ast) !void {
     }
     self.checkMain(ast.location);
     self.checkItems();
-}
-
-fn convertTypOrFail(self: *Self, typ: Typ, location: ?Location) !?Ast.Typ {
-    return self.convertTyp(typ) catch |err| switch (err) {
-        error.BadConvert => return null,
-        error.ConvertAny => {
-            if (location) |loc| {
-                self.failer.cannotInfer(typ, loc);
-            }
-            return null;
-        },
-        error.OutOfMemory => return error.OutOfMemory,
-    };
-}
-
-fn convertTyp(self: *Self, typ: Typ) !Ast.Typ {
-    if (self.converted_typs.get(typ)) |res| {
-        return res;
-    }
-    const res = try self.convertTypFirstTime(typ);
-    try self.converted_typs.put(typ, res);
-    return res;
-}
-
-fn convertTypFirstTime(self: *Self, typ: Typ) ConvertError!Ast.Typ {
-    switch (typ) {
-        .name => |name| {
-            const generics =
-                try self.ast_typ_memo.arena.allocator().alloc(Ast.Typ, name.generics.len);
-            for (generics, name.generics) |*target, generic| {
-                target.* = try self.convertTyp(generic);
-            }
-            return .{ .name = .{
-                .name = name.name,
-                .generics = generics,
-            } };
-        },
-        .fun => |fun| {
-            const params = try self.ast_typ_memo.arena.allocator().alloc(Ast.Typ, fun.params.len);
-            for (params, fun.params) |*target, param| {
-                target.* = try self.convertTyp(param);
-            }
-            const ret_typ = try self.convertTyp(fun.ret_typ.*);
-            const ptr = try self.ast_typ_memo.box(ret_typ);
-            return .{ .fun = .{
-                .params = params,
-                .ret_typ = ptr,
-            } };
-        },
-        .slice => |slice| {
-            const new = try self.convertTyp(slice.typ.*);
-            const ptr = try self.ast_typ_memo.box(new);
-            return .{ .slice = .{
-                .typ = ptr,
-                .mutable = slice.mutable,
-            } };
-        },
-        .prime => |prime| return .{ .prime = prime },
-        .ptr => |ptr| {
-            const inner = try self.convertTyp(ptr.typ.*);
-            const new = try self.ast_typ_memo.box(inner);
-            return .{ .ptr = .{
-                .typ = new,
-                .mutable = ptr.mutable,
-            } };
-        },
-        .array => |array| {
-            const inner = try self.convertTyp(array.typ.*);
-            const new = try self.ast_typ_memo.box(inner);
-            return .{ .array = .{
-                .len = array.len,
-                .typ = new,
-            } };
-        },
-        .err => return error.BadConvert,
-        .any, .int => return error.ConvertAny,
-        .lazy => |inner| return self.convertTyp(inner.*),
-    }
 }
 
 const ConvertError = error{ BadConvert, ConvertAny, OutOfMemory };
@@ -372,17 +294,8 @@ fn checkFun(self: *Self, fun: Ast.Item.Fun, location: Location) !void {
         self.failer.fail(location, "function may not return", .{});
     }
     self.freeVars(rbp);
-    try self.flushConvertQueue();
+    try self.typ_converter.flush();
     _ = self.fun_arena.reset(.retain_capacity);
-}
-
-fn flushConvertQueue(self: *Self) !void {
-    for (self.convert_queue.items) |req| {
-        if (try self.convertTypOrFail(req.from, req.location)) |ast_typ| {
-            req.to.* = ast_typ;
-        }
-    }
-    self.convert_queue.clearRetainingCapacity();
 }
 
 fn checkLoopBlock(self: *Self, block: []Ast.Stmt) !ControlFlow {
@@ -766,9 +679,11 @@ fn checkArray(self: *Self, array: *Ast.Expr.Array, location: Location, hint: Typ
             .typ = try self.typ_memo.box(inner_hint),
             .len = 0,
         } };
-        if (try self.convertTypOrFail(typ, location)) |ast_typ| {
-            array.typ = ast_typ;
-        }
+        try self.typ_converter.addRequest(.{
+            .location = location,
+            .from = typ,
+            .to = &array.typ,
+        });
         return .{
             .typ = typ,
             .mutable = false,
@@ -782,7 +697,7 @@ fn checkArray(self: *Self, array: *Ast.Expr.Array, location: Location, hint: Typ
         .typ = try self.typ_memo.box(inner_typ),
         .len = array.exprs.len,
     } };
-    try self.convert_queue.append(self.gpa, .{
+    try self.typ_converter.addRequest(.{
         .from = typ,
         .to = &array.typ,
         .location = location,
@@ -900,9 +815,11 @@ fn checkSliceStruc(
         .typ = was_ptr.?,
         .mutable = slice.mutable,
     } };
-    if (try self.convertTypOrFail(typ, location)) |ast_typ| {
-        typ_target.* = ast_typ;
-    }
+    try self.typ_converter.addRequest(.{
+        .location = location,
+        .from = typ,
+        .to = typ_target,
+    });
     return .{
         .typ = typ,
         .mutable = false,
@@ -945,9 +862,11 @@ fn checkTypedStruc(
         .name = name.name,
         .generics = generics,
     } };
-    if (try self.convertTypOrFail(typ, location)) |ast_typ| {
-        struc.typ = ast_typ;
-    }
+    try self.typ_converter.addRequest(.{
+        .location = location,
+        .from = typ,
+        .to = &struc.typ,
+    });
     return .{
         .typ = typ,
         .mutable = false,
@@ -1009,9 +928,11 @@ fn checkNamedStructExpr(self: *Self, named: *Ast.Expr.Struct.Named, location: Lo
 }
 
 fn checkUndef(self: *Self, undef: *Ast.Expr.Undef, location: Location, typ: Typ) !ExprInfo {
-    if (try self.convertTypOrFail(typ, location)) |ast_typ| {
-        undef.typ = ast_typ;
-    }
+    try self.typ_converter.addRequest(.{
+        .location = location,
+        .from = typ,
+        .to = &undef.typ,
+    });
     return .{
         .typ = typ,
         .mutable = false,
@@ -1022,7 +943,7 @@ fn checkInt(self: *Self, location: Location, int: *Ast.Expr.Int) !ExprInfo {
     const ptr = try self.fun_arena.allocator().create(Typ);
     const typ: Typ = .{ .lazy = ptr };
     typ.lazy.* = .int;
-    try self.convert_queue.append(self.gpa, .{
+    try self.typ_converter.addRequest(.{
         .from = typ,
         .to = &int.typ,
         .location = location,
@@ -1200,19 +1121,19 @@ fn fillFunMetaHeader(
         ptr.* = .any;
         try resolver.map.put(generic.name, .{ .lazy = ptr });
     }
-    const generics = try self.ast_typ_memo.arena.allocator().alloc(Ast.Typ, header.generics.len);
-    const params = try self.ast_typ_memo.arena.allocator().alloc(Ast.Typ, header.params.len);
+    const generics = try self.typ_converter.ast_typ_memo.arena.allocator().alloc(Ast.Typ, header.generics.len);
+    const params = try self.typ_converter.ast_typ_memo.arena.allocator().alloc(Ast.Typ, header.params.len);
     const resolved_params = try self.arena.allocator().alloc(Typ, header.params.len);
     for (header.params, params, resolved_params) |param, *ast_target, *target| {
         target.* = try param.resolve(&resolver);
-        try self.convert_queue.append(self.gpa, .{
+        try self.typ_converter.addRequest(.{
             .location = location,
             .from = target.*,
             .to = ast_target,
         });
     }
     for (generics, header.generics) |*target, generic| {
-        try self.convert_queue.append(self.gpa, .{
+        try self.typ_converter.addRequest(.{
             .location = location,
             .from = resolver.map.get(generic.name).?,
             .to = target,
@@ -1221,7 +1142,7 @@ fn fillFunMetaHeader(
     fun_meta.generics = generics;
     fun_meta.params = params;
     const resolved_ret_typ = try header.ret_typ.resolve(&resolver);
-    try self.convert_queue.append(self.gpa, .{
+    try self.typ_converter.addRequest(.{
         .location = location,
         .from = resolved_ret_typ,
         .to = &fun_meta.ret_typ,
@@ -1288,8 +1209,7 @@ fn deinit(self: *Self) void {
     self.fun_arena.deinit();
     self.vars_stack.deinit(self.gpa);
     self.generics_usage.deinit(self.gpa);
-    self.convert_queue.deinit(self.gpa);
-    self.converted_typs.deinit();
+    self.typ_converter.deinit();
     self.* = undefined;
 }
 
@@ -1407,12 +1327,6 @@ fn checkTyp(self: *Self, typ: Ast.Typ) !Typ {
         },
     }
 }
-
-const ConvertReq = struct {
-    to: *Ast.Typ,
-    from: Typ,
-    location: Location,
-};
 
 const ExprHint = struct {
     typ: Typ = .any,

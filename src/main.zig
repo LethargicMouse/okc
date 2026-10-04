@@ -59,7 +59,9 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var checker_arena = std.heap.ArenaAllocator.init(gpa);
     defer checker_arena.deinit();
 
-    var checker = try Checker.init(gpa, &checker_arena, &ast_typ_memo);
+    var checker_failer = Checker.Failer.init();
+
+    var checker = try Checker.init(gpa, &checker_arena, &ast_typ_memo, &checker_failer);
     const items = try checker.run(ast);
 
     std.Io.Dir.cwd().createDirPath(io, build_dir_path) catch {
