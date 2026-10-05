@@ -1,10 +1,11 @@
 const std = @import("std");
 
 const Ast = @import("Ast/mod.zig");
-const Typ = Ast.Typ;
 const HashMap = @import("hash_map.zig").HashMap;
 const Memo = @import("memo.zig").Memo;
-const Name = @import("typ_kinds.zig").Name(Typ);
+const Typ = @import("typ.zig").Typ;
+const Name = Typ.Name;
+
 const Resolver = @import("resolver.zig").Resolver(Typ);
 
 const Self = @This();
@@ -14,7 +15,7 @@ file: std.Io.File,
 writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 extra_buffer: std.ArrayList(u8) = .empty,
-typ_memo: *Memo(Ast.Typ),
+typ_memo: *Memo(Typ),
 items: std.StringHashMap(*const Ast.Item),
 structs: HashMap(Name, Struct),
 consts: std.StringHashMap(Typ),
@@ -212,7 +213,7 @@ fn genFun(
     for (fun.body) |stmt| {
         try self.genStmt(stmt);
     }
-    if (fun.header.ret_typ == .prime and fun.header.ret_typ.prime == .void) {
+    if (fun.header.ret_typ.isVoid()) {
         try self.genRet(.{ .expr = null });
     } else {
         try self.genUnreachable();
@@ -485,8 +486,8 @@ fn genDeclare(self: *Self, name: []const u8, declare: Ast.Stmt.Declare) !void {
 }
 
 fn toStack(self: *Self, typ_val: TypVal) !Ref {
-    if (typ_val.typ == .name) {
-        try self.genStruct(typ_val.typ.name.delocate());
+    if (typ_val.typ.getName()) |typ_name| {
+        try self.genStruct(typ_name);
     }
     const tmp = self.newTmp();
     try self.genAlloca(tmp, typ_val.typ);
@@ -545,7 +546,7 @@ fn genCall(self: *Self, call: Ast.Expr.Call) !TypVal {
     };
 }
 
-fn genArrayToSlice(self: *Self, array: Ast.Typ.Array, val: Val) !TypVal {
+fn genArrayToSlice(self: *Self, array: Typ.Array, val: Val) !TypVal {
     var res = TypVal{
         .typ = .{ .slice = .{
             .typ = array.typ,
@@ -625,9 +626,14 @@ fn getLayout(self: *Self, typ: Typ) !Layout {
         .fun, .ptr => return .make(8, 8),
         .slice => return .make(16, 8),
         .name => |name| {
-            try self.genStruct(name.delocate());
-            return self.structs.get(name.delocate()).?.layout;
+            try self.genStruct(name);
+            return self.structs.get(name).?.layout;
         },
+        .loc_name => |located| {
+            try self.genStruct(located.name);
+            return self.structs.get(located.name).?.layout;
+        },
+        .any, .err, .int, .lazy => unreachable,
     }
 }
 
@@ -912,15 +918,15 @@ fn genStr(self: *Self, str: []const u8) !TypVal {
 }
 
 fn genStructExpr(self: *Self, struc: Ast.Expr.Struct) !TypVal {
-    if (struc.typ == .name) {
-        try self.genStruct(struc.typ.name.delocate());
+    if (struc.typ.getName()) |typ_name| {
+        try self.genStruct(typ_name);
     }
     var res = TypVal{
         .typ = struc.typ,
         .val = .undef,
     };
-    if (struc.typ == .name) {
-        for (self.structs.get(struc.typ.name.delocate()).?.default_fields) |field| {
+    if (struc.typ.getName()) |typ_name| {
+        for (self.structs.get(typ_name).?.default_fields) |field| {
             const typ_val = try self.genExpr(field.expr);
             try self.genIV(&res, typ_val, field.index);
         }
@@ -988,10 +994,6 @@ fn genBinOp(self: *Self, kind: Ast.Expr.Binary.Kind) !void {
 }
 
 fn genFunPtr(self: *Self, fun_name: []const u8, fun_meta: Ast.Expr.FunMeta) !TypVal {
-    const fun = Typ.Fun{
-        .params = fun_meta.params,
-        .ret_typ = try self.typ_memo.box(fun_meta.ret_typ),
-    };
     var name = Name{
         .name = fun_name,
         .generics = fun_meta.generics,
@@ -1001,10 +1003,10 @@ fn genFunPtr(self: *Self, fun_name: []const u8, fun_meta: Ast.Expr.FunMeta) !Typ
     }
     try self.fun_queue.append(self.gpa, .{
         .name = name,
-        .fun = fun,
+        .fun = fun_meta.fun,
     });
     return .{
-        .typ = .{ .fun = fun },
+        .typ = .{ .fun = fun_meta.fun },
         .val = .{ .global = name },
     };
 }
@@ -1071,15 +1073,15 @@ fn genConstArray(self: *Self, array: Ast.Expr.Array) !Typ {
 }
 
 fn genConstStruc(self: *Self, struc: Ast.Expr.Struct) !Typ {
-    if (struc.typ == .name) {
-        try self.genStruct(struc.typ.name.delocate());
+    if (struc.typ.getName()) |typ_name| {
+        try self.genStruct(typ_name);
     }
     try self.print("{f} {{", .{LlvmTyp{ .inner = struc.typ }});
     if (struc.fields.len != 0) {
         const fields = try self.gpa.alloc(Ast.Expr, struc.fields.len);
         defer self.gpa.free(fields);
-        if (struc.typ == .name) {
-            for (self.structs.get(struc.typ.name.delocate()).?.default_fields) |field| {
+        if (struc.typ.getName()) |typ_name| {
+            for (self.structs.get(typ_name).?.default_fields) |field| {
                 fields[field.index] = field.expr;
             }
         }
@@ -1099,8 +1101,8 @@ fn genConstStruc(self: *Self, struc: Ast.Expr.Struct) !Typ {
 }
 
 fn getFieldInfo(self: *Self, typ: Typ, name: []const u8) Field {
-    return if (typ == .name)
-        self.structs.get(typ.name.delocate()).?.fields.get(name).?
+    return if (typ.getName()) |typ_name|
+        self.structs.get(typ_name).?.fields.get(name).?
     else if (std.mem.eql(u8, name, "ptr")) .{
         .typ = .{ .ptr = .{
             .typ = typ.slice.typ,
@@ -1172,7 +1174,7 @@ fn appendLayout(res: *Layout, layout: Layout) void {
     res.size += layout.size;
 }
 
-fn primeLayout(prime: Ast.Typ.Prime) !Layout {
+fn primeLayout(prime: Typ.Prime) !Layout {
     return switch (prime) {
         .u8, .bool => .make(1, 1),
         .i32, .u32 => .make(4, 4),
@@ -1238,7 +1240,9 @@ const LlvmTyp = struct {
             },
             .slice => try writer.writeAll("%\"[]\""),
             .ptr, .fun => try writer.writeAll("ptr"),
-            .name => try writer.print("%\"{f}\"", .{typ.inner}),
+            .name => |name| try writer.print("%\"{f}\"", .{name}),
+            .loc_name => |located| try writer.print("%\"{f}\"", .{located.name}),
+            .lazy, .any, .int, .err => unreachable,
         }
     }
 };

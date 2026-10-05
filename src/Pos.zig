@@ -29,3 +29,7 @@ pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
 }
 
 pub const start = Self{ .line = 1, .symbol = 1 };
+
+pub fn eql(self: Self, other: Self) bool {
+    return self.line == other.line and self.symbol == other.symbol;
+}

@@ -1,7 +1,6 @@
 pub const Expr = @import("Expr/mod.zig");
 pub const Item = @import("Item.zig");
 pub const Stmt = @import("Stmt.zig");
-pub const Typ = @import("typ.zig").Typ;
 const Location = @import("../Location.zig");
 
 const Self = @This();

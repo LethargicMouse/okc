@@ -7,6 +7,7 @@ const Lexer = @import("Lexer.zig");
 const Memo = @import("memo.zig").Memo;
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
+const Typ = @import("typ.zig").Typ;
 
 pub fn main(init: std.process.Init) u8 {
     const code = run(init) catch |err| {
@@ -50,7 +51,7 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var ast_arena = std.heap.ArenaAllocator.init(gpa);
     defer ast_arena.deinit();
 
-    var ast_typ_memo = Memo(Ast.Typ).init(&ast_arena);
+    var ast_typ_memo = Memo(Typ).init(&ast_arena);
     defer ast_typ_memo.deinit();
 
     var parser = Parser.init(gpa, &ast_arena, &ast_typ_memo, tokens);

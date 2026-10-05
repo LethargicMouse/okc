@@ -1,4 +1,5 @@
 const std = @import("std");
+const Location = @import("Location.zig");
 
 const Resolver = @import("resolver.zig").Resolver;
 
@@ -32,6 +33,7 @@ pub fn Array(Typ: type) type {
 
 pub fn Name(Typ: type) type {
     return struct {
+        const Self = @This();
         name: []const u8,
         generics: []const Typ = &.{},
 
@@ -76,6 +78,11 @@ pub fn Name(Typ: type) type {
                 try writer.writeByte('>');
             }
         }
+
+        pub const Located = struct {
+            name: Self,
+            location: Location,
+        };
     };
 }
 

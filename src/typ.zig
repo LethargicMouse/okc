@@ -4,10 +4,12 @@ const Ast = @import("Ast/mod.zig");
 const Memo = @import("memo.zig").Memo;
 const Resolver = @import("resolver.zig").Resolver(Typ);
 const typ_kinds = @import("typ_kinds.zig");
+const Location = @import("Location.zig");
 
 pub const Typ = union(enum) {
-    prime: Ast.Typ.Prime,
+    prime: Prime,
     name: Name,
+    loc_name: Name.Located,
     fun: Fun,
     ptr: Ptr,
     slice: Slice,
@@ -23,12 +25,28 @@ pub const Typ = union(enum) {
     pub const Slice = typ_kinds.Slice(Typ);
     pub const Fun = typ_kinds.Fun(Typ);
 
+    pub fn getName(typ: Typ) ?Name {
+        return switch (typ) {
+            .name => |name| name,
+            .loc_name => |located| located.name,
+            else => null,
+        };
+    }
+
     pub fn resolve(typ: Typ, resolver: *Resolver) error{OutOfMemory}!Typ {
         switch (typ) {
             .name => |name| if (resolver.map.get(name.name)) |resolved| {
                 return resolved;
             } else {
                 return .{ .name = try name.resolve(resolver) };
+            },
+            .loc_name => |located| if (resolver.map.get(located.name.name)) |resolved| {
+                return resolved;
+            } else {
+                return .{ .loc_name = .{
+                    .name = try located.name.resolve(resolver),
+                    .location = located.location,
+                } };
             },
             .fun => |fun| return .{ .fun = try fun.resolve(resolver) },
             .slice => |slice| return .{ .slice = try slice.resolve(resolver) },
@@ -37,6 +55,16 @@ pub const Typ = union(enum) {
             // lazy not resolved cuz I feel so
             .lazy, .any, .err, .prime, .int => return typ,
         }
+    }
+
+    pub fn fromName(name: []const u8, location: Location) Typ {
+        if (std.meta.stringToEnum(Prime, name)) |prime| {
+            return .{ .prime = prime };
+        }
+        return .{ .loc_name = .{
+            .name = .{ .name = name },
+            .location = location,
+        } };
     }
 
     const debug_lazies = false;
@@ -53,6 +81,7 @@ pub const Typ = union(enum) {
             return false;
         }
         return switch (a) {
+            .loc_name => |located| located.location.eql(b.loc_name.location),
             .prime => |aprime| aprime == b.prime,
             .name => |aname| aname.eql(b.name),
             .fun => |afun| afun.eql(b.fun),
@@ -74,14 +103,12 @@ pub const Typ = union(enum) {
     pub fn hashIn(typ: Typ, hasher: *std.hash.Wyhash) void {
         hasher.update(&.{@intFromEnum(typ)});
         switch (typ) {
+            .loc_name => |located| located.location.hashIn(hasher),
             .prime => |prime| prime.hashIn(hasher),
             .name => |name| name.hashIn(hasher),
             .fun => |fun| fun.hashIn(hasher),
             .ptr => |ptr| ptr.hashIn(hasher),
             .array => |array| array.hashIn(hasher),
-            // pointers in lazy types are not memoized
-            // but we need to discriminate lazy types by pointers
-            // as they are unique type variables
             .lazy => |inner| hasher.update(std.mem.asBytes(&inner)),
             .slice => |slice| slice.hashIn(hasher),
             .any, .err, .int => {},
@@ -91,6 +118,7 @@ pub const Typ = union(enum) {
     pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (typ) {
             .prime => |prime| try prime.format(writer),
+            .loc_name => |located| try located.name.format(writer),
             .name => |name| try name.format(writer),
             .fun => |fun| try fun.format(writer),
             .ptr => |ptr| try ptr.format(writer),
@@ -146,6 +174,9 @@ pub const Typ = union(enum) {
         if (debug_unify) {
             std.debug.print("unify {f} vs {f}\n", .{ a, b });
         }
+        if (a.eql(b)) {
+            return a;
+        }
         if (a == .err or b == .err) {
             return .err;
         }
@@ -193,6 +224,16 @@ pub const Typ = union(enum) {
         if (b == .int and a.isNumber()) {
             return a;
         }
+        if (a.getName()) |aname| {
+            const bname = b.getName() orelse return null;
+            if (!std.mem.eql(u8, aname.name, bname.name)) {
+                return null;
+            }
+            for (aname.generics, bname.generics) |ag, bg| {
+                _ = ag.unify(bg, active) orelse return null;
+            }
+            return b;
+        }
         if (@intFromEnum(a) != @intFromEnum(b)) {
             return null;
         }
@@ -201,15 +242,6 @@ pub const Typ = union(enum) {
                 return b;
             } else {
                 return null;
-            },
-            .name => |aname| {
-                if (!std.mem.eql(u8, aname.name, b.name.name)) {
-                    return null;
-                }
-                for (aname.generics, b.name.generics) |ag, bg| {
-                    _ = ag.unify(bg, active) orelse return null;
-                }
-                return b;
             },
             .fun => |fun| {
                 if (fun.ret_typ != b.fun.ret_typ) {
@@ -246,7 +278,35 @@ pub const Typ = union(enum) {
                 }
                 return a;
             },
-            .lazy, .any, .err, .int => unreachable,
+            .lazy, .any, .err, .int, .loc_name, .name => unreachable,
         }
     }
+
+    pub fn isVoid(typ: Typ) bool {
+        return typ == .prime and typ.prime == .void;
+    }
+
+    pub const Prime = enum {
+        u8,
+        i32,
+        u32,
+        u64,
+        bool,
+        void,
+
+        pub fn format(prime: Prime, writer: *std.Io.Writer) !void {
+            try writer.writeAll(@tagName(prime));
+        }
+
+        pub fn isNumber(prime: Prime) bool {
+            switch (prime) {
+                .i32, .u8, .u32, .u64 => return true,
+                .bool, .void => return false,
+            }
+        }
+
+        pub fn hashIn(prime: Prime, hasher: *std.hash.Wyhash) void {
+            hasher.update(&.{@intFromEnum(prime)});
+        }
+    };
 };

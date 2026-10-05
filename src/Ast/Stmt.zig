@@ -1,6 +1,6 @@
 const Location = @import("../Location.zig");
 const Expr = @import("Expr/mod.zig");
-const Typ = @import("typ.zig").Typ;
+const Typ = @import("../typ.zig").Typ;
 
 const Self = @This();
 location: Location,

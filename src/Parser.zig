@@ -5,12 +5,13 @@ const Lexer = @import("Lexer.zig");
 const Lexeme = Lexer.Lexeme;
 const Location = @import("Location.zig");
 const Memo = @import("memo.zig").Memo;
+const Typ = @import("typ.zig").Typ;
 
 const Self = @This();
 gpa: std.mem.Allocator,
 tokens: []const Lexer.Token,
 ast_arena: *std.heap.ArenaAllocator,
-ast_typ_memo: *Memo(Ast.Typ),
+ast_typ_memo: *Memo(Typ),
 err_msgs: ErrMsgs = .empty,
 tmp_name: []const u8 = "<unknown>",
 tmp_location: Location = .fake,
@@ -20,7 +21,7 @@ err_cursor: usize = 0,
 pub fn init(
     gpa: std.mem.Allocator,
     ast_arena: *std.heap.ArenaAllocator,
-    ast_typ_memo: *Memo(Ast.Typ),
+    ast_typ_memo: *Memo(Typ),
     tokens: []const Lexer.Token,
 ) Self {
     return .{
@@ -236,8 +237,8 @@ fn parseParamLoud(self: *Self) !Ast.Item.Fun.Header.Param {
     };
 }
 
-fn parseTypLoud(self: *Self) Error!Ast.Typ {
-    return self.parseEither(Ast.Typ, .{
+fn parseTypLoud(self: *Self) Error!Typ {
+    return self.parseEither(Typ, .{
         parseFunTyp,
         parseGenericTyp,
         parseVerbalTyp,
@@ -251,10 +252,10 @@ fn parseTypLoud(self: *Self) Error!Ast.Typ {
     };
 }
 
-fn parseFunTyp(self: *Self) !Ast.Typ {
+fn parseFunTyp(self: *Self) !Typ {
     try self.expect(.fun);
     try self.expectLoud(.parl);
-    const params = try self.parseSep(Ast.Typ, parseTypLoud);
+    const params = try self.parseSep(Typ, parseTypLoud);
     try self.expect(.parr);
     const ret_typ = try self.parseTypLoud();
     const ptr = try self.ast_typ_memo.box(ret_typ);
@@ -264,7 +265,7 @@ fn parseFunTyp(self: *Self) !Ast.Typ {
     } };
 }
 
-fn parseSliceTyp(self: *Self) !Ast.Typ {
+fn parseSliceTyp(self: *Self) !Typ {
     try self.expect(.bral);
     try self.expectLoud(.brar);
     var mutable = true;
@@ -279,20 +280,22 @@ fn parseSliceTyp(self: *Self) !Ast.Typ {
     } };
 }
 
-fn parseGenericTyp(self: *Self) !Ast.Typ {
+fn parseGenericTyp(self: *Self) !Typ {
     const location = self.getLocation();
     const name = try self.parseName();
     try self.expect(.les);
-    const generics = try self.parseSep(Ast.Typ, parseTypLoud);
+    const generics = try self.parseSep(Typ, parseTypLoud);
     try self.expect(.mor);
-    return .{ .name = .{
-        .name = name,
-        .generics = generics,
+    return .{ .loc_name = .{
+        .name = .{
+            .name = name,
+            .generics = generics,
+        },
         .location = location,
     } };
 }
 
-fn parseArrayTyp(self: *Self) !Ast.Typ {
+fn parseArrayTyp(self: *Self) !Typ {
     try self.expect(.bral);
     const len = try self.parseInt();
     try self.expectLoud(.brar);
@@ -313,7 +316,7 @@ fn parseEither(self: *Self, typ: type, comptime parses: anytype) !typ {
     return error.ParseFailed;
 }
 
-fn parseMutPtrTyp(self: *Self) !Ast.Typ {
+fn parseMutPtrTyp(self: *Self) !Typ {
     try self.expect(.amp);
     try self.expect(.mut);
     const typ = try self.parseTypLoud();
@@ -324,7 +327,7 @@ fn parseMutPtrTyp(self: *Self) !Ast.Typ {
     } };
 }
 
-fn parsePtrTyp(self: *Self) !Ast.Typ {
+fn parsePtrTyp(self: *Self) !Typ {
     try self.expect(.amp);
     const typ = try self.parseTypLoud();
     const ptr = try self.ast_typ_memo.box(typ);
@@ -334,10 +337,10 @@ fn parsePtrTyp(self: *Self) !Ast.Typ {
     } };
 }
 
-fn parseVerbalTyp(self: *Self) !Ast.Typ {
+fn parseVerbalTyp(self: *Self) !Typ {
     const location = self.getLocation();
     const name = try self.parseName();
-    return Ast.Typ.fromName(name, location);
+    return Typ.fromName(name, location);
 }
 
 fn parseMany(self: *Self, T: type, parse: fn (*Self) Error!T) ![]T {
@@ -565,7 +568,7 @@ fn parseDeclare(self: *Self) !Ast.Stmt.Declare.Named {
     const mutable = try self.parseMaybe(bool, parseMutable) orelse false;
     const location = self.getLocation();
     const name = try self.parseNameLoud();
-    const typ = try self.parseMaybe(Ast.Typ, parseTypAnnotLoud);
+    const typ = try self.parseMaybe(Typ, parseTypAnnotLoud);
     try self.expectLoud(.equ);
     const expr = try self.parseExprLoud();
     try self.expectLoud(.semi);
@@ -585,7 +588,7 @@ fn parseMutable(self: *Self) !bool {
     return true;
 }
 
-fn parseTypAnnotLoud(self: *Self) !Ast.Typ {
+fn parseTypAnnotLoud(self: *Self) !Typ {
     try self.expectLoud(.colon);
     const typ = try self.parseTypLoud();
     return typ;
@@ -885,7 +888,7 @@ fn parseAtExpr(self: *Self) !Ast.Expr {
 
 fn parseArrayExpr(self: *Self) !Ast.Expr {
     const start = self.getLocation();
-    const mtyp = try self.parseMaybe(Ast.Typ, parseTypHint);
+    const mtyp = try self.parseMaybe(Typ, parseTypHint);
     try self.expect(.bral);
     const exprs = try self.parseSep(Ast.Expr, parseExprLoud);
     const end = self.getLocation();
@@ -899,7 +902,7 @@ fn parseArrayExpr(self: *Self) !Ast.Expr {
     };
 }
 
-fn parseTypHint(self: *Self) !Ast.Typ {
+fn parseTypHint(self: *Self) !Typ {
     try self.expect(.les);
     const typ = try self.parseTypLoud();
     try self.expectLoud(.mor);

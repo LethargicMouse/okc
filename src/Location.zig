@@ -54,3 +54,14 @@ pub const fake = Self{
     .start = .start,
     .end = .start,
 };
+
+pub fn eql(self: Self, other: Self) bool {
+    return self.start.eql(other.start) and self.end.eql(other.end) and
+        std.mem.eql(u8, self.name, other.name);
+}
+
+pub fn hashIn(self: Self, hasher: *std.hash.Wyhash) void {
+    hasher.update(self.name);
+    hasher.update(std.mem.asBytes(&self.start));
+    hasher.update(std.mem.asBytes(&self.end));
+}

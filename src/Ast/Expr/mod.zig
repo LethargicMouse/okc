@@ -2,7 +2,7 @@ const Lexeme = @import("../../Lexer.zig").Lexeme;
 const Location = @import("../../Location.zig");
 pub const Binary = @import("Binary.zig");
 pub const Unary = @import("Unary.zig");
-const Typ = @import("../typ.zig").Typ;
+const Typ = @import("../../typ.zig").Typ;
 
 const Self = @This();
 
@@ -43,8 +43,7 @@ pub const Method = struct {
 
 pub const FunMeta = struct {
     generics: []const Typ = undefined,
-    params: []const Typ = undefined,
-    ret_typ: Typ = undefined,
+    fun: Typ.Fun = undefined,
 };
 
 pub const Subslice = struct {
