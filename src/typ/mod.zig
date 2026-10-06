@@ -3,7 +3,6 @@ const std = @import("std");
 const Location = @import("../Location.zig");
 const Memo = @import("../memo.zig").Memo;
 const Resolver = @import("../resolver.zig").Resolver;
-const typ_kinds = @import("../typ_kinds.zig");
 
 pub const Typ = union(enum) {
     prime: Prime,
@@ -22,7 +21,7 @@ pub const Typ = union(enum) {
     pub const Name = @import("Name.zig");
     pub const Ptr = @import("Ptr.zig");
     pub const Slice = @import("Slice.zig");
-    pub const Fun = typ_kinds.Fun(Typ);
+    pub const Fun = @import("Fun.zig");
 
     pub fn getName(typ: Typ) ?Name {
         return switch (typ) {
