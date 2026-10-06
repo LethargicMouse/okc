@@ -21,6 +21,8 @@ pub const Typ = union(enum) {
     pub const Array = @import("Array.zig");
     pub const Name = @import("Name.zig");
     pub const Ptr = @import("Ptr.zig");
+    pub const Slice = @import("Slice.zig");
+    pub const Fun = typ_kinds.Fun(Typ);
 
     pub fn getName(typ: Typ) ?Name {
         return switch (typ) {
@@ -306,7 +308,4 @@ pub const Typ = union(enum) {
             hasher.update(&.{@intFromEnum(prime)});
         }
     };
-
-    pub const Slice = typ_kinds.Slice(Typ);
-    pub const Fun = typ_kinds.Fun(Typ);
 };
