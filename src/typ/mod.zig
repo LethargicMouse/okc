@@ -20,6 +20,7 @@ pub const Typ = union(enum) {
 
     pub const Array = @import("Array.zig");
     pub const Name = @import("Name.zig");
+    pub const Ptr = @import("Ptr.zig");
 
     pub fn getName(typ: Typ) ?Name {
         return switch (typ) {
@@ -306,7 +307,6 @@ pub const Typ = union(enum) {
         }
     };
 
-    pub const Ptr = typ_kinds.Ptr(Typ);
     pub const Slice = typ_kinds.Slice(Typ);
     pub const Fun = typ_kinds.Fun(Typ);
 };

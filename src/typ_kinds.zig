@@ -3,39 +3,6 @@ const Location = @import("Location.zig");
 
 const Resolver = @import("resolver.zig").Resolver;
 
-pub fn Ptr(Typ: type) type {
-    return struct {
-        typ: *const Typ,
-        mutable: bool,
-
-        pub fn resolve(ptr: @This(), resolver: *Resolver(Typ)) error{OutOfMemory}!@This() {
-            const new = try ptr.typ.resolve(resolver);
-            const new_ptr = try resolver.memo.box(new);
-            return .{
-                .typ = new_ptr,
-                .mutable = ptr.mutable,
-            };
-        }
-
-        pub fn eql(a: @This(), b: @This()) bool {
-            return a.typ == b.typ and a.mutable == b.mutable;
-        }
-
-        pub fn hashIn(ptr: @This(), hasher: *std.hash.Wyhash) void {
-            hasher.update(std.mem.asBytes(&ptr.typ));
-            hasher.update(&.{@intFromBool(ptr.mutable)});
-        }
-
-        pub fn format(ptr: @This(), writer: *std.Io.Writer) !void {
-            if (ptr.mutable) {
-                try writer.print("&mut {f}", .{ptr.typ});
-            } else {
-                try writer.print("&{f}", .{ptr.typ});
-            }
-        }
-    };
-}
-
 pub fn Slice(Typ: type) type {
     return struct {
         typ: *const Typ,

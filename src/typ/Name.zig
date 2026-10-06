@@ -8,18 +8,18 @@ const Self = @This();
 name: []const u8,
 generics: []const Typ = &.{},
 
-pub fn resolve(name: @This(), resolver: *Resolver(Typ)) error{OutOfMemory}!@This() {
-    const generics = try resolver.memo.arena.allocator().alloc(Typ, name.generics.len);
-    for (generics, name.generics) |*target, generic| {
+pub fn resolve(self: Self, resolver: *Resolver(Typ)) error{OutOfMemory}!Self {
+    const generics = try resolver.memo.arena.allocator().alloc(Typ, self.generics.len);
+    for (generics, self.generics) |*target, generic| {
         target.* = try generic.resolve(resolver);
     }
     return .{
-        .name = name.name,
+        .name = self.name,
         .generics = generics,
     };
 }
 
-pub fn eql(a: @This(), b: @This()) bool {
+pub fn eql(a: Self, b: Self) bool {
     if (!std.mem.eql(u8, a.name, b.name)) {
         return false;
     }
@@ -31,19 +31,19 @@ pub fn eql(a: @This(), b: @This()) bool {
     return true;
 }
 
-pub fn hashIn(name: @This(), hasher: *std.hash.Wyhash) void {
-    hasher.update(name.name);
-    // `name.name` determines number of `name.generics`
-    for (name.generics) |gen| {
+pub fn hashIn(self: Self, hasher: *std.hash.Wyhash) void {
+    hasher.update(self.name);
+    // `self.name` determines number of `self.generics`
+    for (self.generics) |gen| {
         gen.hashIn(hasher);
     }
 }
 
-pub fn format(name: @This(), writer: *std.Io.Writer) !void {
-    try writer.writeAll(name.name);
-    if (name.generics.len != 0) {
-        try writer.print("<{f}", .{name.generics[0]});
-        for (name.generics[1..]) |generic| {
+pub fn format(self: Self, writer: *std.Io.Writer) !void {
+    try writer.writeAll(self.name);
+    if (self.generics.len != 0) {
+        try writer.print("<{f}", .{self.generics[0]});
+        for (self.generics[1..]) |generic| {
             try writer.print(", {f}", .{generic});
         }
         try writer.writeByte('>');
