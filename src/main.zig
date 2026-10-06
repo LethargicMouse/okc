@@ -7,7 +7,7 @@ const Lexer = @import("Lexer.zig");
 const Memo = @import("memo.zig").Memo;
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
-const Typ = @import("typ.zig").Typ;
+const Typ = @import("typ/mod.zig").Typ;
 
 pub fn main(init: std.process.Init) u8 {
     const code = run(init) catch |err| {

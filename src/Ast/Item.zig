@@ -1,7 +1,7 @@
 const Location = @import("../Location.zig");
 const Expr = @import("Expr/mod.zig");
 const Stmt = @import("Stmt.zig");
-const Typ = @import("../typ.zig").Typ;
+const Typ = @import("../typ/mod.zig").Typ;
 
 const Self = @This();
 name: []const u8,

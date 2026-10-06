@@ -3,7 +3,7 @@ const std = @import("std");
 const Ast = @import("Ast/mod.zig");
 const HashMap = @import("hash_map.zig").HashMap;
 const Memo = @import("memo.zig").Memo;
-const Typ = @import("typ.zig").Typ;
+const Typ = @import("typ/mod.zig").Typ;
 const Name = Typ.Name;
 
 const Resolver = @import("resolver.zig").Resolver(Typ);

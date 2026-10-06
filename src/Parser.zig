@@ -5,7 +5,7 @@ const Lexer = @import("Lexer.zig");
 const Lexeme = Lexer.Lexeme;
 const Location = @import("Location.zig");
 const Memo = @import("memo.zig").Memo;
-const Typ = @import("typ.zig").Typ;
+const Typ = @import("typ/mod.zig").Typ;
 
 const Self = @This();
 gpa: std.mem.Allocator,
@@ -381,9 +381,9 @@ fn parseFun(self: *Self) !Ast.Item.Fun {
 
 fn parseBlockLoud(self: *Self) Error![]Ast.Stmt {
     try self.expectLoud(.curl);
-    const Stmts = try self.parseMany(Ast.Stmt, parseStmtLoud);
+    const stmts = try self.parseMany(Ast.Stmt, parseStmtLoud);
     try self.expect(.curr);
-    return Stmts;
+    return stmts;
 }
 
 fn parseStmtLoud(self: *Self) !Ast.Stmt {

@@ -5,7 +5,7 @@ const HashMap = @import("hash_map.zig").HashMap;
 const Location = @import("Location.zig");
 const Memo = @import("memo.zig").Memo;
 const Resolver = @import("resolver.zig").Resolver;
-const Typ = @import("typ.zig").Typ;
+const Typ = @import("typ/mod.zig").Typ;
 pub const Failer = @import("Failer.zig");
 
 const Self = @This();

@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Location = @import("Location.zig");
-const Typ = @import("typ.zig").Typ;
+const Typ = @import("typ/mod.zig").Typ;
 
 const Self = @This();
 errors_cnt: u16 = 0,

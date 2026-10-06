@@ -1,10 +1,9 @@
 const std = @import("std");
 
-const Ast = @import("Ast/mod.zig");
-const Memo = @import("memo.zig").Memo;
-const Resolver = @import("resolver.zig").Resolver(Typ);
-const typ_kinds = @import("typ_kinds.zig");
-const Location = @import("Location.zig");
+const Location = @import("../Location.zig");
+const Memo = @import("../memo.zig").Memo;
+const Resolver = @import("../resolver.zig").Resolver;
+const typ_kinds = @import("../typ_kinds.zig");
 
 pub const Typ = union(enum) {
     prime: Prime,
@@ -19,11 +18,7 @@ pub const Typ = union(enum) {
     int,
     err,
 
-    pub const Array = typ_kinds.Array(Typ);
-    pub const Name = typ_kinds.Name(Typ);
-    pub const Ptr = typ_kinds.Ptr(Typ);
-    pub const Slice = typ_kinds.Slice(Typ);
-    pub const Fun = typ_kinds.Fun(Typ);
+    pub const Array = @import("Array.zig");
 
     pub fn getName(typ: Typ) ?Name {
         return switch (typ) {
@@ -33,7 +28,7 @@ pub const Typ = union(enum) {
         };
     }
 
-    pub fn resolve(typ: Typ, resolver: *Resolver) error{OutOfMemory}!Typ {
+    pub fn resolve(typ: Typ, resolver: *Resolver(Typ)) error{OutOfMemory}!Typ {
         switch (typ) {
             .name => |name| if (resolver.map.get(name.name)) |resolved| {
                 return resolved;
@@ -309,4 +304,9 @@ pub const Typ = union(enum) {
             hasher.update(&.{@intFromEnum(prime)});
         }
     };
+
+    pub const Name = typ_kinds.Name(Typ);
+    pub const Ptr = typ_kinds.Ptr(Typ);
+    pub const Slice = typ_kinds.Slice(Typ);
+    pub const Fun = typ_kinds.Fun(Typ);
 };

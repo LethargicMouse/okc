@@ -3,34 +3,6 @@ const Location = @import("Location.zig");
 
 const Resolver = @import("resolver.zig").Resolver;
 
-pub fn Array(Typ: type) type {
-    return struct {
-        len: u64,
-        typ: *const Typ,
-
-        pub fn resolve(array: @This(), resolver: *Resolver(Typ)) error{OutOfMemory}!@This() {
-            const new = try array.typ.resolve(resolver);
-            const new_ptr = try resolver.memo.box(new);
-            return .{
-                .len = array.len,
-                .typ = new_ptr,
-            };
-        }
-
-        pub fn eql(a: @This(), b: @This()) bool {
-            return a.len == b.len and a.typ == b.typ;
-        }
-
-        pub fn hashIn(array: @This(), hasher: *std.hash.Wyhash) void {
-            hasher.update(std.mem.asBytes(&array));
-        }
-
-        pub fn format(array: @This(), writer: *std.Io.Writer) !void {
-            try writer.print("[{}]{f}", .{ array.len, array.typ });
-        }
-    };
-}
-
 pub fn Name(Typ: type) type {
     return struct {
         const Self = @This();
