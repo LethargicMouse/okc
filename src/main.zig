@@ -4,7 +4,7 @@ const Ast = @import("Ast/mod.zig");
 const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
 const Lexer = @import("Lexer.zig");
-const Memo = @import("memo.zig").Memo;
+const memo = @import("memo.zig");
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
 const Typ = @import("typ/mod.zig").Typ;
@@ -51,10 +51,12 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var ast_arena = std.heap.ArenaAllocator.init(gpa);
     defer ast_arena.deinit();
 
-    var ast_typ_memo = Memo(Typ).init(&ast_arena);
-    defer ast_typ_memo.deinit();
+    var typ_mem = memo.Memo(Typ).init(&ast_arena);
+    defer typ_mem.deinit();
+    var typ_slice_mem = memo.SliceMemo(Typ).init(&ast_arena);
+    defer typ_slice_mem.deinit();
 
-    var parser = Parser.init(gpa, &ast_arena, &ast_typ_memo, tokens);
+    var parser = Parser.init(gpa, &ast_arena, &typ_mem, tokens);
     const ast = try parser.run();
 
     var checker_arena = std.heap.ArenaAllocator.init(gpa);
@@ -62,7 +64,13 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
 
     var checker_failer = Checker.Failer.init();
 
-    var checker = try Checker.init(gpa, &checker_arena, &ast_typ_memo, &checker_failer);
+    var checker = try Checker.init(
+        gpa,
+        &checker_arena,
+        &typ_mem,
+        &typ_slice_mem,
+        &checker_failer,
+    );
     const items = try checker.run(ast);
 
     std.Io.Dir.cwd().createDirPath(io, build_dir_path) catch {
@@ -71,7 +79,15 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     };
 
     var write_buf: [256]u8 = undefined;
-    var gen = try Codegen.init(io, gpa, &ast_typ_memo, items, &write_buf, out_ll_path);
+    var gen = try Codegen.init(
+        io,
+        gpa,
+        &typ_mem,
+        &typ_slice_mem,
+        items,
+        &write_buf,
+        out_ll_path,
+    );
     gen.run() catch |err| switch (err) {
         error.WriteFailed => {
             std.log.err("failed to write to `" ++ out_ll_path ++ "`", .{});

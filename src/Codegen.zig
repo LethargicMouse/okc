@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Ast = @import("Ast/mod.zig");
 const HashMap = @import("hash_map.zig").HashMap;
-const Memo = @import("memo.zig").Memo;
+const memo = @import("memo.zig");
 const Typ = @import("typ/mod.zig").Typ;
 const Name = Typ.Name;
 
@@ -15,7 +15,8 @@ file: std.Io.File,
 writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 extra_buffer: std.ArrayList(u8) = .empty,
-typ_memo: *Memo(Typ),
+typ_mem: *memo.Memo(Typ),
+typ_slice_mem: *memo.SliceMemo(Typ),
 items: std.StringHashMap(*const Ast.Item),
 structs: HashMap(Name, Struct),
 consts: std.StringHashMap(Typ),
@@ -34,7 +35,8 @@ const FunReq = struct {
 pub fn init(
     io: std.Io,
     gpa: std.mem.Allocator,
-    typ_memo: *Memo(Typ),
+    typ_mem: *memo.Memo(Typ),
+    typ_slice_mem: *memo.SliceMemo(Typ),
     items: std.StringHashMap(*const Ast.Item),
     write_buf: []u8,
     path: []const u8,
@@ -46,10 +48,11 @@ pub fn init(
     return .{
         .io = io,
         .gpa = gpa,
-        .typ_memo = typ_memo,
+        .typ_mem = typ_mem,
+        .typ_slice_mem = typ_slice_mem,
         .file = file,
         .items = items,
-        .resolver = .init(gpa, typ_memo),
+        .resolver = .init(typ_mem, typ_slice_mem),
         .writer = file.writer(io, write_buf),
         .vars = .init(gpa),
         .structs = .init(gpa),
@@ -71,7 +74,7 @@ fn genAll(self: *Self) !void {
         .name = .{ .name = "main" },
         .fun = .{
             .params = &.{},
-            .ret_typ = try self.typ_memo.box(.{ .prime = .i32 }),
+            .ret_typ = try self.typ_mem.box(.{ .prime = .i32 }),
         },
     });
     while (self.fun_queue.items.len != 0) {
@@ -245,8 +248,8 @@ fn genStruct(self: *Self, name: Name) Error!void {
     var default_fields_vec = std.ArrayList(DefaultField).empty;
     try self.print("\n%\"{f}\" = type {{", .{name});
     const struc = self.items.get(name.name).?.kind.struc;
-    var resolver = Resolver.init(self.gpa, self.typ_memo);
-    defer resolver.map.deinit();
+    var resolver = Resolver.init(self.typ_mem, self.typ_slice_mem);
+    defer resolver.deinit();
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
     }
@@ -710,7 +713,7 @@ fn genPtr(self: *Self, expr: Ast.Expr) !TypVal {
 fn makePtrFromRef(self: *Self, ref: Ref) !TypVal {
     return .{
         .typ = .{ .ptr = .{
-            .typ = try self.typ_memo.box(ref.inner_typ),
+            .typ = try self.typ_mem.box(ref.inner_typ),
             .mutable = false,
         } },
         .val = ref.val,
@@ -815,7 +818,7 @@ fn genSubslice(self: *Self, subslice: Ast.Expr.Subslice) !TypVal {
     const ptr = try self.makePtrFromRef(ptr_ref);
     const len = try self.genBinary(.sub, start.typ, end.val, start.val);
     var res = TypVal{ .typ = .{ .slice = .{
-        .typ = try self.typ_memo.box(ptr_ref.inner_typ),
+        .typ = try self.typ_mem.box(ptr_ref.inner_typ),
         .mutable = false,
     } }, .val = .undef };
     try self.genIV(&res, ptr, 0);
@@ -895,7 +898,7 @@ fn genBool(boo: bool) TypVal {
 
 fn genStr(self: *Self, str: []const u8) !TypVal {
     const info = try self.genStrDecl(str);
-    const ptr_u8 = try self.typ_memo.box(.{ .prime = .u8 });
+    const ptr_u8 = try self.typ_mem.box(.{ .prime = .u8 });
     var res = TypVal{
         .typ = .{ .slice = .{
             .typ = ptr_u8,
@@ -1119,7 +1122,7 @@ fn genConstStr(self: *Self, str: []const u8) !Typ {
     const info = try self.genStrDecl(str);
     try self.print("%\"[]\" {{ ptr @.s{d}, i64 {d} }}", .{ info.tmp, info.len });
     return .{ .slice = .{
-        .typ = try self.typ_memo.box(.{ .prime = .u8 }),
+        .typ = try self.typ_mem.box(.{ .prime = .u8 }),
         .mutable = false,
     } };
 }
@@ -1148,7 +1151,7 @@ fn deinit(self: *Self) void {
     self.loop_ends.deinit(self.gpa);
     self.fun_queue.deinit(self.gpa);
     self.generated.deinit();
-    self.resolver.map.deinit();
+    self.resolver.deinit();
     self.items.deinit();
     self.consts.deinit();
     self.deinitStructs();

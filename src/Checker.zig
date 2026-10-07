@@ -3,7 +3,7 @@ const std = @import("std");
 const Ast = @import("Ast/mod.zig");
 const HashMap = @import("hash_map.zig").HashMap;
 const Location = @import("Location.zig");
-const Memo = @import("memo.zig").Memo;
+const memo = @import("memo.zig");
 const Resolver = @import("resolver.zig").Resolver;
 const Typ = @import("typ/mod.zig").Typ;
 pub const Failer = @import("Failer.zig");
@@ -11,7 +11,8 @@ pub const Failer = @import("Failer.zig");
 const Self = @This();
 gpa: std.mem.Allocator,
 arena: *std.heap.ArenaAllocator,
-typ_memo: *Memo(Typ),
+typ_mem: *memo.Memo(Typ),
+typ_slice_mem: *memo.SliceMemo(Typ),
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
 ast_items: std.StringHashMap(*const Ast.Item),
@@ -26,14 +27,16 @@ norm_queue: std.ArrayList(NormaliseRequest) = .empty,
 pub fn init(
     gpa: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
-    typ_memo: *Memo(Typ),
+    typ_mem: *memo.Memo(Typ),
+    typ_slice_mem: *memo.SliceMemo(Typ),
     failer: *Failer,
 ) error{OutOfMemory}!Self {
     return .{
         .gpa = gpa,
         .arena = arena,
         .failer = failer,
-        .typ_memo = typ_memo,
+        .typ_mem = typ_mem,
+        .typ_slice_mem = typ_slice_mem,
         .fun_arena = .init(gpa),
         .ast_items = .init(gpa),
         .items = .init(gpa),
@@ -625,7 +628,7 @@ fn checkSubslice(self: *Self, subslice: *Ast.Expr.Subslice, location: Location) 
             self.failer.fail(location, "cannot take slice of `{f}`", .{typ});
             return .{
                 .typ = .{ .slice = .{
-                    .typ = try self.typ_memo.box(.err),
+                    .typ = try self.typ_mem.box(.err),
                     .mutable = true,
                 } },
                 .mutable = false,
@@ -653,7 +656,7 @@ fn checkArray(self: *Self, array: *Ast.Expr.Array, hint: Typ) !ExprInfo {
     }
     if (array.exprs.len == 0) {
         const typ = Typ{ .array = .{
-            .typ = try self.typ_memo.box(inner_hint),
+            .typ = try self.typ_mem.box(inner_hint),
             .len = 0,
         } };
         return .{
@@ -666,7 +669,7 @@ fn checkArray(self: *Self, array: *Ast.Expr.Array, hint: Typ) !ExprInfo {
         inner_typ = self.unify(expr.location, inner_typ, info.typ);
     }
     const typ = Typ{ .array = .{
-        .typ = try self.typ_memo.box(inner_typ),
+        .typ = try self.typ_mem.box(inner_typ),
         .len = array.exprs.len,
     } };
     return .{
@@ -676,7 +679,7 @@ fn checkArray(self: *Self, array: *Ast.Expr.Array, hint: Typ) !ExprInfo {
 }
 
 fn checkStr(self: *Self) !ExprInfo {
-    const ptr = try self.typ_memo.box(.{ .prime = .u8 });
+    const ptr = try self.typ_mem.box(.{ .prime = .u8 });
     return .{
         .typ = .{ .slice = .{
             .typ = ptr,
@@ -701,7 +704,7 @@ fn checkNotb(self: *Self, expr: *Ast.Expr) !ExprInfo {
 fn checkPtr(self: *Self, expr: *Ast.Expr, hint: Typ) !ExprInfo {
     const mutable = if (hint == .ptr) hint.ptr.mutable else false;
     const info = try self.checkExpr(expr, .{ .mutable = mutable });
-    const ptr = try self.typ_memo.box(info.typ);
+    const ptr = try self.typ_mem.box(info.typ);
     return .{
         .typ = .{ .ptr = .{
             .typ = ptr,
@@ -763,7 +766,7 @@ fn checkSliceStruc(
             } };
             const info = try self.checkExpr(&field.expr, .{ .typ = expected });
             const typ = self.unify(field.expr.location, expected, info.typ);
-            was_ptr = if (typ == .ptr) typ.ptr.typ else try self.typ_memo.box(.err);
+            was_ptr = if (typ == .ptr) typ.ptr.typ else try self.typ_mem.box(.err);
         } else if (std.mem.eql(u8, field.name, "len")) {
             if (was_len) {
                 self.failer.newFieldSecond(field.location, field.name);
@@ -812,8 +815,8 @@ fn checkTypedStruc(
     if (generics.len == 0) {
         generics = try self.makeGenerics(decl.generics.len);
     }
-    var resolver: Resolver(Typ) = .init(self.gpa, self.typ_memo);
-    defer resolver.map.deinit();
+    var resolver: Resolver(Typ) = .init(self.typ_mem, self.typ_slice_mem);
+    defer resolver.deinit();
     for (decl.generics, generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
     }
@@ -945,8 +948,8 @@ fn checkField(
         return err;
     };
     fiel.used = true;
-    var resolver: Resolver(Typ) = .init(self.gpa, self.typ_memo);
-    defer resolver.map.deinit();
+    var resolver: Resolver(Typ) = .init(self.typ_mem, self.typ_slice_mem);
+    defer resolver.deinit();
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
     }
@@ -1067,15 +1070,15 @@ fn fillFunMetaHeader(
     fun_meta: *Ast.Expr.FunMeta,
     header: Ast.Item.Fun.Header,
 ) !ExprInfo {
-    var resolver = Resolver(Typ).init(self.gpa, self.typ_memo);
-    defer resolver.map.deinit();
+    var resolver = Resolver(Typ).init(self.typ_mem, self.typ_slice_mem);
+    defer resolver.deinit();
     for (header.generics) |generic| {
         const ptr = try self.fun_arena.allocator().create(Typ);
         ptr.* = .any;
         try resolver.map.put(generic.name, .{ .lazy = ptr });
     }
-    const generics = try self.typ_memo.arena.allocator().alloc(Typ, header.generics.len);
-    const params = try self.typ_memo.arena.allocator().alloc(Typ, header.params.len);
+    const generics = try self.typ_mem.arena.allocator().alloc(Typ, header.generics.len);
+    const params = try self.typ_mem.arena.allocator().alloc(Typ, header.params.len);
     for (header.params, params) |param, *target| {
         target.* = try param.typ.resolve(&resolver);
     }
@@ -1085,7 +1088,7 @@ fn fillFunMetaHeader(
     fun_meta.generics = generics;
     fun_meta.fun.params = params;
     const ret_typ = try header.ret_typ.resolve(&resolver);
-    fun_meta.fun.ret_typ = try self.typ_memo.box(ret_typ);
+    fun_meta.fun.ret_typ = try self.typ_mem.box(ret_typ);
     return .{
         .typ = .{ .fun = fun_meta.fun },
         .mutable = false,

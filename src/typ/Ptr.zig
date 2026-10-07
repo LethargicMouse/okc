@@ -9,7 +9,7 @@ mutable: bool,
 
 pub fn resolve(self: Self, resolver: *Resolver(Typ)) error{OutOfMemory}!Self {
     const new = try self.typ.resolve(resolver);
-    const new_ptr = try resolver.memo.box(new);
+    const new_ptr = try resolver.mem.box(new);
     return .{
         .typ = new_ptr,
         .mutable = self.mutable,

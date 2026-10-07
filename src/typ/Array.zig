@@ -9,7 +9,7 @@ typ: *const Typ,
 
 pub fn resolve(self: Self, resolver: *Resolver(Typ)) error{OutOfMemory}!Self {
     const new = try self.typ.resolve(resolver);
-    const new_ptr = try resolver.memo.box(new);
+    const new_ptr = try resolver.mem.box(new);
     return .{
         .len = self.len,
         .typ = new_ptr,
