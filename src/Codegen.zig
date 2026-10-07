@@ -1006,10 +1006,10 @@ fn genFunPtr(self: *Self, fun_name: []const u8, fun_meta: Ast.Expr.FunMeta) !Typ
     }
     try self.fun_queue.append(self.gpa, .{
         .name = name,
-        .fun = fun_meta.fun,
+        .fun = fun_meta.typ.fun,
     });
     return .{
-        .typ = .{ .fun = fun_meta.fun },
+        .typ = .{ .fun = fun_meta.typ.fun },
         .val = .{ .global = name },
     };
 }

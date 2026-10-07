@@ -42,8 +42,8 @@ pub const Method = struct {
 };
 
 pub const FunMeta = struct {
-    generics: []const Typ = undefined,
-    fun: Typ.Fun = undefined,
+    generics: []Typ = undefined,
+    typ: Typ = undefined,
 };
 
 pub const Subslice = struct {

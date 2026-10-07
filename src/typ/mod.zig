@@ -211,8 +211,10 @@ pub const Typ = union(enum) {
         if (a == .slice and b == .ptr and b.ptr.typ.* == .array and
             a.slice.mutable == b.ptr.mutable)
         {
-            if (a.slice.typ != b.ptr.typ.array.typ) {
-                _ = a.slice.typ.unify(b.ptr.typ.array.typ.*, active) orelse return null;
+            if (a.slice.typ != b.ptr.typ.array.typ and
+                a.slice.typ.unify(b.ptr.typ.array.typ.*, active) == null)
+            {
+                return null;
             }
             return a;
         }

@@ -9,9 +9,9 @@ fn main() i32 {
     return 0;
 }
 
-struct Pair<a, b> {
-    first: a,
-    second: b,
+struct Pair<A, B> {
+    first: A,
+    second: B,
 }
 
 let myPair = Pair {

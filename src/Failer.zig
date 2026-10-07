@@ -22,8 +22,8 @@ pub fn fail(self: *Self, location: Location, comptime msg: []const u8, args: any
     self.errors_cnt += 1;
 }
 
-pub fn unused(self: *Self, location: Location) void {
-    self.fail(location, "item is never used", .{});
+pub fn unused(self: *Self, location: Location, name: []const u8) void {
+    self.fail(location, "item `{s}` is never used", .{name});
 }
 
 pub fn alreadyDeclared(

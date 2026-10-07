@@ -47,7 +47,7 @@ pub const Fun = struct {
 
     pub const Header = struct {
         generics: []const Generic,
-        params: []const Param,
+        params: []Param,
         ret_typ: Typ,
 
         pub const Param = struct {

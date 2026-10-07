@@ -22,7 +22,7 @@ failer: *Failer,
 loops_nested: u16 = 0,
 current_generics: []const Ast.Item.Generic = &.{},
 generics_usage: std.DynamicBitSetUnmanaged,
-norm_queue: std.ArrayList(NormaliseRequest) = .empty,
+solve_queue: std.ArrayList(SolveRequest) = .empty,
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -69,13 +69,13 @@ fn checkAst(self: *Self, ast: Ast) !void {
 const ConvertError = error{ BadConvert, ConvertAny, OutOfMemory };
 
 fn checkItems(self: *Self) void {
-    var iter = self.items.valueIterator();
-    while (iter.next()) |item| {
-        self.checkItemUsage(item.*);
+    var iter = self.items.iterator();
+    while (iter.next()) |entry| {
+        self.checkItemUsage(entry.key_ptr.*, entry.value_ptr.*);
     }
 }
 
-fn checkItemUsage(self: *Self, item: Item) void {
+fn checkItemUsage(self: *Self, name: []const u8, item: Item) void {
     if (item.used) {
         switch (item.kind) {
             .fun, .typ => {},
@@ -83,15 +83,15 @@ fn checkItemUsage(self: *Self, item: Item) void {
             .struc => |struc| self.checkStructUsage(struc),
         }
     } else {
-        self.failer.unused(item.location);
+        self.failer.unused(item.location, name);
     }
 }
 
 fn checkStructUsage(self: *Self, struc: Struct) void {
-    var iter = struc.fields.valueIterator();
-    while (iter.next()) |field| {
-        if (!field.used) {
-            self.failer.unused(field.location);
+    var iter = struc.fields.iterator();
+    while (iter.next()) |entry| {
+        if (!entry.value_ptr.used) {
+            self.failer.unused(entry.value_ptr.location, entry.key_ptr.*);
         }
     }
 }
@@ -99,12 +99,15 @@ fn checkStructUsage(self: *Self, struc: Struct) void {
 fn regItem(self: *Self, item: *Ast.Item) !void {
     const kind: Item.Kind = switch (item.kind) {
         .typ_alias => |alias| .{ .typ = alias.typ },
-        .ext_fun => |ext_fun| .{ .fun = ext_fun.header },
+        .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
         .struc => |struc| try self.regStruct(struc),
-        .fun => |fun| .{ .fun = fun.header },
+        .fun => |*fun| .{ .fun = &fun.header },
         .constant => |*declare| try self.regConst(declare),
         .use => unreachable,
     };
+    if (kind == .fun) {
+        try self.checkHeader(kind.fun);
+    }
     if (self.items.get(item.name)) |prev| {
         self.failer.alreadyDeclared(item.location, item.name, prev.location);
         return;
@@ -179,10 +182,98 @@ fn checkArrayComptime(self: *Self, array: Ast.Expr.Array) void {
 
 fn checkItem(self: *Self, item: Ast.Item) error{OutOfMemory}!void {
     switch (item.kind) {
-        .typ_alias, .ext_fun, .constant, .struc => {},
+        .typ_alias, .constant, .struc, .ext_fun => {},
         .fun => |fun| try self.checkFun(fun, item.location),
         .use => unreachable,
     }
+}
+
+fn checkHeader(self: *Self, header: *Ast.Item.Fun.Header) !void {
+    self.current_generics = header.generics;
+    try self.generics_usage.resize(self.gpa, header.generics.len, false);
+    for (header.params) |*param| {
+        param.typ = try self.checkTyp(param.typ);
+    }
+    header.ret_typ = try self.checkTyp(header.ret_typ);
+    self.checkGenericsUsage();
+}
+
+fn checkTyp(self: *Self, typ: Typ) error{OutOfMemory}!Typ {
+    return switch (typ) {
+        .array => |array| .{ .array = try self.checkArrayTyp(array) },
+        .slice => |slice| .{ .slice = try self.checkSliceTyp(slice) },
+        .fun => |fun| .{ .fun = try self.checkFunTyp(fun) },
+        .loc_name => |located| self.checkLocNameTyp(located),
+        .ptr => |ptr| .{ .ptr = try self.checkPtrTyp(ptr) },
+        .prime, .any, .err, .int, .name, .lazy => typ,
+    };
+}
+
+fn checkFunTyp(self: *Self, fun: Typ.Fun) !Typ.Fun {
+    const params = try self.typ_slice_mem.alloc(fun.params.len);
+    for (params, fun.params) |*target, param| {
+        target.* = try self.checkTyp(param);
+    }
+    const new = try self.checkTyp(fun.ret_typ.*);
+    return .{
+        .params = try self.typ_slice_mem.save(params),
+        .ret_typ = try self.typ_mem.box(new),
+    };
+}
+
+fn checkArrayTyp(self: *Self, array: Typ.Array) !Typ.Array {
+    const new = try self.checkTyp(array.typ.*);
+    return .{
+        .typ = try self.typ_mem.box(new),
+        .len = array.len,
+    };
+}
+
+fn checkSliceTyp(self: *Self, slice: Typ.Slice) !Typ.Slice {
+    const new = try self.checkTyp(slice.typ.*);
+    return .{
+        .typ = try self.typ_mem.box(new),
+        .mutable = slice.mutable,
+    };
+}
+
+fn checkPtrTyp(self: *Self, ptr: Typ.Ptr) !Typ.Ptr {
+    const new = try self.checkTyp(ptr.typ.*);
+    return .{
+        .typ = try self.typ_mem.box(new),
+        .mutable = ptr.mutable,
+    };
+}
+
+fn checkLocNameTyp(self: *Self, located: Typ.Name.Located) !Typ {
+    const loc_name: Typ.Name.Located = .{
+        .location = located.location,
+        .name = try self.checkNameTyp(located.name),
+    };
+    for (self.current_generics, 0..) |generic, i| {
+        if (std.mem.eql(u8, generic.name, located.name.name)) {
+            self.generics_usage.set(i);
+            return .{ .loc_name = loc_name };
+        }
+    }
+    const maybe_resolved = self.checkTypDecl(loc_name) catch |err| switch (err) {
+        error.BadType => return .err,
+    };
+    if (maybe_resolved) |resolved| {
+        return resolved;
+    }
+    return .{ .loc_name = loc_name };
+}
+
+fn checkNameTyp(self: *Self, name: Typ.Name) !Typ.Name {
+    const generics = try self.typ_slice_mem.alloc(name.generics.len);
+    for (generics, name.generics) |*target, generic| {
+        target.* = try self.checkTyp(generic);
+    }
+    return .{
+        .name = name.name,
+        .generics = try self.typ_slice_mem.save(generics),
+    };
 }
 
 fn checkVarUsage(self: *Self, vari: Var, location: Location) void {
@@ -209,8 +300,6 @@ fn regStruct(self: *Self, struc: Ast.Item.Struct) !Item.Kind {
         .generics = struc.generics,
         .fields = .init(self.gpa),
     };
-    self.current_generics = struc.generics;
-    try self.generics_usage.resize(self.gpa, struc.generics.len, false);
     for (struc.fields) |*field| {
         var defaulted = false;
         if (field.default) |*expr| {
@@ -229,7 +318,6 @@ fn regStruct(self: *Self, struc: Ast.Item.Struct) !Item.Kind {
             .used = field.name[0] == '_',
         });
     }
-    self.checkGenericsUsage();
     return .{ .struc = res };
 }
 
@@ -252,7 +340,7 @@ fn checkGenericsRedeclare(self: *Self, generics: []const Ast.Item.Generic) !void
 fn checkGenericsUsage(self: *Self) void {
     for (self.current_generics, 0..) |generic, i| {
         if (!self.generics_usage.isSet(i)) {
-            self.failer.unused(generic.location);
+            self.failer.unused(generic.location, generic.name);
         }
     }
 }
@@ -272,11 +360,66 @@ fn checkFun(self: *Self, fun: Ast.Item.Fun, location: Location) !void {
         self.failer.fail(location, "function may not return", .{});
     }
     self.freeVars(rbp);
-    for (self.norm_queue.items) |req| {
-        req.typ.* = req.typ.normalise();
+    for (self.solve_queue.items) |req| {
+        req.typ.* = try self.solveTyp(req.typ.*);
     }
-    self.norm_queue.clearRetainingCapacity();
+    self.solve_queue.clearRetainingCapacity();
     _ = self.fun_arena.reset(.retain_capacity);
+}
+
+fn solveTyp(self: Self, typ: Typ) error{OutOfMemory}!Typ {
+    switch (typ) {
+        .array => |array| {
+            const new = try self.solveTyp(array.typ.*);
+            return .{ .array = .{
+                .typ = try self.typ_mem.box(new),
+                .len = array.len,
+            } };
+        },
+        .fun => |fun| {
+            const params = try self.typ_slice_mem.alloc(fun.params.len);
+            for (params, fun.params) |*target, param| {
+                target.* = try self.solveTyp(param);
+            }
+            const new = try self.solveTyp(fun.ret_typ.*);
+            return .{ .fun = .{
+                .params = try self.typ_slice_mem.save(params),
+                .ret_typ = try self.typ_mem.box(new),
+            } };
+        },
+        .name => |name| return .{ .name = try self.solveNameTyp(name) },
+        .loc_name => |located| return .{ .loc_name = .{
+            .location = located.location,
+            .name = try self.solveNameTyp(located.name),
+        } },
+        .ptr => |ptr| {
+            const new = try self.solveTyp(ptr.typ.*);
+            return .{ .ptr = .{
+                .typ = try self.typ_mem.box(new),
+                .mutable = ptr.mutable,
+            } };
+        },
+        .slice => |slice| {
+            const new = try self.solveTyp(slice.typ.*);
+            return .{ .slice = .{
+                .typ = try self.typ_mem.box(new),
+                .mutable = false,
+            } };
+        },
+        .lazy => |inner| return try self.solveTyp(inner.*),
+        .any, .err, .prime, .int => return typ,
+    }
+}
+
+fn solveNameTyp(self: Self, name: Typ.Name) !Typ.Name {
+    const generics = try self.typ_slice_mem.alloc(name.generics.len);
+    for (generics, name.generics) |*target, generic| {
+        target.* = try self.solveTyp(generic);
+    }
+    return .{
+        .name = name.name,
+        .generics = try self.typ_slice_mem.save(generics),
+    };
 }
 
 fn checkLoopBlock(self: *Self, block: []Ast.Stmt) !ControlFlow {
@@ -372,7 +515,7 @@ fn checkFor(self: *Self, forr: *Ast.Stmt.For) !ControlFlow {
 
 fn freeVar(self: *Self, name: []const u8) void {
     const item = self.items.fetchRemove(name).?.value;
-    self.checkItemUsage(item);
+    self.checkItemUsage(name, item);
 }
 
 fn checkIgnore(self: *Self, ignore: *Ast.Stmt.Ignore, location: Location) !ControlFlow {
@@ -583,7 +726,7 @@ fn checkExpr(self: *Self, expr: *Ast.Expr, hint: ExprHint) error{OutOfMemory}!Ex
         .method => unreachable,
         .subslice => |subslice| return self.checkSubslice(subslice, expr.location),
         .sizeof => |typ| return checkSizeof(typ),
-        .array => |*array| return self.checkArray(array, hint.typ),
+        .array => |*array| return self.checkArray(array, hint.typ, expr.location),
         .unary => |unary| return self.checkUnary(unary, expr.location, hint.typ),
         .struc => |*struc| return self.checkStructExpr(struc, expr.location, hint.typ),
         .int => |*int| return self.checkInt(int, expr.location),
@@ -645,7 +788,7 @@ fn checkSizeof(typ: Typ) !ExprInfo {
     };
 }
 
-fn checkArray(self: *Self, array: *Ast.Expr.Array, hint: Typ) !ExprInfo {
+fn checkArray(self: *Self, array: *Ast.Expr.Array, hint: Typ, location: Location) !ExprInfo {
     var inner_typ: Typ = .any;
     var inner_hint: Typ = .any;
     if (array.mtyp) |typ| {
@@ -668,12 +811,16 @@ fn checkArray(self: *Self, array: *Ast.Expr.Array, hint: Typ) !ExprInfo {
         const info = try self.checkExpr(expr, .{ .typ = inner_hint });
         inner_typ = self.unify(expr.location, inner_typ, info.typ);
     }
-    const typ = Typ{ .array = .{
+    array.typ = Typ{ .array = .{
         .typ = try self.typ_mem.box(inner_typ),
         .len = array.exprs.len,
     } };
+    try self.solve_queue.append(self.gpa, .{
+        .typ = &array.typ,
+        .location = location,
+    });
     return .{
-        .typ = typ,
+        .typ = array.typ,
         .mutable = false,
     };
 }
@@ -828,6 +975,10 @@ fn checkTypedStruc(
         .name = name.name,
         .generics = generics,
     } };
+    try self.solve_queue.append(self.gpa, .{
+        .typ = &struc.typ,
+        .location = location,
+    });
     return .{
         .typ = struc.typ,
         .mutable = false,
@@ -900,7 +1051,7 @@ fn checkInt(self: *Self, int: *Ast.Expr.Int, location: Location) !ExprInfo {
     const ptr = try self.fun_arena.allocator().create(Typ);
     ptr.* = .int;
     int.typ = .{ .lazy = ptr };
-    try self.norm_queue.append(self.gpa, .{
+    try self.solve_queue.append(self.gpa, .{
         .location = location,
         .typ = &int.typ,
     });
@@ -1040,7 +1191,7 @@ fn checkVar(
         .fun => |header| {
             item.used = true;
             vari.fun_meta = .{};
-            return self.fillFunMetaHeader(&vari.fun_meta.?, header);
+            return self.fillFunMetaHeader(&vari.fun_meta.?, header.*, location);
         },
         .struc, .typ => {
             self.failer.fail(location, "it is a type", .{});
@@ -1069,6 +1220,7 @@ fn fillFunMetaHeader(
     self: *Self,
     fun_meta: *Ast.Expr.FunMeta,
     header: Ast.Item.Fun.Header,
+    location: Location,
 ) !ExprInfo {
     var resolver = Resolver(Typ).init(self.typ_mem, self.typ_slice_mem);
     defer resolver.deinit();
@@ -1077,20 +1229,29 @@ fn fillFunMetaHeader(
         ptr.* = .any;
         try resolver.map.put(generic.name, .{ .lazy = ptr });
     }
-    const generics = try self.typ_mem.arena.allocator().alloc(Typ, header.generics.len);
-    const params = try self.typ_mem.arena.allocator().alloc(Typ, header.params.len);
+    fun_meta.generics = try self.typ_slice_mem.arena.allocator().alloc(Typ, header.generics.len);
+    const params = try self.typ_slice_mem.alloc(header.params.len);
     for (header.params, params) |param, *target| {
         target.* = try param.typ.resolve(&resolver);
     }
-    for (generics, header.generics) |*target, generic| {
+    for (fun_meta.generics, header.generics) |*target, generic| {
         target.* = resolver.map.get(generic.name).?;
+        try self.solve_queue.append(self.gpa, .{
+            .typ = target,
+            .location = null,
+        });
     }
-    fun_meta.generics = generics;
-    fun_meta.fun.params = params;
     const ret_typ = try header.ret_typ.resolve(&resolver);
-    fun_meta.fun.ret_typ = try self.typ_mem.box(ret_typ);
+    fun_meta.typ = .{ .fun = .{
+        .params = try self.typ_slice_mem.save(params),
+        .ret_typ = try self.typ_mem.box(ret_typ),
+    } };
+    try self.solve_queue.append(self.gpa, .{
+        .typ = &fun_meta.typ,
+        .location = location,
+    });
     return .{
-        .typ = .{ .fun = fun_meta.fun },
+        .typ = fun_meta.typ,
         .mutable = false,
     };
 }
@@ -1144,7 +1305,7 @@ fn checkRet(self: *Self, ret: *Ast.Stmt.Return, location: Location) !ControlFlow
 
 fn deinit(self: *Self) void {
     self.deinitItems();
-    self.norm_queue.deinit(self.gpa);
+    self.solve_queue.deinit(self.gpa);
     self.fun_arena.deinit();
     self.vars_stack.deinit(self.gpa);
     self.generics_usage.deinit(self.gpa);
@@ -1159,17 +1320,17 @@ fn deinitItems(self: *Self) void {
     self.items.deinit();
 }
 
-fn checkTypDecl(self: *Self, name: Ast.Typ.Name) error{BadType}!?Typ {
+fn checkTypDecl(self: *Self, located: Typ.Name.Located) error{BadType}!?Typ {
     if (debug_check_typ) {
-        std.debug.print("checkTypDecl {f}\n", .{name.delocate()});
+        std.debug.print("checkTypDecl {f}\n", .{located.name});
     }
-    const item = self.items.getPtr(name.name) orelse {
-        self.failer.fail(name.location, "item `{s}` is not declared", .{name.name});
+    const item = self.items.getPtr(located.name.name) orelse {
+        self.failer.fail(located.location, "item `{s}` is not declared", .{located.name.name});
         return error.BadType;
     };
     switch (item.kind) {
         .fun, .vari => {
-            self.failer.fail(name.location, "item `{s}` is not a type", .{name.name});
+            self.failer.fail(located.location, "item `{s}` is not a type", .{located.name.name});
             return error.BadType;
         },
         .typ => |typ| {
@@ -1179,13 +1340,13 @@ fn checkTypDecl(self: *Self, name: Ast.Typ.Name) error{BadType}!?Typ {
         .struc => |struc| {
             item.used = true;
             if (debug_check_typ) {
-                std.debug.print("item {s} used\n", .{name.name});
+                std.debug.print("item {s} used\n", .{located.name.name});
             }
-            if (struc.generics.len != name.generics.len) {
+            if (struc.generics.len != located.name.generics.len) {
                 self.failer.fail(
-                    name.location,
+                    located.location,
                     "expected {} generics\n        found {}",
-                    .{ struc.generics.len, name.generics.len },
+                    .{ struc.generics.len, located.name.generics.len },
                 );
             }
             return null;
@@ -1238,7 +1399,7 @@ const Var = struct {
 
 const Item = struct {
     const Kind = union(enum) {
-        fun: Ast.Item.Fun.Header,
+        fun: *Ast.Item.Fun.Header,
         vari: Var,
         struc: Struct,
         typ: Typ,
@@ -1255,7 +1416,7 @@ const Item = struct {
     }
 };
 
-const NormaliseRequest = struct {
-    location: Location,
+const SolveRequest = struct {
+    location: ?Location,
     typ: *Typ,
 };
