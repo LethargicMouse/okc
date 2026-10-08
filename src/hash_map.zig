@@ -53,6 +53,9 @@ fn SliceHashContext(K: type) type {
         }
 
         pub fn eql(_: Self, as: []const K, bs: []const K) bool {
+            if (as.len != bs.len) {
+                return false;
+            }
             for (as, bs) |a, b| {
                 if (!a.eql(b)) {
                     return false;

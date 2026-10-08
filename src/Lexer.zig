@@ -73,7 +73,11 @@ fn skipComment(self: *Self, dirty: *bool) void {
 }
 
 fn lexNext(self: *Self) ?Token {
-    return self.lexByList() orelse self.lexVerbal() orelse self.lexInt() orelse self.lexStr() orelse self.lexChar();
+    return self.lexByList() orelse
+        self.lexVerbal() orelse
+        self.lexInt() orelse
+        self.lexStr() orelse
+        self.lexChar();
 }
 
 fn lexChar(self: *Self) ?Token {

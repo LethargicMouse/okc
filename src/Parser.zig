@@ -945,8 +945,8 @@ fn parseParExpr(self: *Self) !Ast.Expr {
     const start = self.getLocation();
     try self.expect(.parl);
     var expr = try self.parseExprLoud();
-    try self.expectLoud(.parr);
     const end = self.getLocation();
+    try self.expectLoud(.parr);
     expr.location = start.combine(end);
     return expr;
 }
@@ -981,15 +981,6 @@ fn parseNewFieldLoud(self: *Self) !Ast.Expr.Struct.Field {
         .expr = expr,
         .location = location,
     };
-}
-
-fn parseLitLocExpr(self: *Self) !Ast.Expr {
-    const location = self.getLocation();
-    const literal = try self.parseLiteral();
-    return .{ .lit_loc = .{
-        .literal = literal,
-        .location = location,
-    } };
 }
 
 fn parseVarExpr(self: *Self) !Ast.Expr {

@@ -7,7 +7,7 @@ const Self = @This();
 params: []const Typ,
 ret_typ: *const Typ,
 
-pub fn resolve(self: Self, resolver: *Resolver(Typ)) error{OutOfMemory}!Self {
+pub fn resolve(self: Self, resolver: Resolver(Typ)) error{OutOfMemory}!Self {
     const params = try resolver.slice_mem.alloc(self.params.len);
     for (params, self.params) |*target, param| {
         target.* = try param.resolve(resolver);

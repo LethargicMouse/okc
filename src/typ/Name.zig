@@ -8,7 +8,7 @@ const Self = @This();
 name: []const u8,
 generics: []const Typ = &.{},
 
-pub fn resolve(self: Self, resolver: *Resolver(Typ)) error{OutOfMemory}!Self {
+pub fn resolve(self: Self, resolver: Resolver(Typ)) error{OutOfMemory}!Self {
     const generics = try resolver.slice_mem.alloc(self.generics.len);
     for (generics, self.generics) |*target, generic| {
         target.* = try generic.resolve(resolver);

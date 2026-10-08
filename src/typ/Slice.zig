@@ -7,7 +7,7 @@ const Self = @This();
 typ: *const Typ,
 mutable: bool,
 
-pub fn resolve(self: Self, resolver: *Resolver(Typ)) error{OutOfMemory}!Self {
+pub fn resolve(self: Self, resolver: Resolver(Typ)) error{OutOfMemory}!Self {
     const new = try self.typ.resolve(resolver);
     const ptr = try resolver.mem.box(new);
     return .{

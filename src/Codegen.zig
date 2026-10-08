@@ -6,7 +6,7 @@ const memo = @import("memo.zig");
 const Typ = @import("typ/mod.zig").Typ;
 const Name = Typ.Name;
 
-const Resolver = @import("resolver.zig").Resolver(Typ);
+const Resolver = @import("resolver.zig").Resolver;
 
 const Self = @This();
 io: std.Io,
@@ -24,7 +24,7 @@ vars: std.StringHashMap(Ref),
 loop_ends: std.ArrayList(u32) = .empty,
 fun_queue: std.ArrayList(FunReq) = .empty,
 generated: HashMap(Name, void),
-resolver: Resolver,
+resolve_map: std.StringHashMap(Typ),
 next_tmp: u32 = 0,
 
 const FunReq = struct {
@@ -52,7 +52,7 @@ pub fn init(
         .typ_slice_mem = typ_slice_mem,
         .file = file,
         .items = items,
-        .resolver = .init(typ_mem, typ_slice_mem),
+        .resolve_map = .init(gpa),
         .writer = file.writer(io, write_buf),
         .vars = .init(gpa),
         .structs = .init(gpa),
@@ -104,12 +104,10 @@ fn genFunNamed(self: *Self, req: FunReq) !void {
         return;
     }
     for (fun.header.generics, req.name.generics) |generic, typ| {
-        try self.resolver.map.put(generic.name, typ);
+        try self.resolve_map.put(generic.name, typ);
     }
     try self.genFun(req.name, fun, req.fun);
 }
-
-const i8_typ: Typ = .i8;
 
 fn genSliceDecl(self: *Self) !void {
     try self.print("\n%\"[]\" = type {{ ptr, i64 }}", .{});
@@ -228,7 +226,7 @@ fn genFun(
     try self.print("{s}{s}", .{ self.extra_buffer.items, buffer.items });
     self.extra_buffer.clearRetainingCapacity();
     self.vars.clearRetainingCapacity();
-    self.resolver.map.clearRetainingCapacity();
+    self.resolve_map.clearRetainingCapacity();
 }
 
 fn genStruct(self: *Self, name: Name) Error!void {
@@ -248,7 +246,7 @@ fn genStruct(self: *Self, name: Name) Error!void {
     var default_fields_vec = std.ArrayList(DefaultField).empty;
     try self.print("\n%\"{f}\" = type {{", .{name});
     const struc = self.items.get(name.name).?.kind.struc;
-    var resolver = Resolver.init(self.typ_mem, self.typ_slice_mem);
+    var resolver: Resolver(Typ) = .init(self.typ_mem, self.typ_slice_mem);
     defer resolver.deinit();
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
@@ -257,7 +255,7 @@ fn genStruct(self: *Self, name: Name) Error!void {
     const field_typs = try self.gpa.alloc(Typ, struc.fields.len);
     defer self.gpa.free(field_typs);
     for (field_typs, struc.fields, 0..) |*typ, field, i| {
-        typ.* = try field.typ.resolve(&resolver);
+        typ.* = try field.typ.resolve(resolver);
         const layout = try self.getLayout(typ.*);
         appendLayout(&struct_layout, layout);
         try fields.put(field.name, .{
@@ -608,11 +606,19 @@ fn genExpr(self: *Self, expr: Ast.Expr) Error!TypVal {
 }
 
 fn genSizeof(self: *Self, typ: Typ) !TypVal {
-    const resolved = try typ.resolve(&self.resolver);
+    const resolved = try typ.resolve(self.getResolver());
     const layout = try self.getLayout(resolved);
     return .{
         .typ = .{ .prime = .u64 },
         .val = .{ .int = layout.size },
+    };
+}
+
+fn getResolver(self: Self) Resolver(Typ) {
+    return .{
+        .map = self.resolve_map,
+        .slice_mem = self.typ_slice_mem,
+        .mem = self.typ_mem,
     };
 }
 
@@ -1151,7 +1157,7 @@ fn deinit(self: *Self) void {
     self.loop_ends.deinit(self.gpa);
     self.fun_queue.deinit(self.gpa);
     self.generated.deinit();
-    self.resolver.deinit();
+    self.resolve_map.deinit();
     self.items.deinit();
     self.consts.deinit();
     self.deinitStructs();

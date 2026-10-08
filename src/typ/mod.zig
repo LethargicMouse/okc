@@ -31,7 +31,7 @@ pub const Typ = union(enum) {
         };
     }
 
-    pub fn resolve(typ: Typ, resolver: *Resolver(Typ)) error{OutOfMemory}!Typ {
+    pub fn resolve(typ: Typ, resolver: Resolver(Typ)) error{OutOfMemory}!Typ {
         switch (typ) {
             .name => |name| if (resolver.map.get(name.name)) |resolved| {
                 return resolved;
