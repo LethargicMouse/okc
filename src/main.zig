@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Ast = @import("ast/mod.zig");
+const ast = @import("ast/mod.zig");
 const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
 const Failer = @import("Failer.zig");
@@ -25,6 +25,10 @@ fn run(init: std.process.Init) !u8 {
     var args = try init.minimal.args.iterateAllocator(init.gpa);
     // skip exec name
     _ = args.skip();
+    // var gpa = std.heap.SafeAllocator.init(init.gpa, .{
+    //     .stack_trace_frames = 20,
+    // });
+    // defer _ = gpa.deinit();
     if (args.next()) |path| {
         return runFile(init.io, init.gpa, path);
     } else {
@@ -56,7 +60,7 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     defer typ_mem.deinit();
 
     var parser = Parser.init(gpa, &ast_arena, &typ_mem, tokens);
-    const ast = try parser.run();
+    const module = try parser.run();
 
     var checker_arena = std.heap.ArenaAllocator.init(gpa);
     defer checker_arena.deinit();
@@ -69,7 +73,7 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
         &typ_mem,
         &failer,
     );
-    const items = try checker.run(ast);
+    try checker.run(module);
 
     std.Io.Dir.cwd().createDirPath(io, build_dir_path) catch {
         std.log.err("failed to create `" ++ build_dir_path ++ "`", .{});
@@ -81,11 +85,10 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
         io,
         gpa,
         &typ_mem,
-        items,
         &write_buf,
         out_ll_path,
     );
-    gen.run() catch |err| switch (err) {
+    gen.run(module) catch |err| switch (err) {
         error.WriteFailed => {
             std.log.err("failed to write to `" ++ out_ll_path ++ "`", .{});
             return error.Handled;

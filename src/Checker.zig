@@ -13,7 +13,6 @@ arena: *std.heap.ArenaAllocator,
 typ_mem: *memo.Memo(Typ),
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
-ast_items: std.StringHashMap(*const ast.Item),
 items: std.StringHashMap(Item),
 ret_typ: Typ = undefined,
 failer: *Failer,
@@ -34,25 +33,20 @@ pub fn init(
         .failer = failer,
         .typ_mem = typ_mem,
         .fun_arena = .init(gpa),
-        .ast_items = .init(gpa),
         .items = .init(gpa),
         .generics_usage = try .initEmpty(gpa, 0),
     };
 }
 
-const CheckError = error{ OutOfMemory, Handled };
-
-pub fn run(self: *Self, module: ast.Module) CheckError!std.StringHashMap(*const ast.Item) {
+pub fn run(self: *Self, module: ast.Module) error{ OutOfMemory, Handled }!void {
     defer self.deinit();
-    errdefer self.ast_items.deinit();
     try self.checkModule(module);
     try self.failer.ensureNoErrors();
-    return self.ast_items;
+    return;
 }
 
 fn checkModule(self: *Self, module: ast.Module) !void {
     for (module.items) |*item| {
-        try self.ast_items.put(item.name, item);
         try self.regItem(item);
     }
     for (module.items) |item| {

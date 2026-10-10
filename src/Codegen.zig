@@ -14,7 +14,7 @@ writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 extra_buffer: std.ArrayList(u8) = .empty,
 typ_mem: *memo.Memo(Typ),
-items: std.StringHashMap(*const ast.Item),
+items: std.StringHashMap(ast.Item),
 structs: HashMap(Name, Struct),
 consts: std.StringHashMap(Typ),
 vars: std.StringHashMap(Ref),
@@ -33,7 +33,6 @@ pub fn init(
     io: std.Io,
     gpa: std.mem.Allocator,
     typ_mem: *memo.Memo(Typ),
-    items: std.StringHashMap(*const ast.Item),
     write_buf: []u8,
     path: []const u8,
 ) error{ OutOfMemory, Handled }!Self {
@@ -46,7 +45,7 @@ pub fn init(
         .gpa = gpa,
         .typ_mem = typ_mem,
         .file = file,
-        .items = items,
+        .items = .init(gpa),
         .resolve_map = .init(gpa),
         .writer = file.writer(io, write_buf),
         .vars = .init(gpa),
@@ -56,8 +55,11 @@ pub fn init(
     };
 }
 
-pub fn run(self: *Self) error{ WriteFailed, OutOfMemory }!void {
+pub fn run(self: *Self, module: ast.Module) error{ WriteFailed, OutOfMemory }!void {
     defer self.deinit();
+    for (module.items) |item| {
+        try self.items.put(item.name, item);
+    }
     try self.genAll();
     try self.writer.interface.flush();
 }
@@ -1150,13 +1152,13 @@ fn print(self: *Self, comptime fmt: []const u8, args: anytype) !void {
 const Error = error{ WriteFailed, OutOfMemory };
 
 fn deinit(self: *Self) void {
+    self.items.deinit();
     self.vars.deinit();
     self.file.close(self.io);
     self.loop_ends.deinit(self.gpa);
     self.fun_queue.deinit(self.gpa);
     self.generated.deinit();
     self.resolve_map.deinit();
-    self.items.deinit();
     self.consts.deinit();
     self.deinitStructs();
     self.extra_buffer.deinit(self.gpa);
