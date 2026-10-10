@@ -4,7 +4,6 @@ const Ast = @import("Ast/mod.zig");
 const HashMap = @import("hash_map.zig").HashMap;
 const Location = @import("Location.zig");
 const memo = @import("memo.zig");
-const Resolver = @import("resolver.zig").Resolver;
 const Typ = @import("typ/mod.zig").Typ;
 pub const Failer = @import("Failer.zig");
 
@@ -1037,7 +1036,7 @@ fn checkNewField(
     _ = self.unify(field.expr.location, decl_typ, info.typ);
 }
 
-fn makeResolver(self: Self, map: std.StringHashMap(Typ)) Resolver(Typ) {
+fn makeResolver(self: Self, map: std.StringHashMap(Typ)) Typ.Resolver {
     return .{ .map = map, .mem = self.typ_mem };
 }
 

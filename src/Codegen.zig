@@ -6,8 +6,6 @@ const memo = @import("memo.zig");
 const Typ = @import("typ/mod.zig").Typ;
 const Name = Typ.Name;
 
-const Resolver = @import("resolver.zig").Resolver;
-
 const Self = @This();
 io: std.Io,
 gpa: std.mem.Allocator,
@@ -611,14 +609,14 @@ fn genSizeof(self: *Self, typ: Typ) !TypVal {
     };
 }
 
-fn funResolver(self: Self) Resolver(Typ) {
+fn funResolver(self: Self) Typ.Resolver {
     return .{
         .map = self.resolve_map,
         .mem = self.typ_mem,
     };
 }
 
-fn makeResolver(self: Self, map: std.StringHashMap(Typ)) Resolver(Typ) {
+fn makeResolver(self: Self, map: std.StringHashMap(Typ)) Typ.Resolver {
     return .{ .map = map, .mem = self.typ_mem };
 }
 

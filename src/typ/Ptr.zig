@@ -1,13 +1,12 @@
 const std = @import("std");
 
 const Typ = @import("mod.zig").Typ;
-const Resolver = @import("../resolver.zig").Resolver;
 
 const Self = @This();
 typ: *const Typ,
 mutable: bool,
 
-pub fn resolve(self: Self, resolver: Resolver(Typ)) error{OutOfMemory}!Self {
+pub fn resolve(self: Self, resolver: Typ.Resolver) error{OutOfMemory}!Self {
     const new = try self.typ.resolve(resolver);
     const new_ptr = try resolver.mem.box(new);
     return .{

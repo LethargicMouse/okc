@@ -2,9 +2,15 @@ const std = @import("std");
 
 const Location = @import("../Location.zig");
 const Memo = @import("../memo.zig").Memo;
-const Resolver = @import("../resolver.zig").Resolver;
 
 pub const Typ = union(enum) {
+    pub const Array = @import("Array.zig");
+    pub const Name = @import("Name.zig");
+    pub const Ptr = @import("Ptr.zig");
+    pub const Slice = @import("Slice.zig");
+    pub const Fun = @import("Fun.zig");
+    pub const Resolver = @import("Resolver.zig");
+
     prime: Prime,
     name: Name,
     loc_name: Name.Located,
@@ -17,12 +23,6 @@ pub const Typ = union(enum) {
     int,
     err,
 
-    pub const Array = @import("Array.zig");
-    pub const Name = @import("Name.zig");
-    pub const Ptr = @import("Ptr.zig");
-    pub const Slice = @import("Slice.zig");
-    pub const Fun = @import("Fun.zig");
-
     pub fn getName(typ: Typ) ?Name {
         return switch (typ) {
             .name => |name| name,
@@ -31,7 +31,7 @@ pub const Typ = union(enum) {
         };
     }
 
-    pub fn resolve(typ: Typ, resolver: Resolver(Typ)) error{OutOfMemory}!Typ {
+    pub fn resolve(typ: Typ, resolver: Typ.Resolver) error{OutOfMemory}!Typ {
         switch (typ) {
             .name => |name| if (resolver.map.get(name.name)) |resolved| {
                 return resolved;

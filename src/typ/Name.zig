@@ -1,14 +1,13 @@
 const std = @import("std");
 
 const Location = @import("../Location.zig");
-const Resolver = @import("../resolver.zig").Resolver;
 const Typ = @import("mod.zig").Typ;
 
 const Self = @This();
 name: []const u8,
 generics: []const Typ = &.{},
 
-pub fn resolve(self: Self, resolver: Resolver(Typ)) error{OutOfMemory}!Self {
+pub fn resolve(self: Self, resolver: Typ.Resolver) error{OutOfMemory}!Self {
     const generics = try resolver.mem.alloc(self.generics.len);
     defer resolver.mem.free(generics);
     for (generics, self.generics) |*target, generic| {
