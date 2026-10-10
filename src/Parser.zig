@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Ast = @import("Ast/mod.zig");
+const ast = @import("ast/mod.zig");
 const Lexer = @import("Lexer.zig");
 const Lexeme = Lexer.Lexeme;
 const Location = @import("Location.zig");
@@ -32,9 +32,9 @@ pub fn init(
     };
 }
 
-pub fn run(self: *Self) error{ OutOfMemory, Handled }!Ast {
+pub fn run(self: *Self) error{ OutOfMemory, Handled }!ast.Module {
     defer self.deinit();
-    const ast = try self.parseMaybe(Ast, parseAst) orelse {
+    const module = try self.parseMaybe(ast.Module, parseModule) orelse {
         std.log.err("failed to parse {f}\n{f}\n        found  {s}", .{
             self.tokens[self.err_cursor].location,
             self.err_msgs,
@@ -48,11 +48,11 @@ pub fn run(self: *Self) error{ OutOfMemory, Handled }!Ast {
         }
         return error.Handled;
     };
-    return ast;
+    return module;
 }
 
-fn parseAst(self: *Self) !Ast {
-    const items = try self.parseMany(Ast.Item, parseItemLoud);
+fn parseModule(self: *Self) !ast.Module {
+    const items = try self.parseMany(ast.Item, parseItemLoud);
     const location = self.getLocation();
     try self.expect(.eof);
     return .{
@@ -61,8 +61,8 @@ fn parseAst(self: *Self) !Ast {
     };
 }
 
-fn parseItemLoud(self: *Self) Error!Ast.Item {
-    return self.parseEither(Ast.Item, &.{
+fn parseItemLoud(self: *Self) Error!ast.Item {
+    return self.parseEither(ast.Item, &.{
         parseFunItem,
         parseStructItem,
         parseExtFunItem,
@@ -74,7 +74,7 @@ fn parseItemLoud(self: *Self) Error!Ast.Item {
     };
 }
 
-fn parseTypItem(self: *Self) !Ast.Item {
+fn parseTypItem(self: *Self) !ast.Item {
     try self.expect(.typ);
     const location = self.getLocation();
     const name = try self.parseNameLoud();
@@ -90,7 +90,7 @@ fn parseTypItem(self: *Self) !Ast.Item {
     };
 }
 
-fn parseConstantItem(self: *Self) !Ast.Item {
+fn parseConstantItem(self: *Self) !ast.Item {
     const named = try self.parseDeclare();
     return .{
         .name = named.name,
@@ -99,7 +99,7 @@ fn parseConstantItem(self: *Self) !Ast.Item {
     };
 }
 
-fn parseExtFunItem(self: *Self) !Ast.Item {
+fn parseExtFunItem(self: *Self) !ast.Item {
     const ext_fun = try self.parseExtFun();
     return .{
         .name = self.tmp_name,
@@ -108,7 +108,7 @@ fn parseExtFunItem(self: *Self) !Ast.Item {
     };
 }
 
-fn parseFunItem(self: *Self) !Ast.Item {
+fn parseFunItem(self: *Self) !ast.Item {
     const fun = try self.parseFun();
     return .{
         .name = self.tmp_name,
@@ -117,7 +117,7 @@ fn parseFunItem(self: *Self) !Ast.Item {
     };
 }
 
-fn parseStructItem(self: *Self) !Ast.Item {
+fn parseStructItem(self: *Self) !ast.Item {
     const struc = try self.parseStruct();
     return .{
         .name = self.tmp_name,
@@ -126,13 +126,13 @@ fn parseStructItem(self: *Self) !Ast.Item {
     };
 }
 
-fn parseStruct(self: *Self) !Ast.Item.Struct {
+fn parseStruct(self: *Self) !ast.Item.Struct {
     try self.expect(.struc);
     const location = self.getLocation();
     const name = try self.parseNameLoud();
-    const generics = try self.parseMaybe([]const Ast.Item.Generic, parseGenerics) orelse &.{};
+    const generics = try self.parseMaybe([]const ast.Item.Generic, parseGenerics) orelse &.{};
     try self.expectLoud(.curl);
-    const fields = try self.parseSep(Ast.Item.Struct.Field, parseFieldDeclLoud);
+    const fields = try self.parseSep(ast.Item.Struct.Field, parseFieldDeclLoud);
     try self.expect(.curr);
     self.tmp_location = location;
     self.tmp_name = name;
@@ -142,14 +142,14 @@ fn parseStruct(self: *Self) !Ast.Item.Struct {
     };
 }
 
-fn parseGenerics(self: *Self) ![]const Ast.Item.Generic {
+fn parseGenerics(self: *Self) ![]const ast.Item.Generic {
     try self.expect(.les);
-    const res = try self.parseSep(Ast.Item.Generic, parseGenericLoud);
+    const res = try self.parseSep(ast.Item.Generic, parseGenericLoud);
     try self.expect(.mor);
     return res;
 }
 
-fn parseGenericLoud(self: *Self) !Ast.Item.Generic {
+fn parseGenericLoud(self: *Self) !ast.Item.Generic {
     const location = self.getLocation();
     const name = try self.parseNameLoud();
     return .{
@@ -158,12 +158,12 @@ fn parseGenericLoud(self: *Self) !Ast.Item.Generic {
     };
 }
 
-fn parseFieldDeclLoud(self: *Self) !Ast.Item.Struct.Field {
+fn parseFieldDeclLoud(self: *Self) !ast.Item.Struct.Field {
     const location = self.getLocation();
     const name = try self.parseNameLoud();
     try self.expectLoud(.colon);
     const typ = try self.parseTypLoud();
-    const default = try self.parseMaybe(Ast.Expr, parseAssignPostfix);
+    const default = try self.parseMaybe(ast.Expr, parseAssignPostfix);
     return .{
         .name = name,
         .typ = typ,
@@ -172,7 +172,7 @@ fn parseFieldDeclLoud(self: *Self) !Ast.Item.Struct.Field {
     };
 }
 
-fn parseExtFun(self: *Self) !Ast.Item.Fun.Extern {
+fn parseExtFun(self: *Self) !ast.Item.Fun.Extern {
     try self.expect(.ext);
     const header = try self.parseHeaderLoud();
     try self.expectLoud(.semi);
@@ -181,21 +181,21 @@ fn parseExtFun(self: *Self) !Ast.Item.Fun.Extern {
     };
 }
 
-fn parseHeaderLoud(self: *Self) !Ast.Item.Fun.Header {
-    const header = try self.parseMaybe(Ast.Item.Fun.Header, parseHeader);
+fn parseHeaderLoud(self: *Self) !ast.Item.Fun.Header {
+    const header = try self.parseMaybe(ast.Item.Fun.Header, parseHeader);
     return header orelse {
         try self.fail("`fn`");
         return error.ParseFailed;
     };
 }
 
-fn parseHeader(self: *Self) !Ast.Item.Fun.Header {
+fn parseHeader(self: *Self) !ast.Item.Fun.Header {
     try self.expect(.fun);
     self.tmp_location = self.getLocation();
     self.tmp_name = try self.parseNameLoud();
-    const generics = try self.parseMaybe([]const Ast.Item.Generic, parseGenerics) orelse &.{};
+    const generics = try self.parseMaybe([]const ast.Item.Generic, parseGenerics) orelse &.{};
     try self.expectLoud(.parl);
-    const params = try self.parseSep(Ast.Item.Fun.Header.Param, parseParamLoud);
+    const params = try self.parseSep(ast.Item.Fun.Header.Param, parseParamLoud);
     try self.expect(.parr);
     const ret_typ = try self.parseTypLoud();
     return .{
@@ -225,7 +225,7 @@ fn parseSep(self: *Self, T: type, parse: fn (*Self) Error!T) ![]T {
     return slice;
 }
 
-fn parseParamLoud(self: *Self) !Ast.Item.Fun.Header.Param {
+fn parseParamLoud(self: *Self) !ast.Item.Fun.Header.Param {
     const location = self.getLocation();
     const name = try self.parseNameLoud();
     try self.expectLoud(.colon);
@@ -366,7 +366,7 @@ fn parseMaybe(self: *Self, T: type, parse: fn (*Self) Error!T) !?T {
     return res;
 }
 
-fn parseFun(self: *Self) !Ast.Item.Fun {
+fn parseFun(self: *Self) !ast.Item.Fun {
     const header = try self.parseHeader();
     const location = self.tmp_location;
     const name = self.tmp_name;
@@ -379,15 +379,15 @@ fn parseFun(self: *Self) !Ast.Item.Fun {
     };
 }
 
-fn parseBlockLoud(self: *Self) Error![]Ast.Stmt {
+fn parseBlockLoud(self: *Self) Error![]ast.Stmt {
     try self.expectLoud(.curl);
-    const stmts = try self.parseMany(Ast.Stmt, parseStmtLoud);
+    const stmts = try self.parseMany(ast.Stmt, parseStmtLoud);
     try self.expect(.curr);
     return stmts;
 }
 
-fn parseStmtLoud(self: *Self) !Ast.Stmt {
-    return self.parseEither(Ast.Stmt, .{
+fn parseStmtLoud(self: *Self) !ast.Stmt {
+    return self.parseEither(ast.Stmt, .{
         parseUnreachableStmt,
         parseBreakStmt,
         parseRetStmt,
@@ -403,7 +403,7 @@ fn parseStmtLoud(self: *Self) !Ast.Stmt {
     };
 }
 
-fn parseUnreachableStmt(self: *Self) !Ast.Stmt {
+fn parseUnreachableStmt(self: *Self) !ast.Stmt {
     const location = self.getLocation();
     try self.expect(.unre);
     try self.expectLoud(.semi);
@@ -413,7 +413,7 @@ fn parseUnreachableStmt(self: *Self) !Ast.Stmt {
     };
 }
 
-fn parseBreakStmt(self: *Self) !Ast.Stmt {
+fn parseBreakStmt(self: *Self) !ast.Stmt {
     const location = self.getLocation();
     try self.expect(.brek);
     try self.expectLoud(.semi);
@@ -435,8 +435,8 @@ fn parseOpAssignStmtPostfix(
     } };
 }
 
-fn parseOpAssignBinOp(self: *Self) !Ast.Expr.Binary.Kind {
-    const res = Ast.Expr.Binary.Kind.fromLexeme(self.tokens[self.cursor].lexeme) orelse
+fn parseOpAssignBinOp(self: *Self) !ast.Expr.Binary.Kind {
+    const res = ast.Expr.Binary.Kind.fromLexeme(self.tokens[self.cursor].lexeme) orelse
         return error.ParseFailed;
     if (res.getClass() != .arith) {
         return error.ParseFailed;
@@ -445,7 +445,7 @@ fn parseOpAssignBinOp(self: *Self) !Ast.Expr.Binary.Kind {
     return res;
 }
 
-fn parseIgnoreStmt(self: *Self) !Ast.Stmt {
+fn parseIgnoreStmt(self: *Self) !ast.Stmt {
     const location = self.getLocation();
     try self.expect(.wild);
     try self.expectLoud(.equ);
@@ -459,7 +459,7 @@ fn parseIgnoreStmt(self: *Self) !Ast.Stmt {
     };
 }
 
-fn parseForStmt(self: *Self) !Ast.Stmt {
+fn parseForStmt(self: *Self) !ast.Stmt {
     const location = self.getLocation();
     try self.expect(.whi);
     try self.expectLoud(.parl);
@@ -467,7 +467,7 @@ fn parseForStmt(self: *Self) !Ast.Stmt {
     const vari = try self.parseNameLoud();
     try self.expectLoud(.colon);
     const expr = try self.parseExprLoud();
-    const mend = try self.parseMaybe(Ast.Expr, parseRangeEnd);
+    const mend = try self.parseMaybe(ast.Expr, parseRangeEnd);
     try self.expectLoud(.parr);
     const body = try self.parseBlockLoud();
     if (mend) |end| {
@@ -493,24 +493,24 @@ fn parseForStmt(self: *Self) !Ast.Stmt {
     };
 }
 
-fn parseRangeEnd(self: *Self) !Ast.Expr {
+fn parseRangeEnd(self: *Self) !ast.Expr {
     try self.expect(.dot2);
     return self.parseExprLoud();
 }
 
-fn parseWhileStmt(self: *Self) !Ast.Stmt {
+fn parseWhileStmt(self: *Self) !ast.Stmt {
     const location = self.getLocation();
     try self.expect(.whi);
     const branch = try self.parseBranch();
     return .{ .location = location, .kind = .{ .whi = .{ .branch = branch } } };
 }
 
-fn parseIfStmt(self: *Self) !Ast.Stmt {
+fn parseIfStmt(self: *Self) !ast.Stmt {
     const location = self.getLocation();
     try self.expect(.iff);
     const branch = try self.parseBranch();
-    const else_ifs = try self.parseMany(Ast.Stmt.Branch, parseElseIf);
-    const else_branch = try self.parseMaybe([]Ast.Stmt, parseElseLoud) orelse @constCast(&.{});
+    const else_ifs = try self.parseMany(ast.Stmt.Branch, parseElseIf);
+    const else_branch = try self.parseMaybe([]ast.Stmt, parseElseLoud) orelse @constCast(&.{});
     return .{
         .location = location,
         .kind = .{ .iff = .{
@@ -521,14 +521,14 @@ fn parseIfStmt(self: *Self) !Ast.Stmt {
     };
 }
 
-fn parseElseIf(self: *Self) !Ast.Stmt.Branch {
+fn parseElseIf(self: *Self) !ast.Stmt.Branch {
     try self.expect(.els);
     try self.expect(.iff);
     const branch = try self.parseBranch();
     return branch;
 }
 
-fn parseBranch(self: *Self) !Ast.Stmt.Branch {
+fn parseBranch(self: *Self) !ast.Stmt.Branch {
     try self.expectLoud(.parl);
     const condition = try self.parseExprLoud();
     try self.expectLoud(.parr);
@@ -539,7 +539,7 @@ fn parseBranch(self: *Self) !Ast.Stmt.Branch {
     };
 }
 
-fn parseElseLoud(self: *Self) ![]Ast.Stmt {
+fn parseElseLoud(self: *Self) ![]ast.Stmt {
     try self.expectLoud(.els);
     const Stmts = try self.parseBlockLoud();
     return Stmts;
@@ -550,12 +550,12 @@ fn parseAssignStmtPostfix(self: *Self) !ExprStmtPostfix {
     return .{ .assign = expr };
 }
 
-fn parseAssignPostfix(self: *Self) !Ast.Expr {
+fn parseAssignPostfix(self: *Self) !ast.Expr {
     try self.expect(.equ);
     return self.parseExprLoud();
 }
 
-fn parseDeclareStmt(self: *Self) !Ast.Stmt {
+fn parseDeclareStmt(self: *Self) !ast.Stmt {
     const declare = try self.parseDeclare();
     return .{
         .location = self.tmp_location,
@@ -563,7 +563,7 @@ fn parseDeclareStmt(self: *Self) !Ast.Stmt {
     };
 }
 
-fn parseDeclare(self: *Self) !Ast.Stmt.Declare.Named {
+fn parseDeclare(self: *Self) !ast.Stmt.Declare.Named {
     try self.expect(.let);
     const mutable = try self.parseMaybe(bool, parseMutable) orelse false;
     const location = self.getLocation();
@@ -594,7 +594,7 @@ fn parseTypAnnotLoud(self: *Self) !Typ {
     return typ;
 }
 
-fn parseExprStmt(self: *Self) !Ast.Stmt {
+fn parseExprStmt(self: *Self) !ast.Stmt {
     const expr = try self.parseExpr();
     const postfix = try self.parseExprStmtPostfix();
     try self.expectLoud(.semi);
@@ -632,7 +632,7 @@ fn parseExprStmtPostfix(self: *Self) !ExprStmtPostfix {
 
 fn parseCallPostfix(self: *Self) !Postfix {
     try self.expect(.parl);
-    const args = try self.parseSep(Ast.Expr, parseExprLoud);
+    const args = try self.parseSep(ast.Expr, parseExprLoud);
     const location = self.getLocation();
     try self.expect(.parr);
     return .{
@@ -641,10 +641,10 @@ fn parseCallPostfix(self: *Self) !Postfix {
     };
 }
 
-fn parseRetStmt(self: *Self) !Ast.Stmt {
+fn parseRetStmt(self: *Self) !ast.Stmt {
     const location = self.getLocation();
     try self.expect(.ret);
-    const expr = try self.parseMaybe(Ast.Expr, parseExprLoud);
+    const expr = try self.parseMaybe(ast.Expr, parseExprLoud);
     try self.expectLoud(.semi);
     return .{
         .location = location,
@@ -654,22 +654,22 @@ fn parseRetStmt(self: *Self) !Ast.Stmt {
     };
 }
 
-fn parseExprLoud(self: *Self) !Ast.Expr {
-    const expr = try self.parseMaybe(Ast.Expr, parseExpr);
+fn parseExprLoud(self: *Self) !ast.Expr {
+    const expr = try self.parseMaybe(ast.Expr, parseExpr);
     return expr orelse {
         try self.fail("<expr>");
         return error.ParseFailed;
     };
 }
 
-fn parseExpr(self: *Self) !Ast.Expr {
+fn parseExpr(self: *Self) !ast.Expr {
     return self.parseExprPrior(0, false);
 }
 
-fn parseExprPrior(self: *Self, prior: u8, loud: bool) Error!Ast.Expr {
+fn parseExprPrior(self: *Self, prior: u8, loud: bool) Error!ast.Expr {
     var res = try self.parseExprPosted(loud);
     while (try self.parseBinPostfix(prior)) |bin_postfix| {
-        const binary = try self.ast_arena.allocator().create(Ast.Expr.Binary);
+        const binary = try self.ast_arena.allocator().create(ast.Expr.Binary);
         binary.* = .{
             .left = res,
             .kind = bin_postfix.kind,
@@ -699,8 +699,8 @@ fn parseBinPostfix(self: *Self, prior: u8) !?BinPostfix {
     };
 }
 
-fn parseBinOp(self: *Self, prior: u8) ?Ast.Expr.Binary.Kind {
-    const res = Ast.Expr.Binary.Kind.fromLexeme(self.tokens[self.cursor].lexeme) orelse
+fn parseBinOp(self: *Self, prior: u8) ?ast.Expr.Binary.Kind {
+    const res = ast.Expr.Binary.Kind.fromLexeme(self.tokens[self.cursor].lexeme) orelse
         return null;
     if (res.getPrior() < prior) {
         return null;
@@ -709,16 +709,16 @@ fn parseBinOp(self: *Self, prior: u8) ?Ast.Expr.Binary.Kind {
     return res;
 }
 
-fn parseExprPostedLoud(self: *Self) Error!Ast.Expr {
+fn parseExprPostedLoud(self: *Self) Error!ast.Expr {
     return self.parseExprPosted(true);
 }
 
-fn parseExprPosted(self: *Self, loud: bool) Error!Ast.Expr {
+fn parseExprPosted(self: *Self, loud: bool) Error!ast.Expr {
     var res = try self.parseExprAtom(loud);
     while (try self.parseMaybe(Postfix, parsePostfix)) |postfix| {
         switch (postfix.kind) {
             .method => |method_postfix| {
-                const method = try self.ast_arena.allocator().create(Ast.Expr.Method);
+                const method = try self.ast_arena.allocator().create(ast.Expr.Method);
                 method.* = .{
                     .expr = res,
                     .vari = method_postfix.vari,
@@ -731,7 +731,7 @@ fn parseExprPosted(self: *Self, loud: bool) Error!Ast.Expr {
                 };
             },
             .call => |args| {
-                const call = try self.ast_arena.allocator().create(Ast.Expr.Call);
+                const call = try self.ast_arena.allocator().create(ast.Expr.Call);
                 call.* = .{
                     .expr = res,
                     .args = args,
@@ -742,7 +742,7 @@ fn parseExprPosted(self: *Self, loud: bool) Error!Ast.Expr {
                 };
             },
             .field => |name| {
-                const field = try self.ast_arena.allocator().create(Ast.Expr.Field);
+                const field = try self.ast_arena.allocator().create(ast.Expr.Field);
                 field.* = .{
                     .expr = res,
                     .name = name,
@@ -753,7 +753,7 @@ fn parseExprPosted(self: *Self, loud: bool) Error!Ast.Expr {
                 };
             },
             .elem => |index| {
-                const elem = try self.ast_arena.allocator().create(Ast.Expr.Elem);
+                const elem = try self.ast_arena.allocator().create(ast.Expr.Elem);
                 elem.* = .{
                     .expr = res,
                     .index = index,
@@ -764,7 +764,7 @@ fn parseExprPosted(self: *Self, loud: bool) Error!Ast.Expr {
                 };
             },
             .subslice => |subslice_postfix| {
-                const subslice = try self.ast_arena.allocator().create(Ast.Expr.Subslice);
+                const subslice = try self.ast_arena.allocator().create(ast.Expr.Subslice);
                 subslice.* = .{
                     .expr = res,
                     .start = subslice_postfix.start,
@@ -846,8 +846,8 @@ fn getLocation(self: Self) Location {
     return self.tokens[self.cursor].location;
 }
 
-fn parseExprAtom(self: *Self, loud: bool) Error!Ast.Expr {
-    return self.parseEither(Ast.Expr, .{
+fn parseExprAtom(self: *Self, loud: bool) Error!ast.Expr {
+    return self.parseEither(ast.Expr, .{
         parseAtExpr,
         parseParExpr,
         parseArrayExpr,
@@ -869,7 +869,7 @@ fn parseExprAtom(self: *Self, loud: bool) Error!Ast.Expr {
     };
 }
 
-fn parseAtExpr(self: *Self) !Ast.Expr {
+fn parseAtExpr(self: *Self) !ast.Expr {
     const start = self.getLocation();
     try self.expect(.at);
     const name = try self.parseNameLoud();
@@ -886,11 +886,11 @@ fn parseAtExpr(self: *Self) !Ast.Expr {
     return error.ParseFailed;
 }
 
-fn parseArrayExpr(self: *Self) !Ast.Expr {
+fn parseArrayExpr(self: *Self) !ast.Expr {
     const start = self.getLocation();
     const mtyp = try self.parseMaybe(Typ, parseTypHint);
     try self.expect(.bral);
-    const exprs = try self.parseSep(Ast.Expr, parseExprLoud);
+    const exprs = try self.parseSep(ast.Expr, parseExprLoud);
     const end = self.getLocation();
     try self.expect(.brar);
     return .{
@@ -909,11 +909,11 @@ fn parseTypHint(self: *Self) !Typ {
     return typ;
 }
 
-fn parseUnaryExpr(self: *Self) !Ast.Expr {
+fn parseUnaryExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     const kind = try self.parseUnaryOp();
     const expr = try self.parseExprPostedLoud();
-    const unary = try self.ast_arena.allocator().create(Ast.Expr.Unary);
+    const unary = try self.ast_arena.allocator().create(ast.Expr.Unary);
     unary.* = .{
         .kind = kind,
         .expr = expr,
@@ -924,14 +924,14 @@ fn parseUnaryExpr(self: *Self) !Ast.Expr {
     };
 }
 
-fn parseUnaryOp(self: *Self) !Ast.Expr.Unary.Kind {
-    const res = Ast.Expr.Unary.Kind.fromLexeme(self.tokens[self.cursor].lexeme) orelse
+fn parseUnaryOp(self: *Self) !ast.Expr.Unary.Kind {
+    const res = ast.Expr.Unary.Kind.fromLexeme(self.tokens[self.cursor].lexeme) orelse
         return error.ParseFailed;
     self.cursor += 1;
     return res;
 }
 
-fn parseInferStructExpr(self: *Self) !Ast.Expr {
+fn parseInferStructExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     try self.expect(.dot);
     const fields = try self.parseStructExprBody();
@@ -941,7 +941,7 @@ fn parseInferStructExpr(self: *Self) !Ast.Expr {
     };
 }
 
-fn parseParExpr(self: *Self) !Ast.Expr {
+fn parseParExpr(self: *Self) !ast.Expr {
     const start = self.getLocation();
     try self.expect(.parl);
     var expr = try self.parseExprLoud();
@@ -951,7 +951,7 @@ fn parseParExpr(self: *Self) !Ast.Expr {
     return expr;
 }
 
-fn parseStructExpr(self: *Self) !Ast.Expr {
+fn parseStructExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     const name = try self.parseName();
     const fields = try self.parseStructExprBody();
@@ -964,14 +964,14 @@ fn parseStructExpr(self: *Self) !Ast.Expr {
     };
 }
 
-fn parseStructExprBody(self: *Self) ![]Ast.Expr.Struct.Field {
+fn parseStructExprBody(self: *Self) ![]ast.Expr.Struct.Field {
     try self.expect(.curl);
-    const fields = try self.parseSep(Ast.Expr.Struct.Field, parseNewFieldLoud);
+    const fields = try self.parseSep(ast.Expr.Struct.Field, parseNewFieldLoud);
     try self.expect(.curr);
     return fields;
 }
 
-fn parseNewFieldLoud(self: *Self) !Ast.Expr.Struct.Field {
+fn parseNewFieldLoud(self: *Self) !ast.Expr.Struct.Field {
     const location = self.getLocation();
     const name = try self.parseNameLoud();
     try self.expectLoud(.equ);
@@ -983,7 +983,7 @@ fn parseNewFieldLoud(self: *Self) !Ast.Expr.Struct.Field {
     };
 }
 
-fn parseVarExpr(self: *Self) !Ast.Expr {
+fn parseVarExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     const name = try self.parseName();
     return .{
@@ -992,7 +992,7 @@ fn parseVarExpr(self: *Self) !Ast.Expr {
     };
 }
 
-fn parseStrExpr(self: *Self) !Ast.Expr {
+fn parseStrExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     const str = try self.parseStr();
     return .{
@@ -1001,7 +1001,7 @@ fn parseStrExpr(self: *Self) !Ast.Expr {
     };
 }
 
-fn parseUndefinedExpr(self: *Self) !Ast.Expr {
+fn parseUndefinedExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     try self.expect(.undef);
     return .{
@@ -1010,7 +1010,7 @@ fn parseUndefinedExpr(self: *Self) !Ast.Expr {
     };
 }
 
-fn parseTrueExpr(self: *Self) !Ast.Expr {
+fn parseTrueExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     try self.expect(.tru);
     return .{
@@ -1019,7 +1019,7 @@ fn parseTrueExpr(self: *Self) !Ast.Expr {
     };
 }
 
-fn parseFalseExpr(self: *Self) !Ast.Expr {
+fn parseFalseExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     try self.expect(.fals);
     return .{
@@ -1028,7 +1028,7 @@ fn parseFalseExpr(self: *Self) !Ast.Expr {
     };
 }
 
-fn parseCharExpr(self: *Self) !Ast.Expr {
+fn parseCharExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     const char = try self.parseChar();
     return .{
@@ -1037,7 +1037,7 @@ fn parseCharExpr(self: *Self) !Ast.Expr {
     };
 }
 
-fn parseIntExpr(self: *Self) !Ast.Expr {
+fn parseIntExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     const val = try self.parseInt();
     return .{
@@ -1126,19 +1126,19 @@ fn fail(self: *Self, msg: []const u8) !void {
 const Error = error{ ParseFailed, OutOfMemory };
 
 const ExprStmtPostfix = union(enum) {
-    assign: Ast.Expr,
+    assign: ast.Expr,
     op_assign: OpAssignPostfix,
     none,
 };
 
 const OpAssignPostfix = struct {
-    kind: Ast.Expr.Binary.Kind,
-    expr: Ast.Expr,
+    kind: ast.Expr.Binary.Kind,
+    expr: ast.Expr,
 };
 
 const BinPostfix = struct {
-    kind: Ast.Expr.Binary.Kind,
-    expr: Ast.Expr,
+    kind: ast.Expr.Binary.Kind,
+    expr: ast.Expr,
 };
 
 const Postfix = struct {
@@ -1147,21 +1147,21 @@ const Postfix = struct {
 
     const Kind = union(enum) {
         field: []const u8,
-        elem: Ast.Expr,
+        elem: ast.Expr,
         subslice: Subslice,
-        call: []Ast.Expr,
+        call: []ast.Expr,
         method: Method,
     };
 
     const Method = struct {
-        vari: Ast.Expr.Var,
-        args: []Ast.Expr,
+        vari: ast.Expr.Var,
+        args: []ast.Expr,
         name_location: Location,
     };
 
     const Subslice = struct {
-        start: Ast.Expr,
-        end: Ast.Expr,
+        start: ast.Expr,
+        end: ast.Expr,
     };
 };
 

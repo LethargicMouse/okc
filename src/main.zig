@@ -1,8 +1,9 @@
 const std = @import("std");
 
-const Ast = @import("Ast/mod.zig");
+const Ast = @import("ast/mod.zig");
 const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
+const Failer = @import("Failer.zig");
 const Lexer = @import("Lexer.zig");
 const memo = @import("memo.zig");
 const Parser = @import("Parser.zig");
@@ -60,13 +61,13 @@ fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var checker_arena = std.heap.ArenaAllocator.init(gpa);
     defer checker_arena.deinit();
 
-    var checker_failer = Checker.Failer.init();
+    var failer = Failer.init();
 
     var checker = try Checker.init(
         gpa,
         &checker_arena,
         &typ_mem,
-        &checker_failer,
+        &failer,
     );
     const items = try checker.run(ast);
 
