@@ -9,13 +9,14 @@ name: []const u8,
 generics: []const Typ = &.{},
 
 pub fn resolve(self: Self, resolver: Resolver(Typ)) error{OutOfMemory}!Self {
-    const generics = try resolver.slice_mem.alloc(self.generics.len);
+    const generics = try resolver.mem.alloc(self.generics.len);
+    defer resolver.mem.free(generics);
     for (generics, self.generics) |*target, generic| {
         target.* = try generic.resolve(resolver);
     }
     return .{
         .name = self.name,
-        .generics = try resolver.slice_mem.save(generics),
+        .generics = try resolver.mem.save(generics),
     };
 }
 

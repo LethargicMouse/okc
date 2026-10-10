@@ -12,7 +12,6 @@ const Self = @This();
 gpa: std.mem.Allocator,
 arena: *std.heap.ArenaAllocator,
 typ_mem: *memo.Memo(Typ),
-typ_slice_mem: *memo.SliceMemo(Typ),
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
 ast_items: std.StringHashMap(*const Ast.Item),
@@ -28,7 +27,6 @@ pub fn init(
     gpa: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
     typ_mem: *memo.Memo(Typ),
-    typ_slice_mem: *memo.SliceMemo(Typ),
     failer: *Failer,
 ) error{OutOfMemory}!Self {
     return .{
@@ -36,7 +34,6 @@ pub fn init(
         .arena = arena,
         .failer = failer,
         .typ_mem = typ_mem,
-        .typ_slice_mem = typ_slice_mem,
         .fun_arena = .init(gpa),
         .ast_items = .init(gpa),
         .items = .init(gpa),
@@ -210,13 +207,13 @@ fn checkTyp(self: *Self, typ: Typ) error{OutOfMemory}!Typ {
 }
 
 fn checkFunTyp(self: *Self, fun: Typ.Fun) !Typ.Fun {
-    const params = try self.typ_slice_mem.alloc(fun.params.len);
+    const params = try self.typ_mem.alloc(fun.params.len);
     for (params, fun.params) |*target, param| {
         target.* = try self.checkTyp(param);
     }
     const new = try self.checkTyp(fun.ret_typ.*);
     return .{
-        .params = try self.typ_slice_mem.save(params),
+        .params = try self.typ_mem.save(params),
         .ret_typ = try self.typ_mem.box(new),
     };
 }
@@ -266,13 +263,14 @@ fn checkLocNameTyp(self: *Self, located: Typ.Name.Located) !Typ {
 }
 
 fn checkNameTyp(self: *Self, name: Typ.Name) !Typ.Name {
-    const generics = try self.typ_slice_mem.alloc(name.generics.len);
+    const generics = try self.typ_mem.alloc(name.generics.len);
+    defer self.typ_mem.free(generics);
     for (generics, name.generics) |*target, generic| {
         target.* = try self.checkTyp(generic);
     }
     return .{
         .name = name.name,
-        .generics = try self.typ_slice_mem.save(generics),
+        .generics = try self.typ_mem.save(generics),
     };
 }
 
@@ -377,13 +375,14 @@ fn solveTyp(self: Self, typ: Typ) error{OutOfMemory}!Typ {
             } };
         },
         .fun => |fun| {
-            const params = try self.typ_slice_mem.alloc(fun.params.len);
+            const params = try self.typ_mem.alloc(fun.params.len);
+            defer self.typ_mem.free(params);
             for (params, fun.params) |*target, param| {
                 target.* = try self.solveTyp(param);
             }
             const new = try self.solveTyp(fun.ret_typ.*);
             return .{ .fun = .{
-                .params = try self.typ_slice_mem.save(params),
+                .params = try self.typ_mem.save(params),
                 .ret_typ = try self.typ_mem.box(new),
             } };
         },
@@ -412,13 +411,14 @@ fn solveTyp(self: Self, typ: Typ) error{OutOfMemory}!Typ {
 }
 
 fn solveNameTyp(self: Self, name: Typ.Name) !Typ.Name {
-    const generics = try self.typ_slice_mem.alloc(name.generics.len);
+    const generics = try self.typ_mem.alloc(name.generics.len);
+    defer self.typ_mem.free(generics);
     for (generics, name.generics) |*target, generic| {
         target.* = try self.solveTyp(generic);
     }
     return .{
+        .generics = try self.typ_mem.save(generics),
         .name = name.name,
-        .generics = try self.typ_slice_mem.save(generics),
     };
 }
 
@@ -958,10 +958,13 @@ fn checkTypedStruc(
         return err;
     };
     var generics = name.generics;
-    if (generics.len == 0) {
+    if (name.generics.len == 0) {
         generics = try self.makeGenerics(decl.generics.len);
     }
-    var resolver: Resolver(Typ) = .init(self.typ_mem, self.typ_slice_mem);
+    defer if (name.generics.len == 0) {
+        defer self.typ_mem.free(generics);
+    };
+    var resolver: Resolver(Typ) = .init(self.typ_mem);
     defer resolver.deinit();
     for (decl.generics, generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
@@ -971,8 +974,8 @@ fn checkTypedStruc(
     }
     self.checkFieldsInitialised(decl.fields, struc.fields, location);
     struc.typ = Typ{ .name = .{
+        .generics = try self.typ_mem.save(generics),
         .name = name.name,
-        .generics = self.typ_slice_mem.save(generics),
     } };
     try self.solve_queue.append(self.gpa, .{
         .typ = &struc.typ,
@@ -985,7 +988,7 @@ fn checkTypedStruc(
 }
 
 fn makeGenerics(self: *Self, len: usize) ![]const Typ {
-    const res = try self.typ_slice_mem.alloc(len);
+    const res = try self.typ_mem.alloc(len);
     for (res) |*target| {
         const lazy = try self.fun_arena.allocator().create(Typ);
         lazy.* = .any;
@@ -1098,7 +1101,7 @@ fn checkField(
         return err;
     };
     fiel.used = true;
-    var resolver: Resolver(Typ) = .init(self.typ_mem, self.typ_slice_mem);
+    var resolver: Resolver(Typ) = .init(self.typ_mem);
     defer resolver.deinit();
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
@@ -1221,15 +1224,16 @@ fn fillFunMetaHeader(
     header: Ast.Item.Fun.Header,
     location: Location,
 ) !ExprInfo {
-    var resolver = Resolver(Typ).init(self.typ_mem, self.typ_slice_mem);
+    var resolver = Resolver(Typ).init(self.typ_mem);
     defer resolver.deinit();
     for (header.generics) |generic| {
         const ptr = try self.fun_arena.allocator().create(Typ);
         ptr.* = .any;
         try resolver.map.put(generic.name, .{ .lazy = ptr });
     }
-    fun_meta.generics = try self.typ_slice_mem.arena.allocator().alloc(Typ, header.generics.len);
-    const params = try self.typ_slice_mem.alloc(header.params.len);
+    fun_meta.generics = try self.typ_mem.arena.allocator().alloc(Typ, header.generics.len);
+    const params = try self.typ_mem.alloc(header.params.len);
+    defer self.typ_mem.free(params);
     for (header.params, params) |param, *target| {
         target.* = try param.typ.resolve(resolver);
     }
@@ -1242,7 +1246,7 @@ fn fillFunMetaHeader(
     }
     const ret_typ = try header.ret_typ.resolve(resolver);
     fun_meta.typ = .{ .fun = .{
-        .params = try self.typ_slice_mem.save(params),
+        .params = try self.typ_mem.save(params),
         .ret_typ = try self.typ_mem.box(ret_typ),
     } };
     try self.solve_queue.append(self.gpa, .{

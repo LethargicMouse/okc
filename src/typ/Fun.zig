@@ -8,14 +8,14 @@ params: []const Typ,
 ret_typ: *const Typ,
 
 pub fn resolve(self: Self, resolver: Resolver(Typ)) error{OutOfMemory}!Self {
-    const params = try resolver.slice_mem.alloc(self.params.len);
+    const params = try resolver.mem.alloc(self.params.len);
     for (params, self.params) |*target, param| {
         target.* = try param.resolve(resolver);
     }
     const ret_typ = try self.ret_typ.resolve(resolver);
     const ptr = try resolver.mem.box(ret_typ);
     return .{
-        .params = try resolver.slice_mem.save(params),
+        .params = try resolver.mem.save(params),
         .ret_typ = ptr,
     };
 }

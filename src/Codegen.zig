@@ -16,7 +16,6 @@ writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 extra_buffer: std.ArrayList(u8) = .empty,
 typ_mem: *memo.Memo(Typ),
-typ_slice_mem: *memo.SliceMemo(Typ),
 items: std.StringHashMap(*const Ast.Item),
 structs: HashMap(Name, Struct),
 consts: std.StringHashMap(Typ),
@@ -36,7 +35,6 @@ pub fn init(
     io: std.Io,
     gpa: std.mem.Allocator,
     typ_mem: *memo.Memo(Typ),
-    typ_slice_mem: *memo.SliceMemo(Typ),
     items: std.StringHashMap(*const Ast.Item),
     write_buf: []u8,
     path: []const u8,
@@ -49,7 +47,6 @@ pub fn init(
         .io = io,
         .gpa = gpa,
         .typ_mem = typ_mem,
-        .typ_slice_mem = typ_slice_mem,
         .file = file,
         .items = items,
         .resolve_map = .init(gpa),
@@ -246,7 +243,7 @@ fn genStruct(self: *Self, name: Name) Error!void {
     var default_fields_vec = std.ArrayList(DefaultField).empty;
     try self.print("\n%\"{f}\" = type {{", .{name});
     const struc = self.items.get(name.name).?.kind.struc;
-    var resolver: Resolver(Typ) = .init(self.typ_mem, self.typ_slice_mem);
+    var resolver: Resolver(Typ) = .init(self.typ_mem);
     defer resolver.deinit();
     for (struc.generics, name.generics) |generic, typ| {
         try resolver.map.put(generic.name, typ);
@@ -617,7 +614,6 @@ fn genSizeof(self: *Self, typ: Typ) !TypVal {
 fn makeResolver(self: Self) Resolver(Typ) {
     return .{
         .map = self.resolve_map,
-        .slice_mem = self.typ_slice_mem,
         .mem = self.typ_mem,
     };
 }

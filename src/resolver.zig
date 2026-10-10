@@ -6,13 +6,11 @@ pub fn Resolver(T: type) type {
     return struct {
         const Self = @This();
         mem: *memo.Memo(T),
-        slice_mem: *memo.SliceMemo(T),
         map: std.StringHashMap(T),
 
-        pub fn init(mem: *memo.Memo(T), slice_mem: *memo.SliceMemo(T)) Self {
+        pub fn init(mem: *memo.Memo(T)) Self {
             return .{
                 .mem = mem,
-                .slice_mem = slice_mem,
                 .map = .init(mem.arena.child_allocator),
             };
         }

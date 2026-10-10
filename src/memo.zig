@@ -8,16 +8,19 @@ pub fn Memo(T: type) type {
 
         arena: *std.heap.ArenaAllocator,
         map: hash_map.PtrHashMap(T, void),
+        slice_map: hash_map.SliceHashMap(T, void),
 
         pub fn init(arena: *std.heap.ArenaAllocator) Self {
             return .{
                 .arena = arena,
                 .map = .init(arena.child_allocator),
+                .slice_map = .init(arena.child_allocator),
             };
         }
 
         pub fn deinit(self: *Self) void {
             self.map.deinit();
+            self.slice_map.deinit();
             self.* = undefined;
         }
 
@@ -30,40 +33,23 @@ pub fn Memo(T: type) type {
             try self.map.put(ptr, {});
             return ptr;
         }
-    };
-}
-
-pub fn SliceMemo(T: type) type {
-    return struct {
-        const Self = @This();
-        arena: *std.heap.ArenaAllocator,
-        map: hash_map.SliceHashMap(T, void),
-
-        pub fn init(arena: *std.heap.ArenaAllocator) Self {
-            return .{
-                .arena = arena,
-                .map = .init(arena.child_allocator),
-            };
-        }
-
-        pub fn deinit(self: *Self) void {
-            self.map.deinit();
-            self.* = undefined;
-        }
 
         pub fn save(self: *Self, slice: []const T) error{OutOfMemory}![]const T {
-            defer self.map.allocator.free(slice);
-            if (self.map.getKey(slice)) |res| {
+            if (self.slice_map.getKey(slice)) |res| {
                 return res;
             }
             const res = try self.arena.allocator().alloc(T, slice.len);
             @memcpy(res, slice);
-            try self.map.put(res, {});
+            try self.slice_map.put(res, {});
             return res;
         }
 
         pub fn alloc(self: Self, len: usize) error{OutOfMemory}![]T {
-            return self.map.allocator.alloc(T, len);
+            return self.slice_map.allocator.alloc(T, len);
+        }
+
+        pub fn free(self: Self, slice: []const T) void {
+            self.slice_map.allocator.free(slice);
         }
     };
 }
