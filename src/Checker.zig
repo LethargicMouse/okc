@@ -964,13 +964,13 @@ fn checkTypedStruc(
     defer if (name.generics.len == 0) {
         defer self.typ_mem.free(generics);
     };
-    var resolver: Resolver(Typ) = .init(self.typ_mem);
-    defer resolver.deinit();
+    var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
+    defer resolve_map.deinit();
     for (decl.generics, generics) |generic, typ| {
-        try resolver.map.put(generic.name, typ);
+        try resolve_map.put(generic.name, typ);
     }
     for (struc.fields) |*field| {
-        try self.checkNewField(field, .{ .name = name }, decl.fields, resolver);
+        try self.checkNewField(field, .{ .name = name }, decl.fields, resolve_map);
     }
     self.checkFieldsInitialised(decl.fields, struc.fields, location);
     struc.typ = Typ{ .name = .{
@@ -1026,15 +1026,19 @@ fn checkNewField(
     field: *Ast.Expr.Struct.Field,
     struc_typ: Typ,
     decl_fields: std.StringHashMap(Field),
-    resolver: Resolver(Typ),
+    resolve_map: std.StringHashMap(Typ),
 ) !void {
     const f_decl = decl_fields.get(field.name) orelse {
         self.failer.noField(field.location, field.name, struc_typ);
         return;
     };
-    const decl_typ = try f_decl.typ.resolve(resolver);
+    const decl_typ = try f_decl.typ.resolve(self.makeResolver(resolve_map));
     const info = try self.checkExpr(&field.expr, .{ .typ = decl_typ });
     _ = self.unify(field.expr.location, decl_typ, info.typ);
+}
+
+fn makeResolver(self: Self, map: std.StringHashMap(Typ)) Resolver(Typ) {
+    return .{ .map = map, .mem = self.typ_mem };
 }
 
 fn checkNamedStructExpr(self: *Self, named: *Ast.Expr.Struct.Named, location: Location) !ExprInfo {
@@ -1101,13 +1105,13 @@ fn checkField(
         return err;
     };
     fiel.used = true;
-    var resolver: Resolver(Typ) = .init(self.typ_mem);
-    defer resolver.deinit();
+    var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
+    defer resolve_map.deinit();
     for (struc.generics, name.generics) |generic, typ| {
-        try resolver.map.put(generic.name, typ);
+        try resolve_map.put(generic.name, typ);
     }
     return .{
-        .typ = try fiel.typ.resolve(resolver),
+        .typ = try fiel.typ.resolve(self.makeResolver(resolve_map)),
         .mutable = info.mutable,
     };
 }
@@ -1224,27 +1228,27 @@ fn fillFunMetaHeader(
     header: Ast.Item.Fun.Header,
     location: Location,
 ) !ExprInfo {
-    var resolver = Resolver(Typ).init(self.typ_mem);
-    defer resolver.deinit();
+    var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
+    defer resolve_map.deinit();
     for (header.generics) |generic| {
         const ptr = try self.fun_arena.allocator().create(Typ);
         ptr.* = .any;
-        try resolver.map.put(generic.name, .{ .lazy = ptr });
+        try resolve_map.put(generic.name, .{ .lazy = ptr });
     }
     fun_meta.generics = try self.typ_mem.arena.allocator().alloc(Typ, header.generics.len);
     const params = try self.typ_mem.alloc(header.params.len);
     defer self.typ_mem.free(params);
     for (header.params, params) |param, *target| {
-        target.* = try param.typ.resolve(resolver);
+        target.* = try param.typ.resolve(self.makeResolver(resolve_map));
     }
     for (fun_meta.generics, header.generics) |*target, generic| {
-        target.* = resolver.map.get(generic.name).?;
+        target.* = resolve_map.get(generic.name).?;
         try self.solve_queue.append(self.gpa, .{
             .typ = target,
             .location = null,
         });
     }
-    const ret_typ = try header.ret_typ.resolve(resolver);
+    const ret_typ = try header.ret_typ.resolve(self.makeResolver(resolve_map));
     fun_meta.typ = .{ .fun = .{
         .params = try self.typ_mem.save(params),
         .ret_typ = try self.typ_mem.box(ret_typ),

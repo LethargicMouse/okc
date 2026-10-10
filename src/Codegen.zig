@@ -243,16 +243,16 @@ fn genStruct(self: *Self, name: Name) Error!void {
     var default_fields_vec = std.ArrayList(DefaultField).empty;
     try self.print("\n%\"{f}\" = type {{", .{name});
     const struc = self.items.get(name.name).?.kind.struc;
-    var resolver: Resolver(Typ) = .init(self.typ_mem);
-    defer resolver.deinit();
+    var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
+    defer resolve_map.deinit();
     for (struc.generics, name.generics) |generic, typ| {
-        try resolver.map.put(generic.name, typ);
+        try resolve_map.put(generic.name, typ);
     }
     var struct_layout = Layout{ .size = 0, .alig = 1 };
     const field_typs = try self.gpa.alloc(Typ, struc.fields.len);
     defer self.gpa.free(field_typs);
     for (field_typs, struc.fields, 0..) |*typ, field, i| {
-        typ.* = try field.typ.resolve(resolver);
+        typ.* = try field.typ.resolve(self.makeResolver(resolve_map));
         const layout = try self.getLayout(typ.*);
         appendLayout(&struct_layout, layout);
         try fields.put(field.name, .{
@@ -603,7 +603,7 @@ fn genExpr(self: *Self, expr: Ast.Expr) Error!TypVal {
 }
 
 fn genSizeof(self: *Self, typ: Typ) !TypVal {
-    const resolved = try typ.resolve(self.makeResolver());
+    const resolved = try typ.resolve(self.funResolver());
     const layout = try self.getLayout(resolved);
     return .{
         .typ = .{ .prime = .u64 },
@@ -611,11 +611,15 @@ fn genSizeof(self: *Self, typ: Typ) !TypVal {
     };
 }
 
-fn makeResolver(self: Self) Resolver(Typ) {
+fn funResolver(self: Self) Resolver(Typ) {
     return .{
         .map = self.resolve_map,
         .mem = self.typ_mem,
     };
+}
+
+fn makeResolver(self: Self, map: std.StringHashMap(Typ)) Resolver(Typ) {
+    return .{ .map = map, .mem = self.typ_mem };
 }
 
 fn getLayout(self: *Self, typ: Typ) !Layout {
