@@ -17,14 +17,6 @@ pub const Kind = union(enum) {
     use: []const u8,
 };
 
-pub fn getHeader(self: Self) ?Fun.Header {
-    return switch (self.kind) {
-        .ext_fun => |ext_fun| ext_fun.header,
-        .fun => |fun| fun.header,
-        .constant, .struc, .typ_alias => null,
-    };
-}
-
 pub const Struct = struct {
     generics: []const Generic,
     fields: []Field,

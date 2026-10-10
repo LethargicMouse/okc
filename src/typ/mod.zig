@@ -94,10 +94,6 @@ pub const Typ = union(enum) {
         };
     }
 
-    pub fn named(name: []const u8) Typ {
-        return .{ .name = .{ .name = name } };
-    }
-
     pub fn hashIn(typ: Typ, hasher: *std.hash.Wyhash) void {
         hasher.update(&.{@intFromEnum(typ)});
         switch (typ) {

@@ -430,7 +430,6 @@ fn checkLoopBlock(self: *Self, block: []Ast.Stmt) !ControlFlow {
         .ret => return .ret,
         .brek, .cont => return .cont,
     }
-    return res;
 }
 
 fn checkBlock(self: *Self, block: []Ast.Stmt) !ControlFlow {
@@ -973,7 +972,7 @@ fn checkTypedStruc(
     self.checkFieldsInitialised(decl.fields, struc.fields, location);
     struc.typ = Typ{ .name = .{
         .name = name.name,
-        .generics = generics,
+        .generics = self.typ_slice_mem.save(generics),
     } };
     try self.solve_queue.append(self.gpa, .{
         .typ = &struc.typ,
@@ -986,7 +985,7 @@ fn checkTypedStruc(
 }
 
 fn makeGenerics(self: *Self, len: usize) ![]const Typ {
-    const res = try self.arena.allocator().alloc(Typ, len);
+    const res = try self.typ_slice_mem.alloc(len);
     for (res) |*target| {
         const lazy = try self.fun_arena.allocator().create(Typ);
         lazy.* = .any;

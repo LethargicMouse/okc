@@ -606,7 +606,7 @@ fn genExpr(self: *Self, expr: Ast.Expr) Error!TypVal {
 }
 
 fn genSizeof(self: *Self, typ: Typ) !TypVal {
-    const resolved = try typ.resolve(self.getResolver());
+    const resolved = try typ.resolve(self.makeResolver());
     const layout = try self.getLayout(resolved);
     return .{
         .typ = .{ .prime = .u64 },
@@ -614,7 +614,7 @@ fn genSizeof(self: *Self, typ: Typ) !TypVal {
     };
 }
 
-fn getResolver(self: Self) Resolver(Typ) {
+fn makeResolver(self: Self) Resolver(Typ) {
     return .{
         .map = self.resolve_map,
         .slice_mem = self.typ_slice_mem,
