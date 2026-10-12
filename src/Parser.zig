@@ -67,14 +67,27 @@ fn parseItemLoud(self: *Self) Error!ast.Item {
         parseStructItem,
         parseExtFunItem,
         parseConstantItem,
-        parseTypItem,
+        parseTypAliasItem,
+        parseUseItem,
     }) catch |err| {
         try self.fail("<item>");
         return err;
     };
 }
 
-fn parseTypItem(self: *Self) !ast.Item {
+fn parseUseItem(self: *Self) !ast.Item {
+    try self.expect(.use);
+    const location = self.getLocation();
+    const name = try self.parseNameLoud();
+    try self.expectLoud(.semi);
+    return .{
+        .location = location,
+        .name = name,
+        .kind = .use,
+    };
+}
+
+fn parseTypAliasItem(self: *Self) !ast.Item {
     try self.expect(.typ);
     const location = self.getLocation();
     const name = try self.parseNameLoud();

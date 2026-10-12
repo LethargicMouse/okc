@@ -1420,3 +1420,7 @@ const SolveRequest = struct {
     location: ?Location,
     typ: *Typ,
 };
+
+const Module = struct {
+    items: std.StringHashMap(Item),
+};

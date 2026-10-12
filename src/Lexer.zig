@@ -151,6 +151,7 @@ fn lexVerbal(self: *Self) ?Token {
 }
 
 const verbal_list = [_]LexPair{
+    .{ .str = "use", .lexeme = .use },
     .{ .str = "type", .lexeme = .typ },
     .{ .str = "false", .lexeme = .fals },
     .{ .str = "for", .lexeme = .forr },
@@ -258,6 +259,7 @@ pub const Lexeme = union(enum) {
     int: u64,
     str: []const u8,
     char: u8,
+    use,
     typ,
     fals,
     dot2,
@@ -309,6 +311,7 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: Lexeme) []const u8 {
         return switch (lexeme) {
+            .use => "`use`",
             .typ => "`type`",
             .fals => "`false`",
             .dot2 => "`..`",
