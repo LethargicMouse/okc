@@ -15,7 +15,7 @@ ret_typ: Typ = .any,
 failer: *Failer,
 loops_nested: u16 = 0,
 current_generics: []const ast.Item.Generic = &.{},
-generics_usage: std.DynamicBitSetUnmanaged,
+generics_usage: std.bit_set.Dynamic,
 solve_queue: std.ArrayList(SolveRequest) = .empty,
 
 pub fn init(
@@ -181,54 +181,6 @@ fn checkHeader(self: *Self, header: *ast.Item.Fun.Header) !void {
     self.checkGenericsUsage();
 }
 
-fn checkFunTyp(self: *Self, fun: Typ.Fun) !Typ.Fun {
-    const params = try Typ.memo.alloc(fun.params.len);
-    for (params, fun.params) |*target, param| {
-        target.* = try self.checkTyp(param);
-    }
-    const new = try self.checkTyp(fun.ret_typ.*);
-    return .{
-        .params = try Typ.memo.save(params),
-        .ret_typ = try Typ.memo.box(new),
-    };
-}
-
-fn checkArrayTyp(self: *Self, array: Typ.Array) !Typ.Array {
-    const new = try self.checkTyp(array.typ.*);
-    return .{
-        .typ = try Typ.memo.box(new),
-        .len = array.len,
-    };
-}
-
-fn checkSliceTyp(self: *Self, slice: Typ.Slice) !Typ.Slice {
-    const new = try self.checkTyp(slice.typ.*);
-    return .{
-        .typ = try Typ.memo.box(new),
-        .mutable = slice.mutable,
-    };
-}
-
-fn checkPtrTyp(self: *Self, ptr: Typ.Ptr) !Typ.Ptr {
-    const new = try self.checkTyp(ptr.typ.*);
-    return .{
-        .typ = try Typ.memo.box(new),
-        .mutable = ptr.mutable,
-    };
-}
-
-fn checkNameTyp(self: *Self, name: Typ.Name) !Typ.Name {
-    const generics = try Typ.memo.alloc(name.generics.len);
-    defer Typ.memo.free(generics);
-    for (generics, name.generics) |*target, generic| {
-        target.* = try self.checkTyp(generic);
-    }
-    return .{
-        .name = name.name,
-        .generics = try Typ.memo.save(generics),
-    };
-}
-
 fn checkVarUsage(self: *Self, vari: Var, location: Location) void {
     if (vari.mutable and !vari.mutated) {
         self.failer.fail(location, "variable is never mutated", .{});
@@ -308,8 +260,8 @@ fn checkFun(self: *Self, fun: ast.Item.Fun, location: Location) !void {
             .can_be_mutable = false,
         }, param.location);
     }
-    const cf = try self.checkBlock(fun.body);
-    if (cf != .ret and !fun.header.ret_typ.isVoid()) {
+    const control_flow = try self.checkBlock(fun.body);
+    if (control_flow != .ret and !fun.header.ret_typ.isVoid()) {
         self.failer.fail(location, "function may not return", .{});
     }
     self.freeVars(rbp);
@@ -334,10 +286,10 @@ fn checkBlock(self: *Self, block: []ast.Stmt) !ControlFlow {
     var res = ControlFlow.cont;
     const rbp = self.vars_stack.items.len;
     for (block, 0..) |*stmt, i| {
-        const cf = try self.checkStmt(stmt);
-        if (cf != .cont) {
+        const control_flow = try self.checkStmt(stmt);
+        if (control_flow != .cont) {
             if (res == .cont) {
-                res = cf;
+                res = control_flow;
             }
             if (i + 1 != block.len) {
                 self.failer.fail(block[i + 1].location, "Stmt is unreachable", .{});
@@ -440,32 +392,32 @@ fn checkExprStmt(self: *Self, expr: *ast.Expr) !ControlFlow {
 }
 
 fn checkWhile(self: *Self, whi: *ast.Stmt.While) !ControlFlow {
-    const cf = try self.checkBranch(&whi.branch, true);
-    switch (cf) {
+    const control_flow = try self.checkBranch(&whi.branch, .loop);
+    switch (control_flow) {
         .cont, .brek => return .cont,
         .ret => return .ret,
     }
 }
 
-fn checkIf(self: *Self, iff: *ast.Stmt.If) !ControlFlow {
-    var res = try self.checkBranch(&iff.branch, false);
+fn checkIf(self: *Self, iff: *ast.Stmt.IfStmt) !ControlFlow {
+    var res = try self.checkBranch(&iff.branch, .simple);
     for (iff.else_ifs) |*branch| {
-        const cf = try self.checkBranch(branch, false);
-        if (@backingInt(cf) < @backingInt(res)) {
-            res = cf;
+        const control_flow = try self.checkBranch(branch, .simple);
+        if (@backingInt(control_flow) < @backingInt(res)) {
+            res = control_flow;
         }
     }
-    const cf = try self.checkBlock(iff.else_branch);
-    if (@backingInt(cf) < @backingInt(res)) {
-        res = cf;
+    const control_flow = try self.checkBlock(iff.else_branch);
+    if (@backingInt(control_flow) < @backingInt(res)) {
+        res = control_flow;
     }
     return res;
 }
 
-fn checkBranch(self: *Self, branch: *ast.Stmt.Branch, loop: bool) !ControlFlow {
+fn checkBranch(self: *Self, branch: *ast.Stmt.Branch, kind: ast.Stmt.Branch.Kind) !ControlFlow {
     const info = try self.checkExpr(&branch.condition, .{});
     _ = self.unify(branch.condition.location, .{ .prime = .bool }, info.typ);
-    if (loop) {
+    if (kind == .loop) {
         return self.checkLoopBlock(branch.body);
     }
     return self.checkBlock(branch.body);
@@ -570,7 +522,7 @@ fn getElemExprInfo(self: *Self, info: ExprInfo, location: Location) ?ExprInfo {
 }
 
 fn unify(self: *Self, location: Location, a: Typ, b: Typ) Typ {
-    if (a.unify(b, true)) |typ| {
+    if (a.unify(b, .active)) |typ| {
         if (Typ.debug_unify) {
             std.log.debug("==> {f}\n", .{typ});
         }
@@ -1162,7 +1114,7 @@ fn checkCall(self: *Self, call: *ast.Expr.Call, hint: Typ) !ExprInfo {
     const fun = self.getFunTyp(callee_info.typ, call.expr.location) orelse
         return self.checkBadCall(call);
     // to propagate hint to generics
-    _ = fun.ret_typ.unify(hint, true);
+    _ = fun.ret_typ.unify(hint, .active);
     for (call.args, fun.params) |*arg, param| {
         const info = try self.checkExpr(arg, .{ .typ = param.normalise() });
         _ = self.unify(arg.location, param, info.typ);

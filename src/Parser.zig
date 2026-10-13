@@ -313,9 +313,9 @@ fn parseArrayTyp(self: *Self) !Typ {
     } };
 }
 
-fn parseEither(self: *Self, typ: type, comptime parses: anytype) !typ {
+fn parseEither(self: *Self, T: type, comptime parses: anytype) !T {
     inline for (parses) |parse| {
-        if (try self.parseMaybe(typ, parse)) |res| {
+        if (try self.parseMaybe(T, parse)) |res| {
             return res;
         }
     }

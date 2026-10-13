@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
     const lint_step = step: {
         var builder = zlinter.builder(b, .{});
         inline for (@typeInfo(zlinter.BuiltinLintRule).@"enum".field_values) |field_value| {
-            const rule: zlinter.BuiltinLintRule = @enumFromInt(field_value);
+            const rule: zlinter.BuiltinLintRule = @fromBackingInt(field_value);
             if (rule == .require_doc_comment or
                 rule == .no_inferred_error_unions or
                 rule == .no_global_vars)

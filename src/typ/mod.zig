@@ -18,10 +18,10 @@ pub const Typ = union(enum) {
     slice: Slice,
 
     pub const Array = @import("Array.zig");
+    pub const Fun = @import("Fun.zig");
     pub const Name = @import("Name.zig");
     pub const Ptr = @import("Ptr.zig");
     pub const Slice = @import("Slice.zig");
-    pub const Fun = @import("Fun.zig");
 
     pub var memo: Memo(Typ) = undefined;
 
@@ -183,7 +183,7 @@ pub const Typ = union(enum) {
 
     pub const debug_unify = false;
 
-    pub fn unify(a: Typ, b: Typ, active: bool) ?Typ {
+    pub fn unify(a: Typ, b: Typ, mode: UnifyMode) ?Typ {
         if (debug_unify) {
             std.log.debug("unify {f} vs {f}\n", .{ a, b });
         }
@@ -200,25 +200,25 @@ pub const Typ = union(enum) {
             return a;
         }
         if (a == .lazy and b == .lazy) {
-            const sa = a.lazy.shorten();
-            const sb = b.lazy.shorten();
-            if (sa != sb) {
-                const typ = sa.unify(sb.*, active) orelse return null;
-                sa.setLazy(typ);
-                sb.setLazy(.{ .lazy = sa });
+            const aroot = a.lazy.shorten();
+            const broot = b.lazy.shorten();
+            if (aroot != broot) {
+                const typ = aroot.unify(broot.*, mode) orelse return null;
+                aroot.setLazy(typ);
+                broot.setLazy(.{ .lazy = aroot });
             }
-            return .{ .lazy = sa };
+            return .{ .lazy = aroot };
         }
         if (a == .lazy) {
-            const res = a.lazy.unify(b, active) orelse return null;
-            if (active) {
+            const res = a.lazy.unify(b, mode) orelse return null;
+            if (mode == .active) {
                 a.lazy.setLazy(res);
             }
             return a;
         }
         if (b == .lazy) {
-            const res = a.unify(b.lazy.*, active) orelse return null;
-            if (active) {
+            const res = a.unify(b.lazy.*, mode) orelse return null;
+            if (mode == .active) {
                 b.lazy.setLazy(res);
             }
             return b;
@@ -227,7 +227,7 @@ pub const Typ = union(enum) {
             a.slice.mutable == b.ptr.mutable)
         {
             if (a.slice.typ != b.ptr.typ.array.typ and
-                a.slice.typ.unify(b.ptr.typ.array.typ.*, active) == null)
+                a.slice.typ.unify(b.ptr.typ.array.typ.*, mode) == null)
             {
                 return null;
             }
@@ -245,7 +245,7 @@ pub const Typ = union(enum) {
                 return null;
             }
             for (aname.generics, bname.generics) |ag, bg| {
-                _ = ag.unify(bg, active) orelse return null;
+                _ = ag.unify(bg, mode) orelse return null;
             }
             return b;
         }
@@ -260,10 +260,10 @@ pub const Typ = union(enum) {
             },
             .fun => |fun| {
                 if (fun.ret_typ != b.fun.ret_typ) {
-                    _ = fun.ret_typ.unify(b.fun.ret_typ.*, active) orelse return null;
+                    _ = fun.ret_typ.unify(b.fun.ret_typ.*, mode) orelse return null;
                 }
                 for (fun.params, b.fun.params) |ap, bp| {
-                    _ = ap.unify(bp, active) orelse return null;
+                    _ = ap.unify(bp, mode) orelse return null;
                 }
                 return a;
             },
@@ -272,7 +272,7 @@ pub const Typ = union(enum) {
                     return null;
                 }
                 if (aslice.typ != b.slice.typ) {
-                    _ = aslice.typ.unify(b.slice.typ.*, active) orelse return null;
+                    _ = aslice.typ.unify(b.slice.typ.*, mode) orelse return null;
                 }
                 return a;
             },
@@ -280,14 +280,14 @@ pub const Typ = union(enum) {
                 if (aptr.mutable and !b.ptr.mutable) {
                     return null;
                 }
-                if (aptr.typ != b.ptr.typ and aptr.typ.unify(b.ptr.typ.*, active) == null) {
+                if (aptr.typ != b.ptr.typ and aptr.typ.unify(b.ptr.typ.*, mode) == null) {
                     return null;
                 }
                 return a;
             },
             .array => |arr| {
                 if (arr.len != b.array.len or
-                    (arr.typ != b.array.typ and arr.typ.unify(b.array.typ.*, active) == null))
+                    (arr.typ != b.array.typ and arr.typ.unify(b.array.typ.*, mode) == null))
                 {
                     return null;
                 }
@@ -296,6 +296,11 @@ pub const Typ = union(enum) {
             .lazy, .any, .err, .int, .loc_name, .name => unreachable,
         }
     }
+
+    pub const UnifyMode = enum {
+        active,
+        passive,
+    };
 
     fn updateRec(typ: Typ, fun: anytype, args: anytype) !Typ {
         switch (typ) {
@@ -350,7 +355,7 @@ pub const Typ = union(enum) {
         i32,
         u32,
         u64,
-        u8,
+        u8, // zlinter-disable-current-line field_naming
         void,
 
         pub fn format(prime: Prime, writer: *std.Io.Writer) !void {

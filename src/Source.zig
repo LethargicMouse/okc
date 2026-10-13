@@ -13,6 +13,7 @@ pub fn read(io: std.Io, gpa: std.mem.Allocator, path: []const u8) Error!Self {
         return error.Handled;
     };
     var vec = std.ArrayList([]const u8).empty;
+    errdefer vec.deinit(gpa);
     var iter = std.mem.splitAny(u8, code, "\r\n");
     while (iter.next()) |line| {
         try vec.append(gpa, line);

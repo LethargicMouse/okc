@@ -1,6 +1,6 @@
 const Location = @import("../Location.zig");
-const Expr = @import("Expr/Expr.zig");
 const Typ = @import("../typ/mod.zig").Typ;
+const Expr = @import("Expr/Expr.zig");
 
 const Self = @This();
 location: Location,
@@ -13,7 +13,7 @@ pub const Kind = union(enum) {
     expr: Expr,
     for_range: ForRange,
     forr: For,
-    iff: If,
+    iff: IfStmt,
     ignore: Ignore,
     op_assign: OpAssign,
     ret: Return,
@@ -48,7 +48,7 @@ pub const While = struct {
     branch: Branch,
 };
 
-pub const If = struct {
+pub const IfStmt = struct {
     branch: Branch,
     else_ifs: []Branch,
     else_branch: []Self,
@@ -57,6 +57,11 @@ pub const If = struct {
 pub const Branch = struct {
     condition: Expr,
     body: []Self,
+
+    pub const Kind = enum {
+        loop,
+        simple,
+    };
 };
 
 pub const Assign = struct {

@@ -20,16 +20,25 @@ pub fn main(init: std.process.Init) u8 {
     return code;
 }
 
+const more_stack_trace_frames = false;
+
 fn run(init: std.process.Init) !u8 {
-    var args = try init.minimal.args.iterateAllocator(init.gpa);
+    if (more_stack_trace_frames) {
+        var safe = std.heap.SafeAllocator.init(init.gpa, .{
+            .stack_trace_frames = 20,
+        });
+        defer _ = safe.deinit();
+        return runCLI(init.io, safe.allocator(), init.minimal.args);
+    }
+    return runCLI(init.io, init.gpa, init.minimal.args);
+}
+
+fn runCLI(io: std.Io, gpa: std.mem.Allocator, args: std.process.Args) !u8 {
+    var iter = args.iterate();
     // skip exec name
-    _ = args.skip();
-    // var gpa = std.heap.SafeAllocator.init(init.gpa, .{
-    //     .stack_trace_frames = 20,
-    // });
-    // defer _ = gpa.deinit();
-    if (args.next()) |path| {
-        return runFile(init.io, init.gpa, path);
+    std.debug.assert(iter.skip());
+    if (iter.next()) |path| {
+        return runFile(io, gpa, path);
     } else {
         std.log.err("no source path given", .{});
         return error.Handled;

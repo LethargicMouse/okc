@@ -1,9 +1,10 @@
 const std = @import("std");
+
 const main = @import("main.zig");
 
 fn testFile(comptime name: []const u8, output: []const u8) !void {
-    const ok = std.fmt.comptimePrint("examples/{s}.ok", .{name});
-    try main.compile(std.testing.io, std.testing.allocator, ok);
+    const ok_path = std.fmt.comptimePrint("examples/{s}.ok", .{name});
+    try main.compile(std.testing.io, std.testing.allocator, ok_path);
 
     const run_res = try std.process.run(std.testing.allocator, std.testing.io, .{ .argv = &.{main.out_path} });
     defer std.testing.allocator.free(run_res.stdout);
@@ -183,7 +184,3 @@ test "Subslice.ok" {
 test "TypeAlias.ok" {
     try testFile("TypeAlias", "hello world");
 }
-
-// test "Method.ok" {
-//     try testFile("Method", "kitkat says six\nkitkat says seven\n");
-// }

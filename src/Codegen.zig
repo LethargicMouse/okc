@@ -236,7 +236,9 @@ fn genStruct(self: *Self, name: Name) Error!void {
         self.buffer = buffer;
     }
     var fields = std.StringHashMap(Field).init(self.gpa);
+    errdefer fields.deinit();
     var default_fields_vec = std.ArrayList(DefaultField).empty;
+    errdefer default_fields_vec.deinit(self.gpa);
     try self.print("\n%\"{f}\" = type {{", .{name});
     const struc = self.items.get(name.name).?.kind.struc;
     var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
@@ -319,7 +321,7 @@ fn genBreak(self: *Self) !void {
 fn genWhile(self: *Self, whi: ast.Stmt.While) !void {
     const condition_label = self.newTmp();
     try self.uncond(condition_label, condition_label);
-    try self.genBranch(whi.branch, condition_label, true);
+    try self.genBranch(whi.branch, condition_label, .loop);
 }
 
 fn genForRange(self: *Self, forr: ast.Stmt.ForRange) !void {
@@ -428,11 +430,11 @@ fn uncond(self: *Self, to: u32, next: u32) !void {
     , .{ to, next });
 }
 
-fn genIf(self: *Self, iff: ast.Stmt.If) !void {
+fn genIf(self: *Self, iff: ast.Stmt.IfStmt) !void {
     const end_label = self.newTmp();
-    try self.genBranch(iff.branch, end_label, false);
+    try self.genBranch(iff.branch, end_label, .simple);
     for (iff.else_ifs) |branch| {
-        try self.genBranch(branch, end_label, false);
+        try self.genBranch(branch, end_label, .simple);
     }
     for (iff.else_branch) |stmt| {
         try self.genStmt(stmt);
@@ -440,11 +442,11 @@ fn genIf(self: *Self, iff: ast.Stmt.If) !void {
     try self.uncond(end_label, end_label);
 }
 
-fn genBranch(self: *Self, branch: ast.Stmt.Branch, end_label: u32, loop: bool) !void {
+fn genBranch(self: *Self, branch: ast.Stmt.Branch, end_label: u32, kind: ast.Stmt.Branch.Kind) !void {
     const condition = try self.genExpr(branch.condition);
     const then_label = self.newTmp();
     const else_label = self.newTmp();
-    if (loop) {
+    if (kind == .loop) {
         try self.loop_ends.append(self.gpa, else_label);
     }
     try self.cond(condition.val, then_label, else_label);
@@ -452,7 +454,7 @@ fn genBranch(self: *Self, branch: ast.Stmt.Branch, end_label: u32, loop: bool) !
         try self.genStmt(stmt);
     }
     try self.uncond(end_label, else_label);
-    if (loop) {
+    if (kind == .loop) {
         _ = self.loop_ends.pop();
     }
 }
@@ -848,12 +850,12 @@ fn genUnaryRef(self: *Self, unary: ast.Expr.Unary) !Ref {
 }
 
 fn load(self: *Self, vari: Ref) !u32 {
-    const to = self.newTmp();
+    const res = self.newTmp();
     try self.print(
         "\n  %t{} = load {f}, ptr {f}",
-        .{ to, LlvmTyp{ .inner = vari.inner_typ }, vari.val },
+        .{ res, LlvmTyp{ .inner = vari.inner_typ }, vari.val },
     );
-    return to;
+    return res;
 }
 
 fn genInt(int: ast.Expr.Int) TypVal {
@@ -1206,7 +1208,7 @@ const LlvmTyp = struct {
     pub fn format(typ: LlvmTyp, writer: *std.Io.Writer) !void {
         switch (typ.inner) {
             .prime => |prime| {
-                const s = switch (prime) {
+                const sprime = switch (prime) {
                     .u8 => "i8",
                     .i32 => "i32",
                     .u32 => "i32",
@@ -1214,7 +1216,7 @@ const LlvmTyp = struct {
                     .bool => "i1",
                     .void => "void",
                 };
-                try writer.writeAll(s);
+                try writer.writeAll(sprime);
             },
             .array => |array| {
                 try writer.print("[{} x {f}]", .{
