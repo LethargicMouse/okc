@@ -1,20 +1,19 @@
 const std = @import("std");
 
+const ast = @import("ast/mod.zig");
 const hash_map = @import("hash_map.zig");
 
 pub fn Memo(T: type) type {
     return struct {
         const Self = @This();
 
-        arena: *std.heap.ArenaAllocator,
         map: hash_map.PtrHashMap(T, void),
         slice_map: hash_map.SliceHashMap(T, void),
 
-        pub fn init(arena: *std.heap.ArenaAllocator) Self {
+        pub fn init(gpa: std.mem.Allocator) Self {
             return .{
-                .arena = arena,
-                .map = .init(arena.child_allocator),
-                .slice_map = .init(arena.child_allocator),
+                .map = .init(gpa),
+                .slice_map = .init(gpa),
             };
         }
 
@@ -28,7 +27,7 @@ pub fn Memo(T: type) type {
             if (self.map.getKey(&val)) |ptr| {
                 return ptr;
             }
-            const ptr = try self.arena.allocator().create(T);
+            const ptr = try ast.arena.allocator().create(T);
             ptr.* = val;
             try self.map.put(ptr, {});
             return ptr;
@@ -38,7 +37,7 @@ pub fn Memo(T: type) type {
             if (self.slice_map.getKey(slice)) |res| {
                 return res;
             }
-            const res = try self.arena.allocator().alloc(T, slice.len);
+            const res = try ast.arena.allocator().alloc(T, slice.len);
             @memcpy(res, slice);
             try self.slice_map.put(res, {});
             return res;

@@ -1,11 +1,11 @@
 const std = @import("std");
 
 const ast = @import("ast/mod.zig");
+const Failer = @import("Failer.zig");
 const HashMap = @import("hash_map.zig").HashMap;
 const Location = @import("Location.zig");
 const memo = @import("memo.zig");
 const Typ = @import("typ/mod.zig").Typ;
-const Failer = @import("Failer.zig");
 
 const Self = @This();
 gpa: std.mem.Allocator,
@@ -1228,7 +1228,7 @@ fn fillFunMetaHeader(
         ptr.* = .any;
         try resolve_map.put(generic.name, .{ .lazy = ptr });
     }
-    fun_meta.generics = try self.typ_mem.arena.allocator().alloc(Typ, header.generics.len);
+    fun_meta.generics = try ast.arena.allocator().alloc(Typ, header.generics.len);
     const params = try self.typ_mem.alloc(header.params.len);
     defer self.typ_mem.free(params);
     for (header.params, params) |param, *target| {

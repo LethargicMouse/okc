@@ -53,13 +53,13 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var lexer = try Lexer.init(gpa, source);
     const tokens = try lexer.lex(gpa);
 
-    var ast_arena = std.heap.ArenaAllocator.init(gpa);
-    defer ast_arena.deinit();
+    ast.arena = .init(gpa);
+    defer ast.arena.deinit();
 
-    var typ_mem = memo.Memo(Typ).init(&ast_arena);
+    var typ_mem = memo.Memo(Typ).init(gpa);
     defer typ_mem.deinit();
 
-    var parser = Parser.init(gpa, &ast_arena, &typ_mem, tokens);
+    var parser = Parser.init(gpa, &typ_mem, tokens);
     const module = try parser.run();
 
     var checker_arena = std.heap.ArenaAllocator.init(gpa);

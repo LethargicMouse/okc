@@ -10,7 +10,6 @@ const Typ = @import("typ/mod.zig").Typ;
 const Self = @This();
 gpa: std.mem.Allocator,
 tokens: []const Lexer.Token,
-ast_arena: *std.heap.ArenaAllocator,
 ast_typ_memo: *Memo(Typ),
 err_msgs: ErrMsgs = .empty,
 tmp_name: []const u8 = "<unknown>",
@@ -20,13 +19,11 @@ err_cursor: usize = 0,
 
 pub fn init(
     gpa: std.mem.Allocator,
-    ast_arena: *std.heap.ArenaAllocator,
     ast_typ_memo: *Memo(Typ),
     tokens: []const Lexer.Token,
 ) Self {
     return .{
         .gpa = gpa,
-        .ast_arena = ast_arena,
         .ast_typ_memo = ast_typ_memo,
         .tokens = tokens,
     };
@@ -233,7 +230,7 @@ fn parseSep(self: *Self, T: type, parse: fn (*Self) Error!T) ![]T {
             } else break;
         }
     }
-    const slice = try self.ast_arena.allocator().alloc(T, vec.items.len);
+    const slice = try ast.arena.allocator().alloc(T, vec.items.len);
     @memcpy(slice, vec.items);
     return slice;
 }
@@ -362,7 +359,7 @@ fn parseMany(self: *Self, T: type, parse: fn (*Self) Error!T) ![]T {
     while (try self.parseMaybe(T, parse)) |item| {
         try vec.append(self.gpa, item);
     }
-    const slice = try self.ast_arena.allocator().alloc(T, vec.items.len);
+    const slice = try ast.arena.allocator().alloc(T, vec.items.len);
     @memcpy(slice, vec.items);
     return slice;
 }
@@ -682,7 +679,7 @@ fn parseExpr(self: *Self) !ast.Expr {
 fn parseExprPrior(self: *Self, prior: u8, loud: bool) Error!ast.Expr {
     var res = try self.parseExprPosted(loud);
     while (try self.parseBinPostfix(prior)) |bin_postfix| {
-        const binary = try self.ast_arena.allocator().create(ast.Expr.Binary);
+        const binary = try ast.arena.allocator().create(ast.Expr.Binary);
         binary.* = .{
             .left = res,
             .kind = bin_postfix.kind,
@@ -731,7 +728,7 @@ fn parseExprPosted(self: *Self, loud: bool) Error!ast.Expr {
     while (try self.parseMaybe(Postfix, parsePostfix)) |postfix| {
         switch (postfix.kind) {
             .method => |method_postfix| {
-                const method = try self.ast_arena.allocator().create(ast.Expr.Method);
+                const method = try ast.arena.allocator().create(ast.Expr.Method);
                 method.* = .{
                     .expr = res,
                     .vari = method_postfix.vari,
@@ -744,7 +741,7 @@ fn parseExprPosted(self: *Self, loud: bool) Error!ast.Expr {
                 };
             },
             .call => |args| {
-                const call = try self.ast_arena.allocator().create(ast.Expr.Call);
+                const call = try ast.arena.allocator().create(ast.Expr.Call);
                 call.* = .{
                     .expr = res,
                     .args = args,
@@ -755,7 +752,7 @@ fn parseExprPosted(self: *Self, loud: bool) Error!ast.Expr {
                 };
             },
             .field => |name| {
-                const field = try self.ast_arena.allocator().create(ast.Expr.Field);
+                const field = try ast.arena.allocator().create(ast.Expr.Field);
                 field.* = .{
                     .expr = res,
                     .name = name,
@@ -766,7 +763,7 @@ fn parseExprPosted(self: *Self, loud: bool) Error!ast.Expr {
                 };
             },
             .elem => |index| {
-                const elem = try self.ast_arena.allocator().create(ast.Expr.Elem);
+                const elem = try ast.arena.allocator().create(ast.Expr.Elem);
                 elem.* = .{
                     .expr = res,
                     .index = index,
@@ -777,7 +774,7 @@ fn parseExprPosted(self: *Self, loud: bool) Error!ast.Expr {
                 };
             },
             .subslice => |subslice_postfix| {
-                const subslice = try self.ast_arena.allocator().create(ast.Expr.Subslice);
+                const subslice = try ast.arena.allocator().create(ast.Expr.Subslice);
                 subslice.* = .{
                     .expr = res,
                     .start = subslice_postfix.start,
@@ -926,7 +923,7 @@ fn parseUnaryExpr(self: *Self) !ast.Expr {
     const location = self.getLocation();
     const kind = try self.parseUnaryOp();
     const expr = try self.parseExprPostedLoud();
-    const unary = try self.ast_arena.allocator().create(ast.Expr.Unary);
+    const unary = try ast.arena.allocator().create(ast.Expr.Unary);
     unary.* = .{
         .kind = kind,
         .expr = expr,
