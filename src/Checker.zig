@@ -451,12 +451,12 @@ fn checkIf(self: *Self, iff: *ast.Stmt.If) !ControlFlow {
     var res = try self.checkBranch(&iff.branch, false);
     for (iff.else_ifs) |*branch| {
         const cf = try self.checkBranch(branch, false);
-        if (@intFromEnum(cf) < @intFromEnum(res)) {
+        if (@backingInt(cf) < @backingInt(res)) {
             res = cf;
         }
     }
     const cf = try self.checkBlock(iff.else_branch);
-    if (@intFromEnum(cf) < @intFromEnum(res)) {
+    if (@backingInt(cf) < @backingInt(res)) {
         res = cf;
     }
     return res;

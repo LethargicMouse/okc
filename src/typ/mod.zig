@@ -94,7 +94,7 @@ pub const Typ = union(enum) {
     }
 
     pub fn eql(a: Typ, b: Typ) bool {
-        if (@intFromEnum(a) != @intFromEnum(b)) {
+        if (@backingInt(a) != @backingInt(b)) {
             return false;
         }
         return switch (a) {
@@ -114,7 +114,7 @@ pub const Typ = union(enum) {
     }
 
     pub fn hashIn(typ: Typ, hasher: *std.hash.Wyhash) void {
-        hasher.update(&.{@intFromEnum(typ)});
+        hasher.update(&.{@backingInt(typ)});
         switch (typ) {
             .loc_name => |located| located.location.hashIn(hasher),
             .prime => |prime| prime.hashIn(hasher),
@@ -249,7 +249,7 @@ pub const Typ = union(enum) {
             }
             return b;
         }
-        if (@intFromEnum(a) != @intFromEnum(b)) {
+        if (@backingInt(a) != @backingInt(b)) {
             return null;
         }
         switch (a) {
@@ -365,7 +365,7 @@ pub const Typ = union(enum) {
         }
 
         pub fn hashIn(prime: Prime, hasher: *std.hash.Wyhash) void {
-            hasher.update(&.{@intFromEnum(prime)});
+            hasher.update(&.{@backingInt(prime)});
         }
     };
 };
