@@ -8,10 +8,10 @@ kind: Kind,
 location: Location,
 
 pub const Kind = union(enum) {
-    ext_fun: Fun.Extern,
-    struc: Struct,
-    fun: Fun,
     constant: Stmt.Declare,
+    ext_fun: Fun.Extern,
+    fun: Fun,
+    struc: Struct,
     typ_alias: TypAlias,
     use,
 };

@@ -7,18 +7,18 @@ location: Location,
 kind: Kind,
 
 pub const Kind = union(enum) {
-    forr: For,
-    for_range: ForRange,
-    ret: Return,
-    expr: Expr,
-    declare: Declare.Named,
     assign: Assign,
-    op_assign: OpAssign,
-    iff: If,
-    whi: While,
-    ignore: Ignore,
     brek,
+    declare: Declare.Named,
+    expr: Expr,
+    for_range: ForRange,
+    forr: For,
+    iff: If,
+    ignore: Ignore,
+    op_assign: OpAssign,
+    ret: Return,
     unre,
+    whi: While,
 };
 
 pub const For = struct {

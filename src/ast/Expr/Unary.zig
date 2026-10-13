@@ -5,10 +5,10 @@ kind: Kind,
 expr: Expr,
 
 pub const Kind = enum {
-    ptr,
     deref,
-    notb,
     neg,
+    notb,
+    ptr,
 
     pub fn fromLexeme(lexeme: Lexeme) ?Kind {
         return switch (lexeme) {

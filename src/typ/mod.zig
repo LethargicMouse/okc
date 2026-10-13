@@ -5,17 +5,17 @@ const Location = @import("../Location.zig");
 const Memo = @import("../memo.zig").Memo;
 
 pub const Typ = union(enum) {
-    prime: Prime,
-    name: Name,
-    loc_name: Name.Located,
+    any,
+    array: Array,
+    err,
     fun: Fun,
+    int,
+    lazy: *Typ,
+    loc_name: Name.Located,
+    name: Name,
+    prime: Prime,
     ptr: Ptr,
     slice: Slice,
-    array: Array,
-    lazy: *Typ,
-    any,
-    int,
-    err,
 
     pub const Array = @import("Array.zig");
     pub const Name = @import("Name.zig");
@@ -346,11 +346,11 @@ pub const Typ = union(enum) {
     }
 
     pub const Prime = enum {
-        u8,
+        bool,
         i32,
         u32,
         u64,
-        bool,
+        u8,
         void,
 
         pub fn format(prime: Prime, writer: *std.Io.Writer) !void {

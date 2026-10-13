@@ -10,18 +10,18 @@ pub const Kind = enum {
         arith,
         bool,
     };
+    add,
+    andb,
+    div,
+    equ,
+    les,
+    moreq,
+    mul,
+    neq,
 
     orb,
-    andb,
-    equ,
-    neq,
-    add,
-    sub,
-    mul,
-    div,
-    les,
     rem,
-    moreq,
+    sub,
 
     pub fn getPrior(kind: Kind) u8 {
         switch (kind) {

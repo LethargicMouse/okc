@@ -1133,8 +1133,8 @@ const Error = error{ ParseFailed, OutOfMemory };
 
 const ExprStmtPostfix = union(enum) {
     assign: ast.Expr,
-    op_assign: OpAssignPostfix,
     none,
+    op_assign: OpAssignPostfix,
 };
 
 const OpAssignPostfix = struct {
@@ -1152,11 +1152,11 @@ const Postfix = struct {
     location: Location,
 
     const Kind = union(enum) {
-        field: []const u8,
-        elem: ast.Expr,
-        subslice: Subslice,
         call: []ast.Expr,
+        elem: ast.Expr,
+        field: []const u8,
         method: Method,
+        subslice: Subslice,
     };
 
     const Method = struct {

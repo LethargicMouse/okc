@@ -1253,10 +1253,10 @@ const TypVal = struct {
 };
 
 const Val = union(enum) {
+    global: Name,
     int: u64,
     str: usize,
     tmp: u32,
-    global: Name,
     undef,
 
     pub fn format(val: Val, writer: *std.Io.Writer) std.Io.Writer.Error!void {

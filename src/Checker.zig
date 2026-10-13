@@ -1301,9 +1301,9 @@ const Var = struct {
 const Item = struct {
     const Kind = union(enum) {
         fun: *ast.Item.Fun.Header,
-        vari: Var,
         struc: Struct,
         typ: Typ,
+        vari: Var,
     };
     kind: Kind,
     location: Location,
