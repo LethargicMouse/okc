@@ -1,3 +1,4 @@
 /.zig-cache
 /build
 /zig-out
+/zig-pkg

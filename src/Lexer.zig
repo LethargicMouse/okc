@@ -20,6 +20,7 @@ pub fn init(gpa: std.mem.Allocator, source: Source) error{OutOfMemory}!Self {
 pub fn lex(self: *Self, gpa: std.mem.Allocator) error{OutOfMemory}![]const Token {
     defer self.deinit(gpa);
     var vec = std.ArrayList(Token).empty;
+    errdefer vec.deinit(gpa);
     try self.populate(gpa, &vec);
     return vec.toOwnedSlice(gpa);
 }
@@ -98,10 +99,10 @@ fn lexChar(self: *Self) ?Token {
             if (rest.len == 3 or rest[3] != '\'') {
                 return self.makeToken(.unclosed_char, 3);
             }
-            const sc = msc orelse {
+            const special_char = msc orelse {
                 return self.makeToken(.invalid_char, 4);
             };
-            return self.makeToken(.{ .char = sc }, 4);
+            return self.makeToken(.{ .char = special_char }, 4);
         }
         return self.makeToken(.{ .char = c }, 3);
     }

@@ -89,7 +89,7 @@ pub const Typ = union(enum) {
     pub fn setLazy(lazy: *Typ, typ: Typ) void {
         lazy.* = typ;
         if (debug_lazies) {
-            std.debug.print("=> {f}\n", .{Typ{ .lazy = lazy }});
+            std.log.debug("=> {f}\n", .{Typ{ .lazy = lazy }});
         }
     }
 
@@ -173,7 +173,7 @@ pub const Typ = union(enum) {
         if (typ.* == .lazy) {
             typ.lazy = typ.lazy.shorten();
             if (debug_lazies) {
-                std.debug.print("=> {f}\n", .{typ});
+                std.log.debug("=> {f}\n", .{typ});
             }
             return typ.lazy;
         } else {
@@ -185,7 +185,7 @@ pub const Typ = union(enum) {
 
     pub fn unify(a: Typ, b: Typ, active: bool) ?Typ {
         if (debug_unify) {
-            std.debug.print("unify {f} vs {f}\n", .{ a, b });
+            std.log.debug("unify {f} vs {f}\n", .{ a, b });
         }
         if (a.eql(b)) {
             return a;

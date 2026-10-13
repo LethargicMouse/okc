@@ -1,4 +1,4 @@
-const Expr = @import("mod.zig");
+const Expr = @import("Expr.zig");
 const Lexeme = @import("../../Lexer.zig").Lexeme;
 
 kind: Kind,

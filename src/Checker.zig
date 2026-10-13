@@ -11,7 +11,7 @@ arena: *std.heap.ArenaAllocator,
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
 items: std.StringHashMap(Item),
-ret_typ: Typ = undefined,
+ret_typ: Typ = .any,
 failer: *Failer,
 loops_nested: u16 = 0,
 current_generics: []const ast.Item.Generic = &.{},
@@ -572,7 +572,7 @@ fn getElemExprInfo(self: *Self, info: ExprInfo, location: Location) ?ExprInfo {
 fn unify(self: *Self, location: Location, a: Typ, b: Typ) Typ {
     if (a.unify(b, true)) |typ| {
         if (Typ.debug_unify) {
-            std.debug.print("==> {f}\n", .{typ});
+            std.log.debug("==> {f}\n", .{typ});
         }
         return typ;
     }
@@ -1090,7 +1090,7 @@ fn checkVar(
     switch (item.kind) {
         .fun => |header| {
             item.used = true;
-            vari.fun_meta = .{};
+            vari.fun_meta = @as(ast.Expr.FunMeta, undefined);
             return self.fillFunMetaHeader(&vari.fun_meta.?, header.*, location);
         },
         .struc, .typ => {
@@ -1223,7 +1223,7 @@ fn deinitItems(self: *Self) void {
 
 pub fn checkTypDecl(self: *Self, located: Typ.Name.Located) error{BadType}!?Typ {
     if (debug_check_typ) {
-        std.debug.print("checkTypDecl {f}\n", .{located.name});
+        std.log.debug("checkTypDecl {f}\n", .{located.name});
     }
     const item = self.items.getPtr(located.name.name) orelse {
         self.failer.fail(located.location, "item `{s}` is not declared", .{located.name.name});
@@ -1241,7 +1241,7 @@ pub fn checkTypDecl(self: *Self, located: Typ.Name.Located) error{BadType}!?Typ 
         .struc => |struc| {
             item.used = true;
             if (debug_check_typ) {
-                std.debug.print("item {s} used\n", .{located.name.name});
+                std.log.debug("item {s} used\n", .{located.name.name});
             }
             if (struc.generics.len != located.name.generics.len) {
                 self.failer.fail(

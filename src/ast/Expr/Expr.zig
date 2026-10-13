@@ -1,7 +1,7 @@
 const Location = @import("../../Location.zig");
+const Typ = @import("../../typ/mod.zig").Typ;
 pub const Binary = @import("Binary.zig");
 pub const Unary = @import("Unary.zig");
-const Typ = @import("../../typ/mod.zig").Typ;
 
 const Self = @This();
 
@@ -41,8 +41,8 @@ pub const Method = struct {
 };
 
 pub const FunMeta = struct {
-    generics: []Typ = undefined,
-    typ: Typ = undefined,
+    generics: []Typ,
+    typ: Typ,
 };
 
 pub const Subslice = struct {
@@ -54,12 +54,12 @@ pub const Subslice = struct {
 pub const Array = struct {
     mtyp: ?Typ,
     exprs: []Self,
-    typ: Typ = undefined,
+    typ: Typ = .any,
 };
 
 pub const Struct = struct {
     fields: []Struct.Field,
-    typ: Typ = undefined,
+    typ: Typ = .any,
 
     pub const Field = struct {
         name: []const u8,
@@ -75,12 +75,12 @@ pub const Struct = struct {
 
 pub const Int = struct {
     val: u64,
-    typ: Typ = undefined,
+    typ: Typ = .any,
 };
 
 // lol
 pub const Undef = struct {
-    typ: Typ = undefined,
+    typ: Typ = .any,
 };
 
 pub const Call = struct {
