@@ -132,6 +132,6 @@ fn ConcatStr(sep: []const u8) type {
 }
 
 test {
-    std.testing.refAllDecls(@This());
-    std.testing.refAllDecls(@import("tests.zig"));
+    _ = &main;
+    _ = @import("tests.zig");
 }
