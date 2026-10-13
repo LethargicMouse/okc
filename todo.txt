@@ -11,3 +11,4 @@ x 2026-10-14 2026-10-14 generic Typ recursion +refactor
 2026-10-14 typ: Typ to self: This +refactor
 2026-10-14 self to This +refactor
 2026-10-14 LocName.name -> LocName.bare +refactor
+2026-10-14 no *Loud parse funs +refactor

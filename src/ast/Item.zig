@@ -1,7 +1,7 @@
 const Location = @import("../Location.zig");
+const Typ = @import("../typ/mod.zig").Typ;
 const Expr = @import("Expr/Expr.zig");
 const Stmt = @import("Stmt.zig");
-const Typ = @import("../typ/mod.zig").Typ;
 
 name: []const u8,
 kind: Kind,

@@ -538,17 +538,17 @@ fn parseBranch(self: *Self) !ast.Stmt.Branch {
     try self.expectLoud(.parl);
     const condition = try self.parseExprLoud();
     try self.expectLoud(.parr);
-    const Stmts = try self.parseBlockLoud();
+    const body = try self.parseBlockLoud();
     return .{
         .condition = condition,
-        .body = Stmts,
+        .body = body,
     };
 }
 
 fn parseElseLoud(self: *Self) ![]ast.Stmt {
     try self.expectLoud(.els);
-    const Stmts = try self.parseBlockLoud();
-    return Stmts;
+    const body = try self.parseBlockLoud();
+    return body;
 }
 
 fn parseAssignStmtPostfix(self: *Self) !ExprStmtPostfix {
@@ -669,11 +669,11 @@ fn parseExprLoud(self: *Self) !ast.Expr {
 }
 
 fn parseExpr(self: *Self) !ast.Expr {
-    return self.parseExprPrior(0, false);
+    return self.parseExprPrior(0, .quiet);
 }
 
-fn parseExprPrior(self: *Self, prior: u8, loud: bool) Error!ast.Expr {
-    var res = try self.parseExprPosted(loud);
+fn parseExprPrior(self: *Self, prior: u8, mode: ParseMode) Error!ast.Expr {
+    var res = try self.parseExprPosted(mode);
     while (try self.parseBinPostfix(prior)) |bin_postfix| {
         const binary = try ast.arena.allocator().create(ast.Expr.Binary);
         binary.* = .{
@@ -692,7 +692,7 @@ fn parseExprPrior(self: *Self, prior: u8, loud: bool) Error!ast.Expr {
 fn parseBinPostfix(self: *Self, prior: u8) !?BinPostfix {
     const cursor_before = self.cursor;
     const kind = self.parseBinOp(prior) orelse return null;
-    const expr = self.parseExprPrior(kind.getPrior() + 1, true) catch |err| switch (err) {
+    const expr = self.parseExprPrior(kind.getPrior() + 1, .loud) catch |err| switch (err) {
         error.ParseFailed => {
             self.cursor = cursor_before;
             return null;
@@ -716,11 +716,11 @@ fn parseBinOp(self: *Self, prior: u8) ?ast.Expr.Binary.Kind {
 }
 
 fn parseExprPostedLoud(self: *Self) Error!ast.Expr {
-    return self.parseExprPosted(true);
+    return self.parseExprPosted(.loud);
 }
 
-fn parseExprPosted(self: *Self, loud: bool) Error!ast.Expr {
-    var res = try self.parseExprAtom(loud);
+fn parseExprPosted(self: *Self, mode: ParseMode) Error!ast.Expr {
+    var res = try self.parseExprAtom(mode);
     while (try self.parseMaybe(Postfix, parsePostfix)) |postfix| {
         switch (postfix.kind) {
             .method => |method_postfix| {
@@ -852,7 +852,7 @@ fn getLocation(self: Self) Location {
     return self.tokens[self.cursor].location;
 }
 
-fn parseExprAtom(self: *Self, loud: bool) Error!ast.Expr {
+fn parseExprAtom(self: *Self, mode: ParseMode) Error!ast.Expr {
     return self.parseEither(ast.Expr, .{
         parseAtExpr,
         parseParExpr,
@@ -868,7 +868,7 @@ fn parseExprAtom(self: *Self, loud: bool) Error!ast.Expr {
         parseTrueExpr,
         parseFalseExpr,
     }) catch |err| {
-        if (loud) {
+        if (mode == .loud) {
             try self.fail("<expr>");
         }
         return err;
@@ -877,7 +877,7 @@ fn parseExprAtom(self: *Self, loud: bool) Error!ast.Expr {
 
 fn parseAtExpr(self: *Self) !ast.Expr {
     const start = self.getLocation();
-    try self.expect(.at);
+    try self.expect(.att);
     const name = try self.parseNameLoud();
     if (std.mem.eql(u8, name, "sizeof")) {
         try self.expectLoud(.les);
@@ -1063,13 +1063,6 @@ fn parseName(self: *Self) ![]const u8 {
     return self.parseLexeme(.name);
 }
 
-fn parseIntLoud(self: *Self) ![]const u8 {
-    return self.parseInt() catch |err| {
-        try self.fail("<int>");
-        return err;
-    };
-}
-
 fn parseInt(self: *Self) !u64 {
     return self.parseLexeme(.int);
 }
@@ -1085,7 +1078,7 @@ fn parseStr(self: *Self) ![]const u8 {
 fn parseLexeme(
     self: *Self,
     comptime tag: @typeInfo(Lexeme).@"union".tag_type.?,
-) !std.meta.fieldInfo(Lexeme, tag).type {
+) !@typeInfo(Lexeme).@"union".field_types[@backingInt(tag)] {
     const next = self.tokens[self.cursor].lexeme;
     if (next == tag) {
         self.cursor += 1;
@@ -1199,4 +1192,9 @@ const ErrMsgs = struct {
         err_msgs.inner.deinit(gpa);
         err_msgs.* = undefined;
     }
+};
+
+const ParseMode = enum {
+    loud,
+    quiet,
 };

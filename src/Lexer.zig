@@ -182,7 +182,7 @@ fn lexByList(self: *Self) ?Token {
 }
 
 const lex_list = [_]LexPair{
-    .{ .str = "@", .lexeme = .at },
+    .{ .str = "@", .lexeme = .att },
     .{ .str = ">=", .lexeme = .moreq },
     .{ .str = ">", .lexeme = .mor },
     .{ .str = "|", .lexeme = .pipe },
@@ -257,7 +257,7 @@ pub const Token = struct { lexeme: Lexeme, location: Location };
 
 pub const Lexeme = union(enum) {
     amp,
-    at,
+    att,
     bral,
     brar,
     brek,
@@ -320,7 +320,7 @@ pub const Lexeme = union(enum) {
             .int_too_big => "<int too big>",
             .unclosed_char => "<unclosed char>",
             .invalid_char => "<invalid char>",
-            .at => "`@`",
+            .att => "`@`",
             .moreq => "`>=`",
             .mor => "`>`",
             .unre => "`unreachable`",
