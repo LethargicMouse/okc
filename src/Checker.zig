@@ -10,7 +10,6 @@ const Typ = @import("typ/mod.zig").Typ;
 const Self = @This();
 gpa: std.mem.Allocator,
 arena: *std.heap.ArenaAllocator,
-typ_mem: *memo.Memo(Typ),
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
 items: std.StringHashMap(Item),
@@ -24,14 +23,12 @@ solve_queue: std.ArrayList(SolveRequest) = .empty,
 pub fn init(
     gpa: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
-    typ_mem: *memo.Memo(Typ),
     failer: *Failer,
 ) error{OutOfMemory}!Self {
     return .{
         .gpa = gpa,
         .arena = arena,
         .failer = failer,
-        .typ_mem = typ_mem,
         .fun_arena = .init(gpa),
         .items = .init(gpa),
         .generics_usage = try .initEmpty(gpa, 0),
@@ -200,21 +197,21 @@ fn checkTyp(self: *Self, typ: Typ) error{OutOfMemory}!Typ {
 }
 
 fn checkFunTyp(self: *Self, fun: Typ.Fun) !Typ.Fun {
-    const params = try self.typ_mem.alloc(fun.params.len);
+    const params = try Typ.memo.alloc(fun.params.len);
     for (params, fun.params) |*target, param| {
         target.* = try self.checkTyp(param);
     }
     const new = try self.checkTyp(fun.ret_typ.*);
     return .{
-        .params = try self.typ_mem.save(params),
-        .ret_typ = try self.typ_mem.box(new),
+        .params = try Typ.memo.save(params),
+        .ret_typ = try Typ.memo.box(new),
     };
 }
 
 fn checkArrayTyp(self: *Self, array: Typ.Array) !Typ.Array {
     const new = try self.checkTyp(array.typ.*);
     return .{
-        .typ = try self.typ_mem.box(new),
+        .typ = try Typ.memo.box(new),
         .len = array.len,
     };
 }
@@ -222,7 +219,7 @@ fn checkArrayTyp(self: *Self, array: Typ.Array) !Typ.Array {
 fn checkSliceTyp(self: *Self, slice: Typ.Slice) !Typ.Slice {
     const new = try self.checkTyp(slice.typ.*);
     return .{
-        .typ = try self.typ_mem.box(new),
+        .typ = try Typ.memo.box(new),
         .mutable = slice.mutable,
     };
 }
@@ -230,7 +227,7 @@ fn checkSliceTyp(self: *Self, slice: Typ.Slice) !Typ.Slice {
 fn checkPtrTyp(self: *Self, ptr: Typ.Ptr) !Typ.Ptr {
     const new = try self.checkTyp(ptr.typ.*);
     return .{
-        .typ = try self.typ_mem.box(new),
+        .typ = try Typ.memo.box(new),
         .mutable = ptr.mutable,
     };
 }
@@ -256,14 +253,14 @@ fn checkLocNameTyp(self: *Self, located: Typ.Name.Located) !Typ {
 }
 
 fn checkNameTyp(self: *Self, name: Typ.Name) !Typ.Name {
-    const generics = try self.typ_mem.alloc(name.generics.len);
-    defer self.typ_mem.free(generics);
+    const generics = try Typ.memo.alloc(name.generics.len);
+    defer Typ.memo.free(generics);
     for (generics, name.generics) |*target, generic| {
         target.* = try self.checkTyp(generic);
     }
     return .{
         .name = name.name,
-        .generics = try self.typ_mem.save(generics),
+        .generics = try Typ.memo.save(generics),
     };
 }
 
@@ -363,20 +360,20 @@ fn solveTyp(self: Self, typ: Typ) error{OutOfMemory}!Typ {
         .array => |array| {
             const new = try self.solveTyp(array.typ.*);
             return .{ .array = .{
-                .typ = try self.typ_mem.box(new),
+                .typ = try Typ.memo.box(new),
                 .len = array.len,
             } };
         },
         .fun => |fun| {
-            const params = try self.typ_mem.alloc(fun.params.len);
-            defer self.typ_mem.free(params);
+            const params = try Typ.memo.alloc(fun.params.len);
+            defer Typ.memo.free(params);
             for (params, fun.params) |*target, param| {
                 target.* = try self.solveTyp(param);
             }
             const new = try self.solveTyp(fun.ret_typ.*);
             return .{ .fun = .{
-                .params = try self.typ_mem.save(params),
-                .ret_typ = try self.typ_mem.box(new),
+                .params = try Typ.memo.save(params),
+                .ret_typ = try Typ.memo.box(new),
             } };
         },
         .name => |name| return .{ .name = try self.solveNameTyp(name) },
@@ -387,14 +384,14 @@ fn solveTyp(self: Self, typ: Typ) error{OutOfMemory}!Typ {
         .ptr => |ptr| {
             const new = try self.solveTyp(ptr.typ.*);
             return .{ .ptr = .{
-                .typ = try self.typ_mem.box(new),
+                .typ = try Typ.memo.box(new),
                 .mutable = ptr.mutable,
             } };
         },
         .slice => |slice| {
             const new = try self.solveTyp(slice.typ.*);
             return .{ .slice = .{
-                .typ = try self.typ_mem.box(new),
+                .typ = try Typ.memo.box(new),
                 .mutable = false,
             } };
         },
@@ -404,13 +401,13 @@ fn solveTyp(self: Self, typ: Typ) error{OutOfMemory}!Typ {
 }
 
 fn solveNameTyp(self: Self, name: Typ.Name) !Typ.Name {
-    const generics = try self.typ_mem.alloc(name.generics.len);
-    defer self.typ_mem.free(generics);
+    const generics = try Typ.memo.alloc(name.generics.len);
+    defer Typ.memo.free(generics);
     for (generics, name.generics) |*target, generic| {
         target.* = try self.solveTyp(generic);
     }
     return .{
-        .generics = try self.typ_mem.save(generics),
+        .generics = try Typ.memo.save(generics),
         .name = name.name,
     };
 }
@@ -722,7 +719,7 @@ fn checkExpr(self: *Self, expr: *ast.Expr, hint: ExprHint) error{OutOfMemory}!Ex
         .unary => |unary| return self.checkUnary(unary, expr.location, hint.typ),
         .struc => |*struc| return self.checkStructExpr(struc, expr.location, hint.typ),
         .int => |*int| return self.checkInt(int, expr.location),
-        .str => return self.checkStr(),
+        .str => return checkStr(),
         .vari => |*vari| return self.checkVar(vari, expr.location, hint.mutable),
         .char => return .{
             .typ = .{ .prime = .u8 },
@@ -763,7 +760,7 @@ fn checkSubslice(self: *Self, subslice: *ast.Expr.Subslice, location: Location) 
             self.failer.fail(location, "cannot take slice of `{f}`", .{typ});
             return .{
                 .typ = .{ .slice = .{
-                    .typ = try self.typ_mem.box(.err),
+                    .typ = try Typ.memo.box(.err),
                     .mutable = true,
                 } },
                 .mutable = false,
@@ -791,7 +788,7 @@ fn checkArray(self: *Self, array: *ast.Expr.Array, hint: Typ, location: Location
     }
     if (array.exprs.len == 0) {
         const typ = Typ{ .array = .{
-            .typ = try self.typ_mem.box(inner_hint),
+            .typ = try Typ.memo.box(inner_hint),
             .len = 0,
         } };
         return .{
@@ -804,7 +801,7 @@ fn checkArray(self: *Self, array: *ast.Expr.Array, hint: Typ, location: Location
         inner_typ = self.unify(expr.location, inner_typ, info.typ);
     }
     array.typ = Typ{ .array = .{
-        .typ = try self.typ_mem.box(inner_typ),
+        .typ = try Typ.memo.box(inner_typ),
         .len = array.exprs.len,
     } };
     try self.solve_queue.append(self.gpa, .{
@@ -817,8 +814,8 @@ fn checkArray(self: *Self, array: *ast.Expr.Array, hint: Typ, location: Location
     };
 }
 
-fn checkStr(self: *Self) !ExprInfo {
-    const ptr = try self.typ_mem.box(.{ .prime = .u8 });
+fn checkStr() !ExprInfo {
+    const ptr = try Typ.memo.box(.{ .prime = .u8 });
     return .{
         .typ = .{ .slice = .{
             .typ = ptr,
@@ -843,7 +840,7 @@ fn checkNotb(self: *Self, expr: *ast.Expr) !ExprInfo {
 fn checkPtr(self: *Self, expr: *ast.Expr, hint: Typ) !ExprInfo {
     const mutable = if (hint == .ptr) hint.ptr.mutable else false;
     const info = try self.checkExpr(expr, .{ .mutable = mutable });
-    const ptr = try self.typ_mem.box(info.typ);
+    const ptr = try Typ.memo.box(info.typ);
     return .{
         .typ = .{ .ptr = .{
             .typ = ptr,
@@ -905,7 +902,7 @@ fn checkSliceStruc(
             } };
             const info = try self.checkExpr(&field.expr, .{ .typ = expected });
             const typ = self.unify(field.expr.location, expected, info.typ);
-            was_ptr = if (typ == .ptr) typ.ptr.typ else try self.typ_mem.box(.err);
+            was_ptr = if (typ == .ptr) typ.ptr.typ else try Typ.memo.box(.err);
         } else if (std.mem.eql(u8, field.name, "len")) {
             if (was_len) {
                 self.failer.newFieldSecond(field.location, field.name);
@@ -955,7 +952,7 @@ fn checkTypedStruc(
         generics = try self.makeGenerics(decl.generics.len);
     }
     defer if (name.generics.len == 0) {
-        defer self.typ_mem.free(generics);
+        defer Typ.memo.free(generics);
     };
     var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
     defer resolve_map.deinit();
@@ -967,7 +964,7 @@ fn checkTypedStruc(
     }
     self.checkFieldsInitialised(decl.fields, struc.fields, location);
     struc.typ = Typ{ .name = .{
-        .generics = try self.typ_mem.save(generics),
+        .generics = try Typ.memo.save(generics),
         .name = name.name,
     } };
     try self.solve_queue.append(self.gpa, .{
@@ -981,7 +978,7 @@ fn checkTypedStruc(
 }
 
 fn makeGenerics(self: *Self, len: usize) ![]const Typ {
-    const res = try self.typ_mem.alloc(len);
+    const res = try Typ.memo.alloc(len);
     for (res) |*target| {
         const lazy = try self.fun_arena.allocator().create(Typ);
         lazy.* = .any;
@@ -1025,13 +1022,9 @@ fn checkNewField(
         self.failer.noField(field.location, field.name, struc_typ);
         return;
     };
-    const decl_typ = try f_decl.typ.resolve(self.makeResolver(resolve_map));
+    const decl_typ = try f_decl.typ.resolve(Typ.makeResolver(resolve_map));
     const info = try self.checkExpr(&field.expr, .{ .typ = decl_typ });
     _ = self.unify(field.expr.location, decl_typ, info.typ);
-}
-
-fn makeResolver(self: Self, map: std.StringHashMap(Typ)) Typ.Resolver {
-    return .{ .map = map, .mem = self.typ_mem };
 }
 
 fn checkNamedStructExpr(self: *Self, named: *ast.Expr.Struct.Named, location: Location) !ExprInfo {
@@ -1104,7 +1097,7 @@ fn checkField(
         try resolve_map.put(generic.name, typ);
     }
     return .{
-        .typ = try fiel.typ.resolve(self.makeResolver(resolve_map)),
+        .typ = try fiel.typ.resolve(Typ.makeResolver(resolve_map)),
         .mutable = info.mutable,
     };
 }
@@ -1229,10 +1222,10 @@ fn fillFunMetaHeader(
         try resolve_map.put(generic.name, .{ .lazy = ptr });
     }
     fun_meta.generics = try ast.arena.allocator().alloc(Typ, header.generics.len);
-    const params = try self.typ_mem.alloc(header.params.len);
-    defer self.typ_mem.free(params);
+    const params = try Typ.memo.alloc(header.params.len);
+    defer Typ.memo.free(params);
     for (header.params, params) |param, *target| {
-        target.* = try param.typ.resolve(self.makeResolver(resolve_map));
+        target.* = try param.typ.resolve(Typ.makeResolver(resolve_map));
     }
     for (fun_meta.generics, header.generics) |*target, generic| {
         target.* = resolve_map.get(generic.name).?;
@@ -1241,10 +1234,10 @@ fn fillFunMetaHeader(
             .location = null,
         });
     }
-    const ret_typ = try header.ret_typ.resolve(self.makeResolver(resolve_map));
+    const ret_typ = try header.ret_typ.resolve(Typ.makeResolver(resolve_map));
     fun_meta.typ = .{ .fun = .{
-        .params = try self.typ_mem.save(params),
-        .ret_typ = try self.typ_mem.box(ret_typ),
+        .params = try Typ.memo.save(params),
+        .ret_typ = try Typ.memo.box(ret_typ),
     } };
     try self.solve_queue.append(self.gpa, .{
         .typ = &fun_meta.typ,

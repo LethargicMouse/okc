@@ -13,7 +13,6 @@ file: std.Io.File,
 writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 extra_buffer: std.ArrayList(u8) = .empty,
-typ_mem: *memo.Memo(Typ),
 items: std.StringHashMap(ast.Item),
 structs: HashMap(Name, Struct),
 consts: std.StringHashMap(Typ),
@@ -32,7 +31,6 @@ const FunReq = struct {
 pub fn init(
     io: std.Io,
     gpa: std.mem.Allocator,
-    typ_mem: *memo.Memo(Typ),
     write_buf: []u8,
     path: []const u8,
 ) error{ OutOfMemory, Handled }!Self {
@@ -43,7 +41,6 @@ pub fn init(
     return .{
         .io = io,
         .gpa = gpa,
-        .typ_mem = typ_mem,
         .file = file,
         .items = .init(gpa),
         .resolve_map = .init(gpa),
@@ -71,7 +68,7 @@ fn genAll(self: *Self) !void {
         .name = .{ .name = "main" },
         .fun = .{
             .params = &.{},
-            .ret_typ = try self.typ_mem.box(.{ .prime = .i32 }),
+            .ret_typ = try Typ.memo.box(.{ .prime = .i32 }),
         },
     });
     while (self.fun_queue.items.len != 0) {
@@ -252,7 +249,7 @@ fn genStruct(self: *Self, name: Name) Error!void {
     const field_typs = try self.gpa.alloc(Typ, struc.fields.len);
     defer self.gpa.free(field_typs);
     for (field_typs, struc.fields, 0..) |*typ, field, i| {
-        typ.* = try field.typ.resolve(self.makeResolver(resolve_map));
+        typ.* = try field.typ.resolve(Typ.makeResolver(resolve_map));
         const layout = try self.getLayout(typ.*);
         appendLayout(&struct_layout, layout);
         try fields.put(field.name, .{
@@ -614,12 +611,8 @@ fn genSizeof(self: *Self, typ: Typ) !TypVal {
 fn funResolver(self: Self) Typ.Resolver {
     return .{
         .map = self.resolve_map,
-        .mem = self.typ_mem,
+        .mem = &Typ.memo,
     };
-}
-
-fn makeResolver(self: Self, map: std.StringHashMap(Typ)) Typ.Resolver {
-    return .{ .map = map, .mem = self.typ_mem };
 }
 
 fn getLayout(self: *Self, typ: Typ) !Layout {
@@ -713,17 +706,7 @@ fn genNotb(self: *Self, expr: ast.Expr) !TypVal {
 
 fn genPtr(self: *Self, expr: ast.Expr) !TypVal {
     const ref = try self.genExprRef(expr);
-    return self.makePtrFromRef(ref);
-}
-
-fn makePtrFromRef(self: *Self, ref: Ref) !TypVal {
-    return .{
-        .typ = .{ .ptr = .{
-            .typ = try self.typ_mem.box(ref.inner_typ),
-            .mutable = false,
-        } },
-        .val = ref.val,
-    };
+    return ref.toPtrTypVal();
 }
 
 fn genUndef(undef: ast.Expr.Undef) !TypVal {
@@ -821,10 +804,10 @@ fn genSubslice(self: *Self, subslice: ast.Expr.Subslice) !TypVal {
     const start = try self.genExpr(subslice.start);
     const end = try self.genExpr(subslice.end);
     const ptr_ref = try self.genElemRef(ref, start);
-    const ptr = try self.makePtrFromRef(ptr_ref);
+    const ptr = try ptr_ref.toPtrTypVal();
     const len = try self.genBinary(.sub, start.typ, end.val, start.val);
     var res = TypVal{ .typ = .{ .slice = .{
-        .typ = try self.typ_mem.box(ptr_ref.inner_typ),
+        .typ = try Typ.memo.box(ptr_ref.inner_typ),
         .mutable = false,
     } }, .val = .undef };
     try self.genIV(&res, ptr, 0);
@@ -904,7 +887,7 @@ fn genBool(boo: bool) TypVal {
 
 fn genStr(self: *Self, str: []const u8) !TypVal {
     const info = try self.genStrDecl(str);
-    const ptr_u8 = try self.typ_mem.box(.{ .prime = .u8 });
+    const ptr_u8 = try Typ.memo.box(.{ .prime = .u8 });
     var res = TypVal{
         .typ = .{ .slice = .{
             .typ = ptr_u8,
@@ -1128,7 +1111,7 @@ fn genConstStr(self: *Self, str: []const u8) !Typ {
     const info = try self.genStrDecl(str);
     try self.print("%\"[]\" {{ ptr @.s{d}, i64 {d} }}", .{ info.tmp, info.len });
     return .{ .slice = .{
-        .typ = try self.typ_mem.box(.{ .prime = .u8 }),
+        .typ = try Typ.memo.box(.{ .prime = .u8 }),
         .mutable = false,
     } };
 }
@@ -1298,4 +1281,14 @@ const Val = union(enum) {
 const Ref = struct {
     val: Val,
     inner_typ: Typ,
+
+    fn toPtrTypVal(ref: Ref) !TypVal {
+        return .{
+            .typ = .{ .ptr = .{
+                .typ = try Typ.memo.box(ref.inner_typ),
+                .mutable = false,
+            } },
+            .val = ref.val,
+        };
+    }
 };

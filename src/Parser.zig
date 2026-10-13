@@ -10,7 +10,6 @@ const Typ = @import("typ/mod.zig").Typ;
 const Self = @This();
 gpa: std.mem.Allocator,
 tokens: []const Lexer.Token,
-ast_typ_memo: *Memo(Typ),
 err_msgs: ErrMsgs = .empty,
 tmp_name: []const u8 = "<unknown>",
 tmp_location: Location = .fake,
@@ -19,12 +18,10 @@ err_cursor: usize = 0,
 
 pub fn init(
     gpa: std.mem.Allocator,
-    ast_typ_memo: *Memo(Typ),
     tokens: []const Lexer.Token,
 ) Self {
     return .{
         .gpa = gpa,
-        .ast_typ_memo = ast_typ_memo,
         .tokens = tokens,
     };
 }
@@ -268,7 +265,7 @@ fn parseFunTyp(self: *Self) !Typ {
     const params = try self.parseSep(Typ, parseTypLoud);
     try self.expect(.parr);
     const ret_typ = try self.parseTypLoud();
-    const ptr = try self.ast_typ_memo.box(ret_typ);
+    const ptr = try Typ.memo.box(ret_typ);
     return .{ .fun = .{
         .params = params,
         .ret_typ = ptr,
@@ -283,7 +280,7 @@ fn parseSliceTyp(self: *Self) !Typ {
         error.ParseFailed => mutable = false,
     };
     const typ = try self.parseTypLoud();
-    const ptr = try self.ast_typ_memo.box(typ);
+    const ptr = try Typ.memo.box(typ);
     return .{ .slice = .{
         .typ = ptr,
         .mutable = mutable,
@@ -310,7 +307,7 @@ fn parseArrayTyp(self: *Self) !Typ {
     const len = try self.parseInt();
     try self.expectLoud(.brar);
     const typ = try self.parseTypLoud();
-    const ptr = try self.ast_typ_memo.box(typ);
+    const ptr = try Typ.memo.box(typ);
     return .{ .array = .{
         .len = len,
         .typ = ptr,
@@ -330,7 +327,7 @@ fn parseMutPtrTyp(self: *Self) !Typ {
     try self.expect(.amp);
     try self.expect(.mut);
     const typ = try self.parseTypLoud();
-    const ptr = try self.ast_typ_memo.box(typ);
+    const ptr = try Typ.memo.box(typ);
     return .{ .ptr = .{
         .typ = ptr,
         .mutable = true,
@@ -340,7 +337,7 @@ fn parseMutPtrTyp(self: *Self) !Typ {
 fn parsePtrTyp(self: *Self) !Typ {
     try self.expect(.amp);
     const typ = try self.parseTypLoud();
-    const ptr = try self.ast_typ_memo.box(typ);
+    const ptr = try Typ.memo.box(typ);
     return .{ .ptr = .{
         .typ = ptr,
         .mutable = false,

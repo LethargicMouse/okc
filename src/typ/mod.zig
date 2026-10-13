@@ -4,13 +4,6 @@ const Location = @import("../Location.zig");
 const Memo = @import("../memo.zig").Memo;
 
 pub const Typ = union(enum) {
-    pub const Array = @import("Array.zig");
-    pub const Name = @import("Name.zig");
-    pub const Ptr = @import("Ptr.zig");
-    pub const Slice = @import("Slice.zig");
-    pub const Fun = @import("Fun.zig");
-    pub const Resolver = @import("Resolver.zig");
-
     prime: Prime,
     name: Name,
     loc_name: Name.Located,
@@ -22,6 +15,19 @@ pub const Typ = union(enum) {
     any,
     int,
     err,
+
+    pub const Array = @import("Array.zig");
+    pub const Name = @import("Name.zig");
+    pub const Ptr = @import("Ptr.zig");
+    pub const Slice = @import("Slice.zig");
+    pub const Fun = @import("Fun.zig");
+    pub const Resolver = @import("Resolver.zig");
+
+    pub var memo: Memo(Typ) = undefined;
+
+    pub fn makeResolver(map: std.StringHashMap(Typ)) Typ.Resolver {
+        return .{ .map = map, .mem = &Typ.memo };
+    }
 
     pub fn getName(typ: Typ) ?Name {
         return switch (typ) {

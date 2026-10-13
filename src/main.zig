@@ -56,10 +56,10 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     ast.arena = .init(gpa);
     defer ast.arena.deinit();
 
-    var typ_mem = memo.Memo(Typ).init(gpa);
-    defer typ_mem.deinit();
+    Typ.memo = .init(gpa);
+    defer Typ.memo.deinit();
 
-    var parser = Parser.init(gpa, &typ_mem, tokens);
+    var parser = Parser.init(gpa, tokens);
     const module = try parser.run();
 
     var checker_arena = std.heap.ArenaAllocator.init(gpa);
@@ -70,7 +70,6 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var checker = try Checker.init(
         gpa,
         &checker_arena,
-        &typ_mem,
         &failer,
     );
     try checker.run(module);
@@ -84,7 +83,6 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var gen = try Codegen.init(
         io,
         gpa,
-        &typ_mem,
         &write_buf,
         out_ll_path,
     );
