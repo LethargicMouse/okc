@@ -249,7 +249,7 @@ fn genStruct(self: *Self, name: Name) Error!void {
     const field_typs = try self.gpa.alloc(Typ, struc.fields.len);
     defer self.gpa.free(field_typs);
     for (field_typs, struc.fields, 0..) |*typ, field, i| {
-        typ.* = try field.typ.resolve(Typ.makeResolver(resolve_map));
+        typ.* = try field.typ.resolve(resolve_map);
         const layout = try self.getLayout(typ.*);
         appendLayout(&struct_layout, layout);
         try fields.put(field.name, .{
@@ -600,18 +600,11 @@ fn genExpr(self: *Self, expr: ast.Expr) Error!TypVal {
 }
 
 fn genSizeof(self: *Self, typ: Typ) !TypVal {
-    const resolved = try typ.resolve(self.funResolver());
+    const resolved = try typ.resolve(self.resolve_map);
     const layout = try self.getLayout(resolved);
     return .{
         .typ = .{ .prime = .u64 },
         .val = .{ .int = layout.size },
-    };
-}
-
-fn funResolver(self: Self) Typ.Resolver {
-    return .{
-        .map = self.resolve_map,
-        .mem = &Typ.memo,
     };
 }
 

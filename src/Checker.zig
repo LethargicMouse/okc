@@ -1022,7 +1022,7 @@ fn checkNewField(
         self.failer.noField(field.location, field.name, struc_typ);
         return;
     };
-    const decl_typ = try f_decl.typ.resolve(Typ.makeResolver(resolve_map));
+    const decl_typ = try f_decl.typ.resolve(resolve_map);
     const info = try self.checkExpr(&field.expr, .{ .typ = decl_typ });
     _ = self.unify(field.expr.location, decl_typ, info.typ);
 }
@@ -1097,7 +1097,7 @@ fn checkField(
         try resolve_map.put(generic.name, typ);
     }
     return .{
-        .typ = try fiel.typ.resolve(Typ.makeResolver(resolve_map)),
+        .typ = try fiel.typ.resolve(resolve_map),
         .mutable = info.mutable,
     };
 }
@@ -1225,7 +1225,7 @@ fn fillFunMetaHeader(
     const params = try Typ.memo.alloc(header.params.len);
     defer Typ.memo.free(params);
     for (header.params, params) |param, *target| {
-        target.* = try param.typ.resolve(Typ.makeResolver(resolve_map));
+        target.* = try param.typ.resolve(resolve_map);
     }
     for (fun_meta.generics, header.generics) |*target, generic| {
         target.* = resolve_map.get(generic.name).?;
@@ -1234,7 +1234,7 @@ fn fillFunMetaHeader(
             .location = null,
         });
     }
-    const ret_typ = try header.ret_typ.resolve(Typ.makeResolver(resolve_map));
+    const ret_typ = try header.ret_typ.resolve(resolve_map);
     fun_meta.typ = .{ .fun = .{
         .params = try Typ.memo.save(params),
         .ret_typ = try Typ.memo.box(ret_typ),

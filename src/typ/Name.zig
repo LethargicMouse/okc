@@ -7,15 +7,15 @@ const Self = @This();
 name: []const u8,
 generics: []const Typ = &.{},
 
-pub fn resolve(self: Self, resolver: Typ.Resolver) error{OutOfMemory}!Self {
-    const generics = try resolver.mem.alloc(self.generics.len);
-    defer resolver.mem.free(generics);
+pub fn resolve(self: Self, resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!Self {
+    const generics = try Typ.memo.alloc(self.generics.len);
+    defer Typ.memo.free(generics);
     for (generics, self.generics) |*target, generic| {
-        target.* = try generic.resolve(resolver);
+        target.* = try generic.resolve(resolve_map);
     }
     return .{
         .name = self.name,
-        .generics = try resolver.mem.save(generics),
+        .generics = try Typ.memo.save(generics),
     };
 }
 

@@ -6,9 +6,9 @@ const Self = @This();
 len: u64,
 typ: *const Typ,
 
-pub fn resolve(self: Self, resolver: Typ.Resolver) error{OutOfMemory}!Self {
-    const new = try self.typ.resolve(resolver);
-    const new_ptr = try resolver.mem.box(new);
+pub fn resolve(self: Self, resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!Self {
+    const new = try self.typ.resolve(resolve_map);
+    const new_ptr = try Typ.memo.box(new);
     return .{
         .len = self.len,
         .typ = new_ptr,

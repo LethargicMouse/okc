@@ -6,15 +6,15 @@ const Self = @This();
 params: []const Typ,
 ret_typ: *const Typ,
 
-pub fn resolve(self: Self, resolver: Typ.Resolver) error{OutOfMemory}!Self {
-    const params = try resolver.mem.alloc(self.params.len);
+pub fn resolve(self: Self, resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!Self {
+    const params = try Typ.memo.alloc(self.params.len);
     for (params, self.params) |*target, param| {
-        target.* = try param.resolve(resolver);
+        target.* = try param.resolve(resolve_map);
     }
-    const ret_typ = try self.ret_typ.resolve(resolver);
-    const ptr = try resolver.mem.box(ret_typ);
+    const ret_typ = try self.ret_typ.resolve(resolve_map);
+    const ptr = try Typ.memo.box(ret_typ);
     return .{
-        .params = try resolver.mem.save(params),
+        .params = try Typ.memo.save(params),
         .ret_typ = ptr,
     };
 }

@@ -21,13 +21,8 @@ pub const Typ = union(enum) {
     pub const Ptr = @import("Ptr.zig");
     pub const Slice = @import("Slice.zig");
     pub const Fun = @import("Fun.zig");
-    pub const Resolver = @import("Resolver.zig");
 
     pub var memo: Memo(Typ) = undefined;
-
-    pub fn makeResolver(map: std.StringHashMap(Typ)) Typ.Resolver {
-        return .{ .map = map, .mem = &Typ.memo };
-    }
 
     pub fn getName(typ: Typ) ?Name {
         return switch (typ) {
@@ -37,25 +32,25 @@ pub const Typ = union(enum) {
         };
     }
 
-    pub fn resolve(typ: Typ, resolver: Typ.Resolver) error{OutOfMemory}!Typ {
+    pub fn resolve(typ: Typ, map: std.StringHashMap(Typ)) error{OutOfMemory}!Typ {
         switch (typ) {
-            .name => |name| if (resolver.map.get(name.name)) |resolved| {
+            .name => |name| if (map.get(name.name)) |resolved| {
                 return resolved;
             } else {
-                return .{ .name = try name.resolve(resolver) };
+                return .{ .name = try name.resolve(map) };
             },
-            .loc_name => |located| if (resolver.map.get(located.name.name)) |resolved| {
+            .loc_name => |located| if (map.get(located.name.name)) |resolved| {
                 return resolved;
             } else {
                 return .{ .loc_name = .{
-                    .name = try located.name.resolve(resolver),
+                    .name = try located.name.resolve(map),
                     .location = located.location,
                 } };
             },
-            .fun => |fun| return .{ .fun = try fun.resolve(resolver) },
-            .slice => |slice| return .{ .slice = try slice.resolve(resolver) },
-            .ptr => |ptr| return .{ .ptr = try ptr.resolve(resolver) },
-            .array => |array| return .{ .array = try array.resolve(resolver) },
+            .fun => |fun| return .{ .fun = try fun.resolve(map) },
+            .slice => |slice| return .{ .slice = try slice.resolve(map) },
+            .ptr => |ptr| return .{ .ptr = try ptr.resolve(map) },
+            .array => |array| return .{ .array = try array.resolve(map) },
             // lazy not resolved cuz I feel so
             .lazy, .any, .err, .prime, .int => return typ,
         }
