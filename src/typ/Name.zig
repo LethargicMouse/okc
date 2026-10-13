@@ -7,16 +7,20 @@ const Self = @This();
 name: []const u8,
 generics: []const Typ = &.{},
 
-pub fn resolve(self: Self, resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!Self {
+pub fn updateGenerics(self: Self, fun: anytype, args: anytype) !Self {
     const generics = try Typ.memo.alloc(self.generics.len);
     defer Typ.memo.free(generics);
     for (generics, self.generics) |*target, generic| {
-        target.* = try generic.resolve(resolve_map);
+        target.* = try @call(.auto, fun, .{generic} ++ args);
     }
     return .{
         .name = self.name,
         .generics = try Typ.memo.save(generics),
     };
+}
+
+pub fn resolve(self: Self, resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!Self {
+    return self.updateGenerics(Typ.resolve, .{resolve_map});
 }
 
 pub fn eql(a: Self, b: Self) bool {

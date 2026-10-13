@@ -33,27 +33,12 @@ pub const Typ = union(enum) {
     }
 
     pub fn resolve(typ: Typ, map: std.StringHashMap(Typ)) error{OutOfMemory}!Typ {
-        switch (typ) {
-            .name => |name| if (map.get(name.name)) |resolved| {
+        if (typ.getName()) |name| {
+            if (map.get(name.name)) |resolved| {
                 return resolved;
-            } else {
-                return .{ .name = try name.resolve(map) };
-            },
-            .loc_name => |located| if (map.get(located.name.name)) |resolved| {
-                return resolved;
-            } else {
-                return .{ .loc_name = .{
-                    .name = try located.name.resolve(map),
-                    .location = located.location,
-                } };
-            },
-            .fun => |fun| return .{ .fun = try fun.resolve(map) },
-            .slice => |slice| return .{ .slice = try slice.resolve(map) },
-            .ptr => |ptr| return .{ .ptr = try ptr.resolve(map) },
-            .array => |array| return .{ .array = try array.resolve(map) },
-            // lazy not resolved cuz I feel so
-            .lazy, .any, .err, .prime, .int => return typ,
+            }
         }
+        return typ.updateRec(resolve, .{map});
     }
 
     pub fn fromName(name: []const u8, location: Location) Typ {
@@ -276,6 +261,51 @@ pub const Typ = union(enum) {
                 return a;
             },
             .lazy, .any, .err, .int, .loc_name, .name => unreachable,
+        }
+    }
+
+    fn updateRec(typ: Typ, fun: anytype, args: anytype) !Typ {
+        switch (typ) {
+            .array => |array| {
+                const new = try @call(.auto, fun, .{array.typ.*} ++ args);
+                return .{ .array = .{
+                    .typ = try Typ.memo.box(new),
+                    .len = array.len,
+                } };
+            },
+            .fun => |fun_typ| {
+                const params = try Typ.memo.alloc(fun_typ.params.len);
+                defer Typ.memo.free(params);
+                for (params, fun_typ.params) |*target, param| {
+                    target.* = try @call(.auto, fun, .{param} ++ args);
+                }
+                const new = try @call(.auto, fun, .{fun_typ.ret_typ.*} ++ args);
+                return .{ .fun = .{
+                    .params = try Typ.memo.save(params),
+                    .ret_typ = try Typ.memo.box(new),
+                } };
+            },
+            .name => |name| return .{ .name = try name.updateGenerics(fun, args) },
+            .loc_name => |located| return .{ .loc_name = .{
+                .location = located.location,
+                .name = try located.name.updateGenerics(fun, args),
+            } },
+            .ptr => |ptr| {
+                const new = try @call(.auto, fun, .{ptr.typ.*} ++ args);
+                return .{ .ptr = .{
+                    .typ = try Typ.memo.box(new),
+                    .mutable = ptr.mutable,
+                } };
+            },
+            .slice => |slice| {
+                const new = try @call(.auto, fun, .{slice.typ.*} ++ args);
+                return .{ .slice = .{
+                    .typ = try Typ.memo.box(new),
+                    .mutable = false,
+                } };
+            },
+            .lazy => |inner| return try @call(.auto, fun, .{inner.*} ++ args),
+            .any, .err, .prime, .int => return typ,
         }
     }
 

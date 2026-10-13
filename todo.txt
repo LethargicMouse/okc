@@ -8,3 +8,5 @@ x 2026-10-14 2026-10-14 global Typ.memo +refactor
 2026-10-14 no Memo.free & Memo.alloc +refactor
 x 2026-10-14 2026-10-14 resolve with map only +refactor
 2026-10-14 generic Typ recursion +refactor
+2026-10-14 typ: Typ to self: This +refactor
+2026-10-14 self to This +refactor
