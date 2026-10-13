@@ -175,21 +175,10 @@ fn checkHeader(self: *Self, header: *ast.Item.Fun.Header) !void {
     self.current_generics = header.generics;
     try self.generics_usage.resize(self.gpa, header.generics.len, false);
     for (header.params) |*param| {
-        param.typ = try self.checkTyp(param.typ);
+        param.typ = try param.typ.check(self);
     }
-    header.ret_typ = try self.checkTyp(header.ret_typ);
+    header.ret_typ = try header.ret_typ.check(self);
     self.checkGenericsUsage();
-}
-
-fn checkTyp(self: *Self, typ: Typ) error{OutOfMemory}!Typ {
-    return switch (typ) {
-        .array => |array| .{ .array = try self.checkArrayTyp(array) },
-        .slice => |slice| .{ .slice = try self.checkSliceTyp(slice) },
-        .fun => |fun| .{ .fun = try self.checkFunTyp(fun) },
-        .loc_name => |located| self.checkLocNameTyp(located),
-        .ptr => |ptr| .{ .ptr = try self.checkPtrTyp(ptr) },
-        .prime, .any, .err, .int, .name, .lazy => typ,
-    };
 }
 
 fn checkFunTyp(self: *Self, fun: Typ.Fun) !Typ.Fun {
@@ -226,26 +215,6 @@ fn checkPtrTyp(self: *Self, ptr: Typ.Ptr) !Typ.Ptr {
         .typ = try Typ.memo.box(new),
         .mutable = ptr.mutable,
     };
-}
-
-fn checkLocNameTyp(self: *Self, located: Typ.Name.Located) !Typ {
-    const loc_name: Typ.Name.Located = .{
-        .location = located.location,
-        .name = try self.checkNameTyp(located.name),
-    };
-    for (self.current_generics, 0..) |generic, i| {
-        if (std.mem.eql(u8, generic.name, located.name.name)) {
-            self.generics_usage.set(i);
-            return .{ .loc_name = loc_name };
-        }
-    }
-    const maybe_resolved = self.checkTypDecl(loc_name) catch |err| switch (err) {
-        error.BadType => return .err,
-    };
-    if (maybe_resolved) |resolved| {
-        return resolved;
-    }
-    return .{ .loc_name = loc_name };
 }
 
 fn checkNameTyp(self: *Self, name: Typ.Name) !Typ.Name {
@@ -345,67 +314,10 @@ fn checkFun(self: *Self, fun: ast.Item.Fun, location: Location) !void {
     }
     self.freeVars(rbp);
     for (self.solve_queue.items) |req| {
-        req.typ.* = try self.solveTyp(req.typ.*);
+        req.typ.* = try req.typ.solve();
     }
     self.solve_queue.clearRetainingCapacity();
     _ = self.fun_arena.reset(.retain_capacity);
-}
-
-fn solveTyp(self: Self, typ: Typ) error{OutOfMemory}!Typ {
-    switch (typ) {
-        .array => |array| {
-            const new = try self.solveTyp(array.typ.*);
-            return .{ .array = .{
-                .typ = try Typ.memo.box(new),
-                .len = array.len,
-            } };
-        },
-        .fun => |fun| {
-            const params = try Typ.memo.alloc(fun.params.len);
-            defer Typ.memo.free(params);
-            for (params, fun.params) |*target, param| {
-                target.* = try self.solveTyp(param);
-            }
-            const new = try self.solveTyp(fun.ret_typ.*);
-            return .{ .fun = .{
-                .params = try Typ.memo.save(params),
-                .ret_typ = try Typ.memo.box(new),
-            } };
-        },
-        .name => |name| return .{ .name = try self.solveNameTyp(name) },
-        .loc_name => |located| return .{ .loc_name = .{
-            .location = located.location,
-            .name = try self.solveNameTyp(located.name),
-        } },
-        .ptr => |ptr| {
-            const new = try self.solveTyp(ptr.typ.*);
-            return .{ .ptr = .{
-                .typ = try Typ.memo.box(new),
-                .mutable = ptr.mutable,
-            } };
-        },
-        .slice => |slice| {
-            const new = try self.solveTyp(slice.typ.*);
-            return .{ .slice = .{
-                .typ = try Typ.memo.box(new),
-                .mutable = false,
-            } };
-        },
-        .lazy => |inner| return try self.solveTyp(inner.*),
-        .any, .err, .prime, .int => return typ,
-    }
-}
-
-fn solveNameTyp(self: Self, name: Typ.Name) !Typ.Name {
-    const generics = try Typ.memo.alloc(name.generics.len);
-    defer Typ.memo.free(generics);
-    for (generics, name.generics) |*target, generic| {
-        target.* = try self.solveTyp(generic);
-    }
-    return .{
-        .generics = try Typ.memo.save(generics),
-        .name = name.name,
-    };
 }
 
 fn checkLoopBlock(self: *Self, block: []ast.Stmt) !ControlFlow {
@@ -1309,7 +1221,7 @@ fn deinitItems(self: *Self) void {
     self.items.deinit();
 }
 
-fn checkTypDecl(self: *Self, located: Typ.Name.Located) error{BadType}!?Typ {
+pub fn checkTypDecl(self: *Self, located: Typ.Name.Located) error{BadType}!?Typ {
     if (debug_check_typ) {
         std.debug.print("checkTypDecl {f}\n", .{located.name});
     }
@@ -1409,4 +1321,3 @@ const SolveRequest = struct {
     location: ?Location,
     typ: *Typ,
 };
-

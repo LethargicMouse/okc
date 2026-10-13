@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Checker = @import("../Checker.zig");
 const Location = @import("../Location.zig");
 const Memo = @import("../memo.zig").Memo;
 
@@ -24,12 +25,44 @@ pub const Typ = union(enum) {
 
     pub var memo: Memo(Typ) = undefined;
 
+    pub fn check(
+        typ: Typ,
+        checker: *Checker,
+    ) error{OutOfMemory}!Typ {
+        if (typ == .name) {
+            return typ;
+        }
+        const res = try typ.updateRec(check, .{checker});
+        if (res == .loc_name) {
+            for (checker.current_generics, 0..) |generic, i| {
+                if (std.mem.eql(u8, generic.name, res.loc_name.name.name)) {
+                    checker.generics_usage.set(i);
+                    return res;
+                }
+            }
+            const maybe_resolved = checker.checkTypDecl(res.loc_name) catch |err| switch (err) {
+                error.BadType => return .err,
+            };
+            if (maybe_resolved) |resolved| {
+                return resolved;
+            }
+        }
+        return res;
+    }
+
     pub fn getName(typ: Typ) ?Name {
         return switch (typ) {
             .name => |name| name,
             .loc_name => |located| located.name,
             else => null,
         };
+    }
+
+    pub fn solve(typ: Typ) error{OutOfMemory}!Typ {
+        if (typ == .lazy) {
+            return typ.lazy.solve();
+        }
+        return typ.updateRec(solve, .{});
     }
 
     pub fn resolve(typ: Typ, map: std.StringHashMap(Typ)) error{OutOfMemory}!Typ {
@@ -304,8 +337,7 @@ pub const Typ = union(enum) {
                     .mutable = false,
                 } };
             },
-            .lazy => |inner| return try @call(.auto, fun, .{inner.*} ++ args),
-            .any, .err, .prime, .int => return typ,
+            .any, .err, .prime, .int, .lazy => return typ,
         }
     }
 
