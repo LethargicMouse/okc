@@ -2,9 +2,7 @@ const std = @import("std");
 
 const ast = @import("ast/mod.zig");
 const Failer = @import("Failer.zig");
-const HashMap = @import("hash_map.zig").HashMap;
 const Location = @import("Location.zig");
-const memo = @import("memo.zig");
 const Typ = @import("typ/mod.zig").Typ;
 
 const Self = @This();
@@ -52,8 +50,6 @@ fn checkModule(self: *Self, module: ast.Module) !void {
     self.checkMain(module.location);
     self.checkItemsUsage();
 }
-
-const ConvertError = error{ BadConvert, ConvertAny, OutOfMemory };
 
 fn checkItemsUsage(self: *Self) void {
     var iter = self.items.iterator();
@@ -1414,6 +1410,3 @@ const SolveRequest = struct {
     typ: *Typ,
 };
 
-const Module = struct {
-    items: std.StringHashMap(Item),
-};

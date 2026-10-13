@@ -5,7 +5,6 @@ const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
 const Failer = @import("Failer.zig");
 const Lexer = @import("Lexer.zig");
-const memo = @import("memo.zig");
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
 const Typ = @import("typ/mod.zig").Typ;

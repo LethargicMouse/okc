@@ -1,7 +1,6 @@
 const Expr = @import("mod.zig");
 const Lexeme = @import("../../Lexer.zig").Lexeme;
 
-const Self = @This();
 kind: Kind,
 expr: Expr,
 

@@ -4,7 +4,6 @@ const ast = @import("ast/mod.zig");
 const Lexer = @import("Lexer.zig");
 const Lexeme = Lexer.Lexeme;
 const Location = @import("Location.zig");
-const Memo = @import("memo.zig").Memo;
 const Typ = @import("typ/mod.zig").Typ;
 
 const Self = @This();
