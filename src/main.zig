@@ -80,7 +80,7 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
         return error.Handled;
     };
 
-    var write_buf: [256]u8 = undefined;
+    var write_buf: [4096]u8 = undefined;
     var gen = try Codegen.init(
         io,
         gpa,
