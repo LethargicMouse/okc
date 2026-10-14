@@ -5,7 +5,7 @@ x 2026-10-14 2026-10-14 exprs out of ast +refactor
 x 2026-10-14 2026-10-14 stmts out of ast +refactor
 2026-10-14 no semicolons +change
 x 2026-10-14 2026-10-14 items info to items +refactor
-2026-10-14 no Memo.free & Memo.alloc +refactor
+x 2026-10-14 2026-10-14 no Memo.free & Memo.alloc +refactor
 x 2026-10-14 2026-10-14 resolve with map only +refactor
 x 2026-10-14 2026-10-14 generic Typ recursion +refactor
 2026-10-14 typ: Typ to self: This +refactor
@@ -15,3 +15,4 @@ x 2026-10-14 2026-10-14 generic Typ recursion +refactor
 2026-10-14 remove Branch +refactor
 2026-10-14 Module.Info +refactor
 2026-10-14 move Declare to Item +refactor
+2026-10-14 ast.arena: Allocator +refactor

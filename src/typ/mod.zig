@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const ast = @import("../ast/mod.zig");
 const Checker = @import("../Checker.zig");
 const Location = @import("../Location.zig");
 const Memo = @import("../memo.zig").Memo;
@@ -312,8 +313,8 @@ pub const Typ = union(enum) {
                 } };
             },
             .fun => |fun_typ| {
-                const params = try Typ.memo.alloc(fun_typ.params.len);
-                defer Typ.memo.free(params);
+                const params = try ast.arena.allocator().alloc(Typ, fun_typ.params.len);
+                defer ast.arena.allocator().free(params);
                 for (params, fun_typ.params) |*target, param| {
                     target.* = try @call(.auto, fun, .{param} ++ args);
                 }

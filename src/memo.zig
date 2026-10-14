@@ -42,13 +42,5 @@ pub fn Memo(T: type) type {
             try self.slice_map.put(res, {});
             return res;
         }
-
-        pub fn alloc(self: Self, len: usize) error{OutOfMemory}![]T {
-            return self.slice_map.allocator.alloc(T, len);
-        }
-
-        pub fn free(self: Self, slice: []const T) void {
-            self.slice_map.allocator.free(slice);
-        }
     };
 }

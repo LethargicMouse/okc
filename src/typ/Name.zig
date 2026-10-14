@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const ast = @import("../ast/mod.zig");
 const Location = @import("../Location.zig");
 const Typ = @import("mod.zig").Typ;
 
@@ -8,8 +9,8 @@ name: []const u8,
 generics: []const Typ = &.{},
 
 pub fn updateGenerics(self: Self, fun: anytype, args: anytype) !Self {
-    const generics = try Typ.memo.alloc(self.generics.len);
-    defer Typ.memo.free(generics);
+    const generics = try ast.arena.allocator().alloc(Typ, self.generics.len);
+    defer ast.arena.allocator().free(generics);
     for (generics, self.generics) |*target, generic| {
         target.* = try @call(.auto, fun, .{generic} ++ args);
     }
