@@ -2,15 +2,13 @@ const std = @import("std");
 
 fn HashContext(K: type) type {
     return struct {
-        const Self = @This();
-
-        pub fn hash(_: Self, key: K) u64 {
+        pub fn hash(_: @This(), key: K) u64 {
             var hasher = std.hash.Wyhash.init(0);
             key.hashIn(&hasher);
             return hasher.final();
         }
 
-        pub fn eql(_: Self, a: K, b: K) bool {
+        pub fn eql(_: @This(), a: K, b: K) bool {
             return a.eql(b);
         }
     };
@@ -22,15 +20,13 @@ pub fn HashMap(K: type, V: type) type {
 
 fn PtrHashContext(K: type) type {
     return struct {
-        const Self = @This();
-
-        pub fn hash(_: Self, key: *const K) u64 {
+        pub fn hash(_: @This(), key: *const K) u64 {
             var hasher = std.hash.Wyhash.init(0);
             key.hashIn(&hasher);
             return hasher.final();
         }
 
-        pub fn eql(_: Self, a: *const K, b: *const K) bool {
+        pub fn eql(_: @This(), a: *const K, b: *const K) bool {
             return a.eql(b.*);
         }
     };
@@ -42,9 +38,7 @@ pub fn PtrHashMap(K: type, V: type) type {
 
 fn SliceHashContext(K: type) type {
     return struct {
-        const Self = @This();
-
-        pub fn hash(_: Self, keys: []const K) u64 {
+        pub fn hash(_: @This(), keys: []const K) u64 {
             var hasher = std.hash.Wyhash.init(0);
             for (keys) |key| {
                 key.hashIn(&hasher);
@@ -52,7 +46,7 @@ fn SliceHashContext(K: type) type {
             return hasher.final();
         }
 
-        pub fn eql(_: Self, as: []const K, bs: []const K) bool {
+        pub fn eql(_: @This(), as: []const K, bs: []const K) bool {
             if (as.len != bs.len) {
                 return false;
             }

@@ -3,8 +3,6 @@ const Typ = @import("../typ/mod.zig").Typ;
 pub const Binary = @import("Binary.zig");
 pub const Unary = @import("Unary.zig");
 
-const Self = @This();
-
 location: Location,
 kind: Kind,
 
@@ -33,10 +31,12 @@ pub const Var = struct {
     fun_meta: ?FunMeta = null,
 };
 
+const Expr = @This();
+
 pub const Method = struct {
-    expr: Self,
+    expr: Expr,
     vari: Var,
-    args: []Self,
+    args: []Expr,
     name_location: Location,
 };
 
@@ -46,14 +46,14 @@ pub const FunMeta = struct {
 };
 
 pub const Subslice = struct {
-    expr: Self,
-    start: Self,
-    end: Self,
+    expr: Expr,
+    start: Expr,
+    end: Expr,
 };
 
 pub const Array = struct {
     mtyp: ?Typ,
-    exprs: []Self,
+    exprs: []Expr,
     typ: Typ = .any,
 };
 
@@ -63,7 +63,7 @@ pub const Struct = struct {
 
     pub const Field = struct {
         name: []const u8,
-        expr: Self,
+        expr: Expr,
         location: Location,
     };
 
@@ -84,16 +84,16 @@ pub const Undef = struct {
 };
 
 pub const Call = struct {
-    expr: Self,
-    args: []Self,
+    expr: Expr,
+    args: []Expr,
 };
 
 pub const Field = struct {
-    expr: Self,
+    expr: Expr,
     name: []const u8,
 };
 
 pub const Elem = struct {
-    expr: Self,
-    index: Self,
+    expr: Expr,
+    index: Expr,
 };

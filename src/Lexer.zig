@@ -4,12 +4,11 @@ const Location = @import("Location.zig");
 const Pos = @import("Pos.zig");
 const Source = @import("Source.zig");
 
-const Self = @This();
 source: Source,
 poses: []const Pos,
 cursor: usize = 0,
 
-pub fn init(gpa: std.mem.Allocator, source: Source) error{OutOfMemory}!Self {
+pub fn init(gpa: std.mem.Allocator, source: Source) error{OutOfMemory}!@This() {
     const poses = try Pos.makePoses(gpa, source.code);
     return .{
         .source = source,
@@ -17,7 +16,7 @@ pub fn init(gpa: std.mem.Allocator, source: Source) error{OutOfMemory}!Self {
     };
 }
 
-pub fn lex(self: *Self, gpa: std.mem.Allocator) error{OutOfMemory}![]const Token {
+pub fn lex(self: *@This(), gpa: std.mem.Allocator) error{OutOfMemory}![]const Token {
     defer self.deinit(gpa);
     var vec = std.ArrayList(Token).empty;
     errdefer vec.deinit(gpa);
@@ -25,7 +24,7 @@ pub fn lex(self: *Self, gpa: std.mem.Allocator) error{OutOfMemory}![]const Token
     return vec.toOwnedSlice(gpa);
 }
 
-fn populate(self: *Self, gpa: std.mem.Allocator, res: *std.ArrayList(Token)) !void {
+fn populate(self: *@This(), gpa: std.mem.Allocator, res: *std.ArrayList(Token)) !void {
     while (true) {
         const before_skip = self.cursor;
         self.skip();
@@ -44,7 +43,7 @@ fn populate(self: *Self, gpa: std.mem.Allocator, res: *std.ArrayList(Token)) !vo
     }
 }
 
-fn skip(self: *Self) void {
+fn skip(self: *@This()) void {
     var dirty = true;
     while (dirty) {
         dirty = false;
@@ -53,7 +52,7 @@ fn skip(self: *Self) void {
     }
 }
 
-fn skipSpaces(self: *Self, dirty: *bool) void {
+fn skipSpaces(self: *@This(), dirty: *bool) void {
     const spaces = self.takeWhile(std.ascii.isWhitespace);
     if (spaces.len > 0) {
         dirty.* = true;
@@ -61,7 +60,7 @@ fn skipSpaces(self: *Self, dirty: *bool) void {
     }
 }
 
-fn skipComment(self: *Self, dirty: *bool) void {
+fn skipComment(self: *@This(), dirty: *bool) void {
     if (std.mem.startsWith(u8, self.getRest(), "//")) {
         dirty.* = true;
         while (self.cursor < self.source.code.len and self.source.code[self.cursor] != '\n') {
@@ -73,7 +72,7 @@ fn skipComment(self: *Self, dirty: *bool) void {
     }
 }
 
-fn lexNext(self: *Self) ?Token {
+fn lexNext(self: *@This()) ?Token {
     return self.lexByList() orelse
         self.lexVerbal() orelse
         self.lexInt() orelse
@@ -81,7 +80,7 @@ fn lexNext(self: *Self) ?Token {
         self.lexChar();
 }
 
-fn lexChar(self: *Self) ?Token {
+fn lexChar(self: *@This()) ?Token {
     const rest = self.getRest();
     if (std.mem.startsWith(u8, rest, "'")) {
         if (rest.len == 1) {
@@ -109,7 +108,7 @@ fn lexChar(self: *Self) ?Token {
     return null;
 }
 
-fn lexStr(self: *Self) ?Token {
+fn lexStr(self: *@This()) ?Token {
     if (self.source.code[self.cursor] != '"') {
         return null;
     }
@@ -128,7 +127,7 @@ fn lexStr(self: *Self) ?Token {
     return self.makeToken(.{ .str = str }, end + 1 - start);
 }
 
-fn lexInt(self: *Self) ?Token {
+fn lexInt(self: *@This()) ?Token {
     const res = self.takeWhile(std.ascii.isDigit);
     if (res.len == 0) {
         return null;
@@ -139,7 +138,7 @@ fn lexInt(self: *Self) ?Token {
     return self.makeToken(.{ .int = int }, res.len);
 }
 
-fn lexVerbal(self: *Self) ?Token {
+fn lexVerbal(self: *@This()) ?Token {
     var res = self.lexName() orelse return null;
     const name = res.lexeme.name;
     inline for (verbal_list) |pair| {
@@ -172,7 +171,7 @@ const verbal_list = [_]LexPair{
     .{ .str = "return", .lexeme = .ret },
 };
 
-fn lexByList(self: *Self) ?Token {
+fn lexByList(self: *@This()) ?Token {
     inline for (lex_list) |pair| {
         if (std.mem.startsWith(u8, self.getRest(), pair.str)) {
             return self.makeToken(pair.lexeme, pair.str.len);
@@ -209,11 +208,11 @@ const lex_list = [_]LexPair{
     .{ .str = "}", .lexeme = .curr },
 };
 
-fn getRest(self: Self) []const u8 {
+fn getRest(self: @This()) []const u8 {
     return self.source.code[self.cursor..];
 }
 
-fn lexName(self: *Self) ?Token {
+fn lexName(self: *@This()) ?Token {
     const res = self.takeWhile(isNameChar);
     if (res.len != 0 and isNameFirstChar(res[0])) {
         return self.makeToken(.{ .name = res }, res.len);
@@ -221,7 +220,7 @@ fn lexName(self: *Self) ?Token {
     return null;
 }
 
-fn takeWhile(self: Self, predicate: fn (u8) bool) []const u8 {
+fn takeWhile(self: @This(), predicate: fn (u8) bool) []const u8 {
     var i = self.cursor;
     while (i < self.source.code.len and predicate(self.source.code[i])) {
         i += 1;
@@ -237,7 +236,7 @@ fn isNameChar(c: u8) bool {
     return isNameFirstChar(c) or std.ascii.isDigit(c);
 }
 
-fn makeToken(self: *Self, lexeme: Lexeme, len: usize) Token {
+fn makeToken(self: *@This(), lexeme: Lexeme, len: usize) Token {
     const location = Location{
         .name = self.source.name,
         .start = self.poses[self.cursor],
@@ -248,7 +247,7 @@ fn makeToken(self: *Self, lexeme: Lexeme, len: usize) Token {
     return .{ .lexeme = lexeme, .location = location };
 }
 
-fn deinit(self: *Self, gpa: std.mem.Allocator) void {
+fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     gpa.free(self.poses);
     self.* = undefined;
 }

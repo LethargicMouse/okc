@@ -3,31 +3,30 @@ const std = @import("std");
 const Location = @import("Location.zig");
 const Typ = @import("typ/mod.zig").Typ;
 
-const Self = @This();
 errors_cnt: u16 = 0,
 
-pub fn init() Self {
+pub fn init() @This() {
     return .{};
 }
 
-pub fn ensureNoErrors(self: Self) error{Handled}!void {
+pub fn ensureNoErrors(self: @This()) error{Handled}!void {
     if (self.errors_cnt != 0) {
         std.log.err("check failed with {} errors", .{self.errors_cnt});
         return error.Handled;
     }
 }
 
-pub fn fail(self: *Self, location: Location, comptime msg: []const u8, args: anytype) void {
+pub fn fail(self: *@This(), location: Location, comptime msg: []const u8, args: anytype) void {
     std.log.err("in {f}\n     " ++ msg ++ "\n", .{location} ++ args);
     self.errors_cnt += 1;
 }
 
-pub fn unused(self: *Self, location: Location, name: []const u8) void {
+pub fn unused(self: *@This(), location: Location, name: []const u8) void {
     self.fail(location, "item `{s}` is never used", .{name});
 }
 
 pub fn alreadyDeclared(
-    self: *Self,
+    self: *@This(),
     location: Location,
     name: []const u8,
     prev: Location,
@@ -39,11 +38,11 @@ pub fn alreadyDeclared(
     );
 }
 
-pub fn notMut(self: *Self, location: Location) void {
+pub fn notMut(self: *@This(), location: Location) void {
     self.fail(location, "it is immutable", .{});
 }
 
-pub fn wrongTyp(self: *Self, location: Location, a: Typ, b: Typ) void {
+pub fn wrongTyp(self: *@This(), location: Location, a: Typ, b: Typ) void {
     self.fail(location,
         \\wrong type:
         \\         expected  {f}
@@ -51,16 +50,16 @@ pub fn wrongTyp(self: *Self, location: Location, a: Typ, b: Typ) void {
     , .{ a, b });
 }
 
-pub fn newFieldSecond(self: *Self, location: Location, name: []const u8) void {
+pub fn newFieldSecond(self: *@This(), location: Location, name: []const u8) void {
     self.fail(location, "field `{s}` is already initialized", .{name});
 }
 
-pub fn notInit(self: *Self, location: Location, name: []const u8) void {
+pub fn notInit(self: *@This(), location: Location, name: []const u8) void {
     self.fail(location, "field `{s}` is not initialized", .{name});
 }
 
 pub fn noField(
-    self: *Self,
+    self: *@This(),
     location: Location,
     field: []const u8,
     typ: Typ,
@@ -68,17 +67,17 @@ pub fn noField(
     self.fail(location, "type `{f}` has no field named `{s}`", .{ typ, field });
 }
 
-pub fn notStruct(self: *Self, location: Location, typ: Typ) void {
+pub fn notStruct(self: *@This(), location: Location, typ: Typ) void {
     self.fail(location, "type `{f}` is not a struct", .{typ});
 }
 
-pub fn cannotInfer(self: *Self, typ: Typ, location: Location) void {
+pub fn cannotInfer(self: *@This(), typ: Typ, location: Location) void {
     self.fail(location, "cannot infer type", .{});
     if (typ != .any) {
         std.log.info("best guess is `{f}`\n", .{typ});
     }
 }
 
-pub fn notDeclared(self: *Self, location: Location, name: []const u8) void {
+pub fn notDeclared(self: *@This(), location: Location, name: []const u8) void {
     self.fail(location, "item `{s}` is not declared", .{name});
 }

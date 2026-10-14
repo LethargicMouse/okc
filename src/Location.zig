@@ -2,13 +2,12 @@ const std = @import("std");
 
 const Pos = @import("Pos.zig");
 
-const Self = @This();
 name: []const u8,
 start: Pos,
 end: Pos,
 lines: []const []const u8,
 
-pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
     try writer.print(
         \\`{s}` at {f}:
         \\     |
@@ -39,7 +38,7 @@ fn underline(writer: *std.Io.Writer, start: usize, end: usize) std.Io.Writer.Err
     }
 }
 
-pub fn combine(a: Self, b: Self) Self {
+pub fn combine(a: @This(), b: @This()) @This() {
     return .{
         .name = a.name,
         .lines = a.lines,
@@ -48,19 +47,19 @@ pub fn combine(a: Self, b: Self) Self {
     };
 }
 
-pub const fake = Self{
+pub const fake = @This(){
     .lines = &.{},
     .name = "<unknown>",
     .start = .start,
     .end = .start,
 };
 
-pub fn eql(self: Self, other: Self) bool {
+pub fn eql(self: @This(), other: @This()) bool {
     return self.start.eql(other.start) and self.end.eql(other.end) and
         std.mem.eql(u8, self.name, other.name);
 }
 
-pub fn hashIn(self: Self, hasher: *std.hash.Wyhash) void {
+pub fn hashIn(self: @This(), hasher: *std.hash.Wyhash) void {
     hasher.update(self.name);
     hasher.update(std.mem.asBytes(&self.start));
     hasher.update(std.mem.asBytes(&self.end));

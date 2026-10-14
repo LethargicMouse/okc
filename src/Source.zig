@@ -1,13 +1,12 @@
 const std = @import("std");
 
-const Self = @This();
 code: []const u8,
 name: []const u8,
 lines: []const []const u8,
 
 const Error = error{ OutOfMemory, Handled };
 
-pub fn read(io: std.Io, gpa: std.mem.Allocator, path: []const u8) Error!Self {
+pub fn read(io: std.Io, gpa: std.mem.Allocator, path: []const u8) Error!@This() {
     const code = std.Io.Dir.cwd().readFileAlloc(io, path, gpa, .unlimited) catch {
         std.log.err("failed to read `{s}`", .{path});
         return error.Handled;
@@ -26,7 +25,7 @@ pub fn read(io: std.Io, gpa: std.mem.Allocator, path: []const u8) Error!Self {
     };
 }
 
-pub fn deinit(self: *Self, gpa: std.mem.Allocator) void {
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     gpa.free(self.code);
     gpa.free(self.lines);
     self.* = undefined;

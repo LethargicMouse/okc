@@ -1,11 +1,10 @@
 const std = @import("std");
 
-const Self = @This();
 line: u32,
 symbol: u32,
 
-pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) error{OutOfMemory}![]const Self {
-    var vec = try std.ArrayList(Self).initCapacity(gpa, code.len + 2);
+pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) error{OutOfMemory}![]const @This() {
+    var vec = try std.ArrayList(@This()).initCapacity(gpa, code.len + 2);
     var current = start;
     for (code) |c| {
         try vec.append(gpa, current);
@@ -24,12 +23,12 @@ pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) error{OutOfMemory}![]
     return vec.toOwnedSlice(gpa);
 }
 
-pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
     try writer.print("{}:{}", .{ self.line, self.symbol });
 }
 
-pub const start = Self{ .line = 1, .symbol = 1 };
+pub const start = @This(){ .line = 1, .symbol = 1 };
 
-pub fn eql(self: Self, other: Self) bool {
+pub fn eql(self: @This(), other: @This()) bool {
     return self.line == other.line and self.symbol == other.symbol;
 }

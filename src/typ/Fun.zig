@@ -2,11 +2,10 @@ const std = @import("std");
 
 const Typ = @import("mod.zig").Typ;
 
-const Self = @This();
 params: []const Typ,
 ret_typ: *const Typ,
 
-pub fn resolve(self: Self, resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!Self {
+pub fn resolve(self: @This(), resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!@This() {
     const params = try Typ.memo.alloc(self.params.len);
     for (params, self.params) |*target, param| {
         target.* = try param.resolve(resolve_map);
@@ -19,7 +18,7 @@ pub fn resolve(self: Self, resolve_map: std.StringHashMap(Typ)) error{OutOfMemor
     };
 }
 
-pub fn eql(a: Self, b: Self) bool {
+pub fn eql(a: @This(), b: @This()) bool {
     if (a.ret_typ != b.ret_typ) {
         return false;
     }
@@ -31,14 +30,14 @@ pub fn eql(a: Self, b: Self) bool {
     return true;
 }
 
-pub fn hashIn(self: Self, hasher: *std.hash.Wyhash) void {
+pub fn hashIn(self: @This(), hasher: *std.hash.Wyhash) void {
     for (self.params) |param| {
         param.hashIn(hasher);
     }
     self.ret_typ.hashIn(hasher);
 }
 
-pub fn format(self: Self, writer: *std.Io.Writer) !void {
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
     try writer.writeAll("fn(");
     if (self.params.len != 0) {
         try self.params[0].format(writer);

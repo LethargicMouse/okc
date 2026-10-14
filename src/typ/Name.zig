@@ -4,11 +4,10 @@ const ast = @import("../ast/mod.zig");
 const Location = @import("../Location.zig");
 const Typ = @import("mod.zig").Typ;
 
-const Self = @This();
 name: []const u8,
 generics: []const Typ = &.{},
 
-pub fn updateGenerics(self: Self, fun: anytype, args: anytype) !Self {
+pub fn updateGenerics(self: @This(), fun: anytype, args: anytype) !@This() {
     const generics = try ast.arena.allocator().alloc(Typ, self.generics.len);
     defer ast.arena.allocator().free(generics);
     for (generics, self.generics) |*target, generic| {
@@ -20,11 +19,11 @@ pub fn updateGenerics(self: Self, fun: anytype, args: anytype) !Self {
     };
 }
 
-pub fn resolve(self: Self, resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!Self {
+pub fn resolve(self: @This(), resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!@This() {
     return self.updateGenerics(Typ.resolve, .{resolve_map});
 }
 
-pub fn eql(a: Self, b: Self) bool {
+pub fn eql(a: @This(), b: @This()) bool {
     if (!std.mem.eql(u8, a.name, b.name)) {
         return false;
     }
@@ -36,7 +35,7 @@ pub fn eql(a: Self, b: Self) bool {
     return true;
 }
 
-pub fn hashIn(self: Self, hasher: *std.hash.Wyhash) void {
+pub fn hashIn(self: @This(), hasher: *std.hash.Wyhash) void {
     hasher.update(self.name);
     // `self.name` determines number of `self.generics`
     for (self.generics) |gen| {
@@ -44,7 +43,7 @@ pub fn hashIn(self: Self, hasher: *std.hash.Wyhash) void {
     }
 }
 
-pub fn format(self: Self, writer: *std.Io.Writer) !void {
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
     try writer.writeAll(self.name);
     if (self.generics.len != 0) {
         try writer.print("<{f}", .{self.generics[0]});
@@ -55,7 +54,9 @@ pub fn format(self: Self, writer: *std.Io.Writer) !void {
     }
 }
 
+const Name = @This();
+
 pub const Located = struct {
-    name: Self,
+    name: Name,
     location: Location,
 };
