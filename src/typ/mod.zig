@@ -36,7 +36,7 @@ pub const Typ = union(enum) {
         const res = try self.updateRec(check, .{checker});
         if (res == .loc_name) {
             for (checker.current_generics, 0..) |generic, i| {
-                if (std.mem.eql(u8, generic.name, res.loc_name.name.name)) {
+                if (std.mem.eql(u8, generic.name, res.loc_name.bare.name)) {
                     checker.generics_usage.set(i);
                     return res;
                 }
@@ -54,7 +54,7 @@ pub const Typ = union(enum) {
     pub fn getName(self: @This()) ?Name {
         return switch (self) {
             .name => |name| name,
-            .loc_name => |located| located.name,
+            .loc_name => |located| located.bare,
             else => null,
         };
     }
@@ -80,7 +80,7 @@ pub const Typ = union(enum) {
             return .{ .prime = prime };
         }
         return .{ .loc_name = .{
-            .name = .{ .name = name },
+            .bare = .{ .name = name },
             .location = location,
         } };
     }
@@ -132,7 +132,7 @@ pub const Typ = union(enum) {
     pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (self) {
             .prime => |prime| try prime.format(writer),
-            .loc_name => |located| try located.name.format(writer),
+            .loc_name => |located| try located.bare.format(writer),
             .name => |name| try name.format(writer),
             .fun => |fun| try fun.format(writer),
             .ptr => |ptr| try ptr.format(writer),
@@ -327,7 +327,7 @@ pub const Typ = union(enum) {
             .name => |name| return .{ .name = try name.updateGenerics(fun, args) },
             .loc_name => |located| return .{ .loc_name = .{
                 .location = located.location,
-                .name = try located.name.updateGenerics(fun, args),
+                .bare = try located.bare.updateGenerics(fun, args),
             } },
             .ptr => |ptr| {
                 const new = try @call(.auto, fun, .{ptr.typ.*} ++ args);

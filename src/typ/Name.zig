@@ -57,6 +57,6 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
 const Name = @This();
 
 pub const Located = struct {
-    name: Name,
+    bare: Name,
     location: Location,
 };

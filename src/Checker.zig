@@ -721,7 +721,7 @@ fn checkStructExpr(
         .mutable = false,
     };
     const name = switch (hint) {
-        .loc_name => |located| located.name,
+        .loc_name => |located| located.bare,
         .name => |name| name,
         .slice => |slice| return self.checkSliceStruc(
             slice,
@@ -995,7 +995,7 @@ fn getTypName(self: *@This(), norm: Typ, location: Location) ?Typ.Name {
     switch (norm) {
         .err => return null,
         .name => |name| return name,
-        .loc_name => |located| return located.name,
+        .loc_name => |located| return located.bare,
         .slice, .array, .any, .lazy, .int => {
             std.log.err("getTypName: {f}", .{norm});
             unreachable;
@@ -1174,15 +1174,15 @@ fn deinitItems(self: *@This()) void {
 
 pub fn checkTypDecl(self: *@This(), located: Typ.Name.Located) error{BadType}!?Typ {
     if (debug_check_typ) {
-        std.log.debug("checkTypDecl {f}\n", .{located.name});
+        std.log.debug("checkTypDecl {f}\n", .{located.bare});
     }
-    const item = self.items.getPtr(located.name.name) orelse {
-        self.failer.fail(located.location, "item `{s}` is not declared", .{located.name.name});
+    const item = self.items.getPtr(located.bare.name) orelse {
+        self.failer.fail(located.location, "item `{s}` is not declared", .{located.bare.name});
         return error.BadType;
     };
     switch (item.kind) {
         .fun, .vari => {
-            self.failer.fail(located.location, "item `{s}` is not a type", .{located.name.name});
+            self.failer.fail(located.location, "item `{s}` is not a type", .{located.bare.name});
             return error.BadType;
         },
         .typ => |typ| {
@@ -1192,13 +1192,13 @@ pub fn checkTypDecl(self: *@This(), located: Typ.Name.Located) error{BadType}!?T
         .struc => |struc| {
             item.used = true;
             if (debug_check_typ) {
-                std.log.debug("item {s} used\n", .{located.name.name});
+                std.log.debug("item {s} used\n", .{located.bare.name});
             }
-            if (struc.generics.len != located.name.generics.len) {
+            if (struc.generics.len != located.bare.generics.len) {
                 self.failer.fail(
                     located.location,
                     "expected {} generics\n        found {}",
-                    .{ struc.generics.len, located.name.generics.len },
+                    .{ struc.generics.len, located.bare.generics.len },
                 );
             }
             return null;

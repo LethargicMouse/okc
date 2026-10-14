@@ -629,8 +629,8 @@ fn getLayout(self: *@This(), typ: Typ) !Layout {
             return self.structs.get(name).?.layout;
         },
         .loc_name => |located| {
-            try self.genStruct(located.name);
-            return self.structs.get(located.name).?.layout;
+            try self.genStruct(located.bare);
+            return self.structs.get(located.bare).?.layout;
         },
         .any, .err, .int, .lazy => unreachable,
     }
@@ -1230,7 +1230,7 @@ const LlvmTyp = struct {
             .slice => try writer.writeAll("%\"[]\""),
             .ptr, .fun => try writer.writeAll("ptr"),
             .name => |name| try writer.print("%\"{f}\"", .{name}),
-            .loc_name => |located| try writer.print("%\"{f}\"", .{located.name}),
+            .loc_name => |located| try writer.print("%\"{f}\"", .{located.bare}),
             .lazy, .any, .int, .err => unreachable,
         }
     }

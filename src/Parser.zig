@@ -295,7 +295,7 @@ fn parseGenericTyp(self: *@This()) !Typ {
     const generics = try self.parseSep(Typ, parseTypLoud);
     try self.expect(.mor);
     return .{ .loc_name = .{
-        .name = .{
+        .bare = .{
             .name = name,
             .generics = generics,
         },
