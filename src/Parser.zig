@@ -33,7 +33,7 @@ pub fn run(self: *@This()) error{ OutOfMemory, Handled }!ast.Module {
         std.log.err("failed to parse {f}\n{f}\n        found  {s}", .{
             self.tokens[self.err_cursor].location,
             self.err_msgs,
-            self.tokens[self.err_cursor].lexeme.describe(),
+            Lexeme.describe(self.tokens[self.err_cursor].lexeme),
         });
         if (self.err_cursor != 0) {
             const before = self.tokens[self.err_cursor - 1];
@@ -47,16 +47,16 @@ pub fn run(self: *@This()) error{ OutOfMemory, Handled }!ast.Module {
 }
 
 fn parseModule(self: *@This()) !ast.Module {
-    const items = try self.many(parseItemLoud, .{});
+    const items = try self.many(parseItem, .{});
     const location = self.getLocation();
-    try self.expect(.eof);
+    try self.expect(.eof, .quiet);
     return .{
         .items = items,
         .location = location,
     };
 }
 
-fn parseItemLoud(self: *@This()) Error!Item {
+fn parseItem(self: *@This()) Error!Item {
     return self.either(.{
         parseFunItem,
         parseStructItem,
@@ -71,10 +71,10 @@ fn parseItemLoud(self: *@This()) Error!Item {
 }
 
 fn parseUseItem(self: *@This()) !Item {
-    try self.expect(.use);
+    try self.expect(.use, .quiet);
     const location = self.getLocation();
-    const name = try self.parseNameLoud();
-    try self.expectLoud(.semi);
+    const name = try self.parseName(.loud);
+    try self.expect(.semi, .loud);
     return .{
         .location = location,
         .name = name,
@@ -83,12 +83,12 @@ fn parseUseItem(self: *@This()) !Item {
 }
 
 fn parseTypAliasItem(self: *@This()) !Item {
-    try self.expect(.typ);
+    try self.expect(.typ, .quiet);
     const location = self.getLocation();
-    const name = try self.parseNameLoud();
-    try self.expectLoud(.equ);
-    const typ = try self.parseTypLoud();
-    try self.expectLoud(.semi);
+    const name = try self.parseName(.loud);
+    try self.expect(.equ, .loud);
+    const typ = try self.parseTyp();
+    try self.expect(.semi, .loud);
     return .{
         .name = name,
         .location = location,
@@ -135,13 +135,13 @@ fn parseStructItem(self: *@This()) !Item {
 }
 
 fn parseStruct(self: *@This()) !Item.Struct {
-    try self.expect(.struc);
+    try self.expect(.struc, .quiet);
     const location = self.getLocation();
-    const name = try self.parseNameLoud();
+    const name = try self.parseName(.loud);
     const generics = try self.maybe(parseGenerics, .{}) orelse &.{};
-    try self.expectLoud(.curl);
-    const fields = try self.sep(parseFieldDeclLoud, .{});
-    try self.expect(.curr);
+    try self.expect(.curl, .loud);
+    const fields = try self.sep(parseFieldDecl, .{});
+    try self.expect(.curr, .quiet);
     self.tmp_location = location;
     self.tmp_name = name;
     return .{
@@ -151,26 +151,26 @@ fn parseStruct(self: *@This()) !Item.Struct {
 }
 
 fn parseGenerics(self: *@This()) ![]const Item.Generic {
-    try self.expect(.les);
-    const res = try self.sep(parseGenericLoud, .{});
-    try self.expect(.mor);
+    try self.expect(.les, .quiet);
+    const res = try self.sep(parseGeneric, .{});
+    try self.expect(.mor, .quiet);
     return res;
 }
 
-fn parseGenericLoud(self: *@This()) !Item.Generic {
+fn parseGeneric(self: *@This()) !Item.Generic {
     const location = self.getLocation();
-    const name = try self.parseNameLoud();
+    const name = try self.parseName(.loud);
     return .{
         .name = name,
         .location = location,
     };
 }
 
-fn parseFieldDeclLoud(self: *@This()) !Item.Struct.Field {
+fn parseFieldDecl(self: *@This()) !Item.Struct.Field {
     const location = self.getLocation();
-    const name = try self.parseNameLoud();
-    try self.expectLoud(.colon);
-    const typ = try self.parseTypLoud();
+    const name = try self.parseName(.loud);
+    try self.expect(.colon, .loud);
+    const typ = try self.parseTyp();
     const default = try self.maybe(parseAssignPostfix, .{});
     return .{
         .name = name,
@@ -181,31 +181,23 @@ fn parseFieldDeclLoud(self: *@This()) !Item.Struct.Field {
 }
 
 fn parseExtFun(self: *@This()) !Item.Fun.Extern {
-    try self.expect(.ext);
-    const header = try self.parseHeaderLoud();
-    try self.expectLoud(.semi);
+    try self.expect(.ext, .quiet);
+    const header = try self.parseHeader(.loud);
+    try self.expect(.semi, .loud);
     return .{
         .header = header,
     };
 }
 
-fn parseHeaderLoud(self: *@This()) !Item.Fun.Header {
-    const header = try self.maybe(parseHeader, .{});
-    return header orelse {
-        try self.fail("`fn`");
-        return error.ParseFailed;
-    };
-}
-
-fn parseHeader(self: *@This()) !Item.Fun.Header {
-    try self.expect(.fun);
+fn parseHeader(self: *@This(), mode: ParseMode) !Item.Fun.Header {
+    try self.expect(.fun, mode);
     self.tmp_location = self.getLocation();
-    self.tmp_name = try self.parseNameLoud();
+    self.tmp_name = try self.parseName(.loud);
     const generics = try self.maybe(parseGenerics, .{}) orelse &.{};
-    try self.expectLoud(.parl);
-    const params = try self.sep(parseParamLoud, .{});
-    try self.expect(.parr);
-    const ret_typ = try self.parseTypLoud();
+    try self.expect(.parl, .loud);
+    const params = try self.sep(parseParam, .{});
+    try self.expect(.parr, .quiet);
+    const ret_typ = try self.parseTyp();
     return .{
         .generics = generics,
         .params = params,
@@ -213,31 +205,28 @@ fn parseHeader(self: *@This()) !Item.Fun.Header {
     };
 }
 
-fn sep(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse) {
-    var vec = std.ArrayList(ParseRes(parse)).empty;
+fn sep(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) {
+    var vec = std.ArrayList(ParseRes(parse, args)).empty;
     defer vec.deinit(self.gpa);
-    if (try self.maybe(parse, .{})) |first| {
+    if (try self.maybe(parse, args)) |first| {
         try vec.append(self.gpa, first);
         while (true) {
-            self.expectLoud(.comma) catch |err| switch (err) {
-                error.ParseFailed => break,
-                error.OutOfMemory => return error.OutOfMemory,
-            };
+            try self.maybe(expect, .{ .comma, .loud }) orelse break;
             if (try self.maybe(parse, args)) |item| {
                 try vec.append(self.gpa, item);
             } else break;
         }
     }
-    const slice = try ast.arena.allocator().alloc(ParseRes(parse), vec.items.len);
+    const slice = try ast.arena.allocator().alloc(ParseRes(parse, args), vec.items.len);
     @memcpy(slice, vec.items);
     return slice;
 }
 
-fn parseParamLoud(self: *@This()) !Item.Fun.Header.Param {
+fn parseParam(self: *@This()) !Item.Fun.Header.Param {
     const location = self.getLocation();
-    const name = try self.parseNameLoud();
-    try self.expectLoud(.colon);
-    const typ = try self.parseTypLoud();
+    const name = try self.parseName(.loud);
+    try self.expect(.colon, .loud);
+    const typ = try self.parseTyp();
     return .{
         .name = name,
         .typ = typ,
@@ -245,7 +234,7 @@ fn parseParamLoud(self: *@This()) !Item.Fun.Header.Param {
     };
 }
 
-fn parseTypLoud(self: *@This()) Error!Typ {
+fn parseTyp(self: *@This()) Error!Typ {
     return self.either(.{
         parseFunTyp,
         parseGenericTyp,
@@ -261,11 +250,11 @@ fn parseTypLoud(self: *@This()) Error!Typ {
 }
 
 fn parseFunTyp(self: *@This()) Error!Typ {
-    try self.expect(.fun);
-    try self.expectLoud(.parl);
-    const params = try self.sep(parseTypLoud, .{});
-    try self.expect(.parr);
-    const ret_typ = try self.parseTypLoud();
+    try self.expect(.fun, .quiet);
+    try self.expect(.parl, .loud);
+    const params = try self.sep(parseTyp, .{});
+    try self.expect(.parr, .quiet);
+    const ret_typ = try self.parseTyp();
     const ptr = try Typ.memo.box(ret_typ);
     return .{ .fun = .{
         .params = params,
@@ -274,13 +263,13 @@ fn parseFunTyp(self: *@This()) Error!Typ {
 }
 
 fn parseSliceTyp(self: *@This()) !Typ {
-    try self.expect(.bral);
-    try self.expectLoud(.brar);
+    try self.expect(.bral, .quiet);
+    try self.expect(.brar, .loud);
     var mutable = true;
-    self.expect(.mut) catch |err| switch (err) {
-        error.ParseFailed => mutable = false,
+    try self.maybe(expect, .{ .mut, .quiet }) orelse {
+        mutable = false;
     };
-    const typ = try self.parseTypLoud();
+    const typ = try self.parseTyp();
     const ptr = try Typ.memo.box(typ);
     return .{ .slice = .{
         .typ = ptr,
@@ -290,10 +279,10 @@ fn parseSliceTyp(self: *@This()) !Typ {
 
 fn parseGenericTyp(self: *@This()) Error!Typ {
     const location = self.getLocation();
-    const name = try self.parseName();
-    try self.expect(.les);
-    const generics = try self.sep(parseTypLoud, .{});
-    try self.expect(.mor);
+    const name = try self.parseName(.quiet);
+    try self.expect(.les, .quiet);
+    const generics = try self.sep(parseTyp, .{});
+    try self.expect(.mor, .quiet);
     return .{ .loc_name = .{
         .bare = .{
             .name = name,
@@ -304,10 +293,10 @@ fn parseGenericTyp(self: *@This()) Error!Typ {
 }
 
 fn parseArrayTyp(self: *@This()) !Typ {
-    try self.expect(.bral);
+    try self.expect(.bral, .quiet);
     const len = try self.parseInt();
-    try self.expectLoud(.brar);
-    const typ = try self.parseTypLoud();
+    try self.expect(.brar, .loud);
+    const typ = try self.parseTyp();
     const ptr = try Typ.memo.box(typ);
     return .{ .array = .{
         .len = len,
@@ -315,7 +304,7 @@ fn parseArrayTyp(self: *@This()) !Typ {
     } };
 }
 
-fn either(self: *@This(), comptime parses: anytype) !ParseRes(parses[0]) {
+fn either(self: *@This(), comptime parses: anytype) !ParseRes(parses[0], .{}) {
     inline for (parses) |parse| {
         if (try self.maybe(parse, .{})) |res| {
             return res;
@@ -325,9 +314,9 @@ fn either(self: *@This(), comptime parses: anytype) !ParseRes(parses[0]) {
 }
 
 fn parseMutPtrTyp(self: *@This()) Error!Typ {
-    try self.expect(.amp);
-    try self.expect(.mut);
-    const typ = try self.parseTypLoud();
+    try self.expect(.amp, .quiet);
+    try self.expect(.mut, .quiet);
+    const typ = try self.parseTyp();
     const ptr = try Typ.memo.box(typ);
     return .{ .ptr = .{
         .typ = ptr,
@@ -336,8 +325,8 @@ fn parseMutPtrTyp(self: *@This()) Error!Typ {
 }
 
 fn parsePtrTyp(self: *@This()) Error!Typ {
-    try self.expect(.amp);
-    const typ = try self.parseTypLoud();
+    try self.expect(.amp, .quiet);
+    const typ = try self.parseTyp();
     const ptr = try Typ.memo.box(typ);
     return .{ .ptr = .{
         .typ = ptr,
@@ -347,26 +336,27 @@ fn parsePtrTyp(self: *@This()) Error!Typ {
 
 fn parseVerbalTyp(self: *@This()) Error!Typ {
     const location = self.getLocation();
-    const name = try self.parseName();
+    const name = try self.parseName(.quiet);
     return Typ.fromName(name, location);
 }
 
-fn many(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse) {
-    var vec = std.ArrayList(ParseRes(parse)).empty;
+fn many(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) {
+    var vec = std.ArrayList(ParseRes(parse, args)).empty;
     defer vec.deinit(self.gpa);
     while (try self.maybe(parse, args)) |item| {
         try vec.append(self.gpa, item);
     }
-    const slice = try ast.arena.allocator().alloc(ParseRes(parse), vec.items.len);
+    const slice = try ast.arena.allocator().alloc(ParseRes(parse, args), vec.items.len);
     @memcpy(slice, vec.items);
     return slice;
 }
 
-fn ParseRes(fun: anytype) type {
-    return @typeInfo(@typeInfo(@TypeOf(fun)).@"fn".return_type.?).error_union.payload;
+fn ParseRes(fun: anytype, args: anytype) type {
+    return @typeInfo(@TypeOf(@call(.auto, fun, .{@as(*@This(), undefined)} ++ args)))
+        .error_union.payload;
 }
 
-fn maybe(self: *@This(), parse: anytype, args: anytype) !?ParseRes(parse) {
+fn maybe(self: *@This(), parse: anytype, args: anytype) !?ParseRes(parse, args) {
     const cursor_before = self.cursor;
     const res = @call(.auto, parse, .{self} ++ args) catch |err| switch (err) {
         error.ParseFailed => {
@@ -379,10 +369,10 @@ fn maybe(self: *@This(), parse: anytype, args: anytype) !?ParseRes(parse) {
 }
 
 fn parseFun(self: *@This()) !Item.Fun {
-    const header = try self.parseHeader();
+    const header = try self.parseHeader(.quiet);
     const location = self.tmp_location;
     const name = self.tmp_name;
-    const block = try self.parseBlockLoud();
+    const block = try self.parseBlock();
     self.tmp_location = location;
     self.tmp_name = name;
     return .{
@@ -391,14 +381,14 @@ fn parseFun(self: *@This()) !Item.Fun {
     };
 }
 
-fn parseBlockLoud(self: *@This()) Error![]Stmt {
-    try self.expectLoud(.curl);
-    const stmts = try self.many(parseStmtLoud, .{});
-    try self.expect(.curr);
+fn parseBlock(self: *@This()) Error![]Stmt {
+    try self.expect(.curl, .loud);
+    const stmts = try self.many(parseStmt, .{});
+    try self.expect(.curr, .quiet);
     return stmts;
 }
 
-fn parseStmtLoud(self: *@This()) !Stmt {
+fn parseStmt(self: *@This()) !Stmt {
     return self.either(.{
         parseUnreachableStmt,
         parseBreakStmt,
@@ -417,8 +407,8 @@ fn parseStmtLoud(self: *@This()) !Stmt {
 
 fn parseUnreachableStmt(self: *@This()) !Stmt {
     const location = self.getLocation();
-    try self.expect(.unre);
-    try self.expectLoud(.semi);
+    try self.expect(.unre, .quiet);
+    try self.expect(.semi, .loud);
     return .{
         .location = location,
         .kind = .unre,
@@ -427,8 +417,8 @@ fn parseUnreachableStmt(self: *@This()) !Stmt {
 
 fn parseBreakStmt(self: *@This()) !Stmt {
     const location = self.getLocation();
-    try self.expect(.brek);
-    try self.expectLoud(.semi);
+    try self.expect(.brek, .quiet);
+    try self.expect(.semi, .loud);
     return .{
         .location = location,
         .kind = .brek,
@@ -439,8 +429,8 @@ fn parseOpAssignStmtPostfix(
     self: *@This(),
 ) !ExprStmtPostfix {
     const kind = try self.parseOpAssignBinOp();
-    try self.expect(.equ);
-    const expr = try self.parseExprLoud();
+    try self.expect(.equ, .quiet);
+    const expr = try self.parseExpr(.loud);
     return .{ .op_assign = .{
         .kind = kind,
         .expr = expr,
@@ -459,10 +449,10 @@ fn parseOpAssignBinOp(self: *@This()) !Expr.Binary.Kind {
 
 fn parseIgnoreStmt(self: *@This()) !Stmt {
     const location = self.getLocation();
-    try self.expect(.wild);
-    try self.expectLoud(.equ);
-    const expr = try self.parseExprLoud();
-    try self.expectLoud(.semi);
+    try self.expect(.wild, .quiet);
+    try self.expect(.equ, .loud);
+    const expr = try self.parseExpr(.loud);
+    try self.expect(.semi, .loud);
     return .{
         .location = location,
         .kind = .{ .ignore = .{
@@ -473,15 +463,15 @@ fn parseIgnoreStmt(self: *@This()) !Stmt {
 
 fn parseForStmt(self: *@This()) !Stmt {
     const location = self.getLocation();
-    try self.expect(.whi);
-    try self.expectLoud(.parl);
+    try self.expect(.whi, .quiet);
+    try self.expect(.parl, .loud);
     const vari_location = self.getLocation();
-    const vari = try self.parseNameLoud();
-    try self.expectLoud(.colon);
-    const expr = try self.parseExprLoud();
+    const vari = try self.parseName(.loud);
+    try self.expect(.colon, .loud);
+    const expr = try self.parseExpr(.loud);
     const mend = try self.maybe(parseRangeEnd, .{});
-    try self.expectLoud(.parr);
-    const body = try self.parseBlockLoud();
+    try self.expect(.parr, .loud);
+    const body = try self.parseBlock();
     if (mend) |end| {
         return .{
             .location = location,
@@ -506,23 +496,23 @@ fn parseForStmt(self: *@This()) !Stmt {
 }
 
 fn parseRangeEnd(self: *@This()) !Expr {
-    try self.expect(.dot2);
-    return self.parseExprLoud();
+    try self.expect(.dot2, .quiet);
+    return self.parseExpr(.loud);
 }
 
 fn parseWhileStmt(self: *@This()) !Stmt {
     const location = self.getLocation();
-    try self.expect(.whi);
+    try self.expect(.whi, .quiet);
     const branch = try self.parseBranch();
     return .{ .location = location, .kind = .{ .whi = .{ .branch = branch } } };
 }
 
 fn parseIfStmt(self: *@This()) !Stmt {
     const location = self.getLocation();
-    try self.expect(.iff);
+    try self.expect(.iff, .quiet);
     const branch = try self.parseBranch();
     const else_ifs = try self.many(parseElseIf, .{});
-    const else_branch = try self.maybe(parseElseLoud, .{}) orelse @constCast(&.{});
+    const else_branch = try self.maybe(parseElse, .{}) orelse @constCast(&.{});
     return .{
         .location = location,
         .kind = .{ .iff = .{
@@ -534,26 +524,26 @@ fn parseIfStmt(self: *@This()) !Stmt {
 }
 
 fn parseElseIf(self: *@This()) !Stmt.Branch {
-    try self.expect(.els);
-    try self.expect(.iff);
+    try self.expect(.els, .quiet);
+    try self.expect(.iff, .quiet);
     const branch = try self.parseBranch();
     return branch;
 }
 
 fn parseBranch(self: *@This()) !Stmt.Branch {
-    try self.expectLoud(.parl);
-    const condition = try self.parseExprLoud();
-    try self.expectLoud(.parr);
-    const body = try self.parseBlockLoud();
+    try self.expect(.parl, .loud);
+    const condition = try self.parseExpr(.loud);
+    try self.expect(.parr, .loud);
+    const body = try self.parseBlock();
     return .{
         .condition = condition,
         .body = body,
     };
 }
 
-fn parseElseLoud(self: *@This()) ![]Stmt {
-    try self.expectLoud(.els);
-    const body = try self.parseBlockLoud();
+fn parseElse(self: *@This()) ![]Stmt {
+    try self.expect(.els, .loud);
+    const body = try self.parseBlock();
     return body;
 }
 
@@ -563,8 +553,8 @@ fn parseAssignStmtPostfix(self: *@This()) !ExprStmtPostfix {
 }
 
 fn parseAssignPostfix(self: *@This()) !Expr {
-    try self.expect(.equ);
-    return self.parseExprLoud();
+    try self.expect(.equ, .quiet);
+    return self.parseExpr(.loud);
 }
 
 fn parseDeclareStmt(self: *@This()) !Stmt {
@@ -576,14 +566,14 @@ fn parseDeclareStmt(self: *@This()) !Stmt {
 }
 
 fn parseDeclare(self: *@This()) !Stmt.Declare.Named {
-    try self.expect(.let);
+    try self.expect(.let, .quiet);
     const mutable = try self.maybe(parseMutable, .{}) orelse false;
     const location = self.getLocation();
-    const name = try self.parseNameLoud();
-    const typ = try self.maybe(parseTypAnnotLoud, .{});
-    try self.expectLoud(.equ);
-    const expr = try self.parseExprLoud();
-    try self.expectLoud(.semi);
+    const name = try self.parseName(.loud);
+    const typ = try self.maybe(parseTypAnnot, .{});
+    try self.expect(.equ, .loud);
+    const expr = try self.parseExpr(.loud);
+    try self.expect(.semi, .loud);
     self.tmp_location = location;
     return .{
         .name = name,
@@ -596,20 +586,20 @@ fn parseDeclare(self: *@This()) !Stmt.Declare.Named {
 }
 
 fn parseMutable(self: *@This()) Error!bool {
-    try self.expect(.mut);
+    try self.expect(.mut, .quiet);
     return true;
 }
 
-fn parseTypAnnotLoud(self: *@This()) !Typ {
-    try self.expectLoud(.colon);
-    const typ = try self.parseTypLoud();
+fn parseTypAnnot(self: *@This()) !Typ {
+    try self.expect(.colon, .loud);
+    const typ = try self.parseTyp();
     return typ;
 }
 
 fn parseExprStmt(self: *@This()) !Stmt {
-    const expr = try self.parseExpr();
+    const expr = try self.parseExpr(.quiet);
     const postfix = try self.parseExprStmtPostfix();
-    try self.expectLoud(.semi);
+    try self.expect(.semi, .loud);
     switch (postfix) {
         .none => return .{ .location = expr.location, .kind = .{ .expr = expr } },
         .assign => |right| {
@@ -643,10 +633,10 @@ fn parseExprStmtPostfix(self: *@This()) !ExprStmtPostfix {
 }
 
 fn parseCallPostfix(self: *@This()) !Postfix {
-    try self.expect(.parl);
-    const args = try self.sep(parseExprLoud, .{});
+    try self.expect(.parl, .quiet);
+    const args = try self.sep(parseExpr, .{.loud});
     const location = self.getLocation();
-    try self.expect(.parr);
+    try self.expect(.parr, .quiet);
     return .{
         .location = location,
         .kind = .{ .call = args },
@@ -655,9 +645,9 @@ fn parseCallPostfix(self: *@This()) !Postfix {
 
 fn parseRetStmt(self: *@This()) !Stmt {
     const location = self.getLocation();
-    try self.expect(.ret);
-    const expr = try self.maybe(parseExprLoud, .{});
-    try self.expectLoud(.semi);
+    try self.expect(.ret, .quiet);
+    const expr = try self.maybe(parseExpr, .{.loud});
+    try self.expect(.semi, .loud);
     return .{
         .location = location,
         .kind = .{ .ret = .{
@@ -666,16 +656,8 @@ fn parseRetStmt(self: *@This()) !Stmt {
     };
 }
 
-fn parseExprLoud(self: *@This()) !Expr {
-    const expr = try self.maybe(parseExpr, .{});
-    return expr orelse {
-        try self.fail("<expr>");
-        return error.ParseFailed;
-    };
-}
-
-fn parseExpr(self: *@This()) !Expr {
-    return self.parseExprPrior(0, .quiet);
+fn parseExpr(self: *@This(), mode: ParseMode) !Expr {
+    return self.parseExprPrior(0, mode);
 }
 
 fn parseExprPrior(self: *@This(), prior: u8, mode: ParseMode) Error!Expr {
@@ -719,10 +701,6 @@ fn parseBinOp(self: *@This(), prior: u8) ?Expr.Binary.Kind {
     }
     self.cursor += 1;
     return res;
-}
-
-fn parseExprPostedLoud(self: *@This()) Error!Expr {
-    return self.parseExprPosted(.loud);
 }
 
 fn parseExprPosted(self: *@This(), mode: ParseMode) Error!Expr {
@@ -803,9 +781,9 @@ fn parsePostfix(self: *@This()) !Postfix {
 }
 
 fn parseMethodPostfix(self: *@This()) !Postfix {
-    try self.expect(.dot);
+    try self.expect(.dot, .quiet);
     const location = self.getLocation();
-    const name = try self.parseName();
+    const name = try self.parseName(.quiet);
     const call_postfix = try self.parseCallPostfix();
     return .{
         .location = call_postfix.location,
@@ -818,12 +796,12 @@ fn parseMethodPostfix(self: *@This()) !Postfix {
 }
 
 fn parseSubslicePostfix(self: *@This()) !Postfix {
-    try self.expect(.bral);
-    const start = try self.parseExpr();
-    try self.expect(.dot2);
-    const end = try self.parseExprLoud();
+    try self.expect(.bral, .quiet);
+    const start = try self.parseExpr(.quiet);
+    try self.expect(.dot2, .quiet);
+    const end = try self.parseExpr(.loud);
     const location = self.getLocation();
-    try self.expectLoud(.brar);
+    try self.expect(.brar, .loud);
     return .{
         .location = location,
         .kind = .{ .subslice = .{
@@ -834,10 +812,10 @@ fn parseSubslicePostfix(self: *@This()) !Postfix {
 }
 
 fn parseElemPostfix(self: *@This()) !Postfix {
-    try self.expect(.bral);
-    const index = try self.parseExprLoud();
+    try self.expect(.bral, .quiet);
+    const index = try self.parseExpr(.loud);
     const location = self.getLocation();
-    try self.expectLoud(.brar);
+    try self.expect(.brar, .loud);
     return .{
         .location = location,
         .kind = .{ .elem = index },
@@ -845,9 +823,9 @@ fn parseElemPostfix(self: *@This()) !Postfix {
 }
 
 fn parseFieldPostfix(self: *@This()) !Postfix {
-    try self.expect(.dot);
+    try self.expect(.dot, .quiet);
     const location = self.getLocation();
-    const name = try self.parseNameLoud();
+    const name = try self.parseName(.loud);
     return .{
         .location = location,
         .kind = .{ .field = name },
@@ -883,13 +861,13 @@ fn parseExprAtom(self: *@This(), mode: ParseMode) Error!Expr {
 
 fn parseAtExpr(self: *@This()) Error!Expr {
     const start = self.getLocation();
-    try self.expect(.att);
-    const name = try self.parseNameLoud();
+    try self.expect(.att, .quiet);
+    const name = try self.parseName(.loud);
     if (std.mem.eql(u8, name, "sizeof")) {
-        try self.expectLoud(.les);
-        const typ = try self.parseTypLoud();
+        try self.expect(.les, .loud);
+        const typ = try self.parseTyp();
         const end = self.getLocation();
-        try self.expectLoud(.mor);
+        try self.expect(.mor, .loud);
         return .{
             .location = start.combine(end),
             .kind = .{ .sizeof = typ },
@@ -901,10 +879,10 @@ fn parseAtExpr(self: *@This()) Error!Expr {
 fn parseArrayExpr(self: *@This()) Error!Expr {
     const start = self.getLocation();
     const mtyp = try self.maybe(parseTypHint, .{});
-    try self.expect(.bral);
-    const exprs = try self.sep(parseExprLoud, .{});
+    try self.expect(.bral, .quiet);
+    const exprs = try self.sep(parseExpr, .{.loud});
     const end = self.getLocation();
-    try self.expect(.brar);
+    try self.expect(.brar, .quiet);
     return .{
         .location = start.combine(end),
         .kind = .{ .array = .{
@@ -915,16 +893,16 @@ fn parseArrayExpr(self: *@This()) Error!Expr {
 }
 
 fn parseTypHint(self: *@This()) !Typ {
-    try self.expect(.les);
-    const typ = try self.parseTypLoud();
-    try self.expectLoud(.mor);
+    try self.expect(.les, .quiet);
+    const typ = try self.parseTyp();
+    try self.expect(.mor, .loud);
     return typ;
 }
 
 fn parseUnaryExpr(self: *@This()) Error!Expr {
     const location = self.getLocation();
     const kind = try self.parseUnaryOp();
-    const expr = try self.parseExprPostedLoud();
+    const expr = try self.parseExprPosted(.loud);
     const unary = try ast.arena.allocator().create(Expr.Unary);
     unary.* = .{
         .kind = kind,
@@ -945,7 +923,7 @@ fn parseUnaryOp(self: *@This()) !Expr.Unary.Kind {
 
 fn parseInferStructExpr(self: *@This()) Error!Expr {
     const location = self.getLocation();
-    try self.expect(.dot);
+    try self.expect(.dot, .quiet);
     const fields = try self.parseStructExprBody();
     return .{
         .location = location,
@@ -955,17 +933,17 @@ fn parseInferStructExpr(self: *@This()) Error!Expr {
 
 fn parseParExpr(self: *@This()) Error!Expr {
     const start = self.getLocation();
-    try self.expect(.parl);
-    var expr = try self.parseExprLoud();
+    try self.expect(.parl, .quiet);
+    var expr = try self.parseExpr(.loud);
     const end = self.getLocation();
-    try self.expectLoud(.parr);
+    try self.expect(.parr, .loud);
     expr.location = start.combine(end);
     return expr;
 }
 
 fn parseStructExpr(self: *@This()) Error!Expr {
     const location = self.getLocation();
-    const name = try self.parseName();
+    const name = try self.parseName(.quiet);
     const fields = try self.parseStructExprBody();
     return .{
         .location = location,
@@ -977,17 +955,17 @@ fn parseStructExpr(self: *@This()) Error!Expr {
 }
 
 fn parseStructExprBody(self: *@This()) ![]Expr.Struct.Field {
-    try self.expect(.curl);
-    const fields = try self.sep(parseNewFieldLoud, .{});
-    try self.expect(.curr);
+    try self.expect(.curl, .quiet);
+    const fields = try self.sep(parseNewField, .{});
+    try self.expect(.curr, .quiet);
     return fields;
 }
 
-fn parseNewFieldLoud(self: *@This()) !Expr.Struct.Field {
+fn parseNewField(self: *@This()) !Expr.Struct.Field {
     const location = self.getLocation();
-    const name = try self.parseNameLoud();
-    try self.expectLoud(.equ);
-    const expr = try self.parseExprLoud();
+    const name = try self.parseName(.loud);
+    try self.expect(.equ, .loud);
+    const expr = try self.parseExpr(.loud);
     return .{
         .name = name,
         .expr = expr,
@@ -997,7 +975,7 @@ fn parseNewFieldLoud(self: *@This()) !Expr.Struct.Field {
 
 fn parseVarExpr(self: *@This()) Error!Expr {
     const location = self.getLocation();
-    const name = try self.parseName();
+    const name = try self.parseName(.quiet);
     return .{
         .location = location,
         .kind = .{ .vari = .{ .name = name } },
@@ -1015,7 +993,7 @@ fn parseStrExpr(self: *@This()) Error!Expr {
 
 fn parseUndefinedExpr(self: *@This()) Error!Expr {
     const location = self.getLocation();
-    try self.expect(.undef);
+    try self.expect(.undef, .quiet);
     return .{
         .location = location,
         .kind = .{ .undef = .{} },
@@ -1024,7 +1002,7 @@ fn parseUndefinedExpr(self: *@This()) Error!Expr {
 
 fn parseTrueExpr(self: *@This()) Error!Expr {
     const location = self.getLocation();
-    try self.expect(.tru);
+    try self.expect(.tru, .quiet);
     return .{
         .location = location,
         .kind = .{ .bool = true },
@@ -1033,7 +1011,7 @@ fn parseTrueExpr(self: *@This()) Error!Expr {
 
 fn parseFalseExpr(self: *@This()) Error!Expr {
     const location = self.getLocation();
-    try self.expect(.fals);
+    try self.expect(.fals, .quiet);
     return .{
         .location = location,
         .kind = .{ .bool = false },
@@ -1058,15 +1036,13 @@ fn parseIntExpr(self: *@This()) Error!Expr {
     };
 }
 
-fn parseNameLoud(self: *@This()) ![]const u8 {
-    return self.parseName() catch |err| {
-        try self.fail("<name>");
-        return err;
+fn parseName(self: *@This(), mode: ParseMode) ![]const u8 {
+    return try self.maybe(parseLexeme, .{.name}) orelse {
+        if (mode == .loud) {
+            try self.fail("<name>");
+        }
+        return error.ParseFailed;
     };
-}
-
-fn parseName(self: *@This()) ![]const u8 {
-    return self.parseLexeme(.name);
 }
 
 fn parseInt(self: *@This()) !u64 {
@@ -1084,7 +1060,7 @@ fn parseStr(self: *@This()) ![]const u8 {
 fn parseLexeme(
     self: *@This(),
     comptime tag: @typeInfo(Lexeme).@"union".tag_type.?,
-) !@typeInfo(Lexeme).@"union".field_types[@backingInt(tag)] {
+) Error!@typeInfo(Lexeme).@"union".field_types[@backingInt(tag)] {
     const next = self.tokens[self.cursor].lexeme;
     if (next == tag) {
         self.cursor += 1;
@@ -1099,17 +1075,13 @@ fn deinit(self: *@This()) void {
     self.* = undefined;
 }
 
-fn expectLoud(self: *@This(), lexeme: Lexeme) !void {
-    self.expect(lexeme) catch |err| {
-        try self.fail(lexeme.describe());
-        return err;
-    };
-}
-
-fn expect(self: *@This(), lexeme: @typeInfo(Lexeme).@"union".tag_type.?) !void {
+fn expect(self: *@This(), lexeme: @typeInfo(Lexeme).@"union".tag_type.?, mode: ParseMode) !void {
     if (self.tokens[self.cursor].lexeme == lexeme) {
         self.cursor += 1;
     } else {
+        if (mode == .loud) {
+            try self.fail(Lexeme.describe(lexeme));
+        }
         return error.ParseFailed;
     }
 }

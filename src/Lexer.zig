@@ -309,7 +309,7 @@ pub const Lexeme = union(enum) {
     whi,
     wild,
 
-    pub fn describe(lexeme: Lexeme) []const u8 {
+    pub fn describe(lexeme: @typeInfo(Lexeme).@"union".tag_type.?) []const u8 {
         return switch (lexeme) {
             .use => "`use`",
             .typ => "`type`",
