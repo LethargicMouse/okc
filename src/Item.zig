@@ -1,7 +1,8 @@
-const Location = @import("../Location.zig");
-const Typ = @import("../typ/mod.zig").Typ;
-const Expr = @import("Expr/Expr.zig");
-const Stmt = @import("Stmt.zig");
+const Checker = @import("Checker.zig");
+const Expr = @import("ast/Expr/Expr.zig");
+const Location = @import("Location.zig");
+const Stmt = @import("ast/Stmt.zig");
+const Typ = @import("typ/mod.zig").Typ;
 
 name: []const u8,
 kind: Kind,
@@ -56,4 +57,23 @@ pub const TypAlias = struct {
 pub const Generic = struct {
     name: []const u8,
     location: Location,
+};
+
+pub const Info = struct {
+    pub const Kind = union(enum) {
+        fun: *Fun.Header,
+        struc: Checker.Struct,
+        typ: Typ,
+        vari: Checker.Var,
+    };
+    kind: Info.Kind,
+    location: Location,
+    used: bool = false,
+
+    pub fn deinit(self: *@This()) void {
+        switch (self.kind) {
+            .struc => |*struc| struc.deinit(),
+            .fun, .vari, .typ => {},
+        }
+    }
 };

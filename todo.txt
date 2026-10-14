@@ -1,6 +1,6 @@
 x 2026-10-14 2026-10-14 global Typ.memo +refactor
 x 2026-10-14 2026-10-14 Checker owns arena +refactor
-2026-10-14 items out of ast +refactor
+x 2026-10-14 2026-10-14 items out of ast +refactor
 2026-10-14 exprs out of ast +refactor
 2026-10-14 stmts out of ast +refactor
 2026-10-14 no semicolons +change
@@ -13,3 +13,4 @@ x 2026-10-14 2026-10-14 generic Typ recursion +refactor
 2026-10-14 LocName.name -> LocName.bare +refactor
 2026-10-14 no *Loud parse funs +refactor
 2026-10-14 remove Branch +refactor
+2026-10-14 Module.Info +refactor

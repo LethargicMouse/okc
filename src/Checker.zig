@@ -4,17 +4,18 @@ const ast = @import("ast/mod.zig");
 const Failer = @import("Failer.zig");
 const Location = @import("Location.zig");
 const Typ = @import("typ/mod.zig").Typ;
+const Item = @import("Item.zig");
 
 const Self = @This();
 gpa: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
-items: std.StringHashMap(Item),
+items: std.StringHashMap(Item.Info),
 ret_typ: Typ = .any,
 failer: Failer,
 loops_nested: u16 = 0,
-current_generics: []const ast.Item.Generic = &.{},
+current_generics: []const Item.Generic = &.{},
 generics_usage: std.bit_set.Dynamic,
 solve_queue: std.ArrayList(SolveRequest) = .empty,
 
@@ -56,15 +57,15 @@ fn checkItemsUsage(self: *Self) void {
     }
 }
 
-fn checkItemUsage(self: *Self, name: []const u8, item: Item) void {
-    if (item.used) {
-        switch (item.kind) {
+fn checkItemUsage(self: *Self, name: []const u8, info: Item.Info) void {
+    if (info.used) {
+        switch (info.kind) {
             .fun, .typ => {},
-            .vari => |vari| self.checkVarUsage(vari, item.location),
+            .vari => |vari| self.checkVarUsage(vari, info.location),
             .struc => |struc| self.checkStructUsage(struc),
         }
     } else {
-        self.failer.unused(item.location, name);
+        self.failer.unused(info.location, name);
     }
 }
 
@@ -77,8 +78,8 @@ fn checkStructUsage(self: *Self, struc: Struct) void {
     }
 }
 
-fn regItem(self: *Self, item: *ast.Item) !void {
-    const kind: Item.Kind = switch (item.kind) {
+fn regItem(self: *Self, item: *Item) !void {
+    const kind: Item.Info.Kind = switch (item.kind) {
         .typ_alias => |alias| .{ .typ = alias.typ },
         .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
         .struc => |struc| try self.regStruct(struc),
@@ -99,7 +100,7 @@ fn regItem(self: *Self, item: *ast.Item) !void {
     });
 }
 
-fn regConst(self: *Self, declare: *ast.Stmt.Declare) !Item.Kind {
+fn regConst(self: *Self, declare: *ast.Stmt.Declare) !Item.Info.Kind {
     const hint_typ = if (declare.typ) |typ| typ else .any;
     const typ = try self.checkConstExpr(&declare.expr, .{ .typ = hint_typ });
     if (declare.typ) |typ_decl| {
@@ -161,7 +162,7 @@ fn checkArrayComptime(self: *Self, array: ast.Expr.Array) void {
     }
 }
 
-fn checkItem(self: *Self, item: ast.Item) error{OutOfMemory}!void {
+fn checkItem(self: *Self, item: Item) error{OutOfMemory}!void {
     switch (item.kind) {
         .typ_alias, .constant, .struc, .ext_fun => {},
         .fun => |fun| try self.checkFun(fun, item.location),
@@ -169,7 +170,7 @@ fn checkItem(self: *Self, item: ast.Item) error{OutOfMemory}!void {
     }
 }
 
-fn checkHeader(self: *Self, header: *ast.Item.Fun.Header) !void {
+fn checkHeader(self: *Self, header: *Item.Fun.Header) !void {
     self.current_generics = header.generics;
     try self.generics_usage.resize(self.gpa, header.generics.len, false);
     for (header.params) |*param| {
@@ -197,7 +198,7 @@ fn checkMain(self: *Self, location: Location) void {
     item.used = true;
 }
 
-fn regStruct(self: *Self, struc: ast.Item.Struct) !Item.Kind {
+fn regStruct(self: *Self, struc: Item.Struct) !Item.Info.Kind {
     try self.checkGenericsRedeclare(struc.generics);
     var res = Struct{
         .generics = struc.generics,
@@ -224,7 +225,7 @@ fn regStruct(self: *Self, struc: ast.Item.Struct) !Item.Kind {
     return .{ .struc = res };
 }
 
-fn checkGenericsRedeclare(self: *Self, generics: []const ast.Item.Generic) !void {
+fn checkGenericsRedeclare(self: *Self, generics: []const Item.Generic) !void {
     var map = std.StringHashMap(Location).init(self.gpa);
     defer map.deinit();
     for (generics) |generic| {
@@ -248,7 +249,7 @@ fn checkGenericsUsage(self: *Self) void {
     }
 }
 
-fn checkFun(self: *Self, fun: ast.Item.Fun, location: Location) !void {
+fn checkFun(self: *Self, fun: Item.Fun, location: Location) !void {
     self.ret_typ = fun.header.ret_typ;
     const rbp = self.vars_stack.items.len;
     for (fun.header.params) |param| {
@@ -1069,7 +1070,7 @@ fn checkVar(
 fn fillFunMetaHeader(
     self: *Self,
     fun_meta: *ast.Expr.FunMeta,
-    header: ast.Item.Fun.Header,
+    header: Item.Fun.Header,
     location: Location,
 ) !ExprInfo {
     var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
@@ -1232,40 +1233,21 @@ const Field = struct {
     used: bool = false,
 };
 
-const Struct = struct {
-    generics: []const ast.Item.Generic,
+pub const Struct = struct {
+    generics: []const Item.Generic,
     fields: std.StringHashMap(Field),
 
-    fn deinit(struc: *Struct) void {
+    pub fn deinit(struc: *Struct) void {
         struc.fields.deinit();
         struc.* = undefined;
     }
 };
 
-const Var = struct {
+pub const Var = struct {
     typ: Typ,
     can_be_mutable: bool,
     mutable: bool,
     mutated: bool = false,
-};
-
-const Item = struct {
-    const Kind = union(enum) {
-        fun: *ast.Item.Fun.Header,
-        struc: Struct,
-        typ: Typ,
-        vari: Var,
-    };
-    kind: Kind,
-    location: Location,
-    used: bool = false,
-
-    fn deinit(item: *Item) void {
-        switch (item.kind) {
-            .struc => |*struc| struc.deinit(),
-            .fun, .vari, .typ => {},
-        }
-    }
 };
 
 const SolveRequest = struct {

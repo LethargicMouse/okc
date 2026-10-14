@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const ast = @import("ast/mod.zig");
+const Item = @import("Item.zig");
 const Lexer = @import("Lexer.zig");
 const Lexeme = Lexer.Lexeme;
 const Location = @import("Location.zig");
@@ -45,7 +46,7 @@ pub fn run(self: *Self) error{ OutOfMemory, Handled }!ast.Module {
 }
 
 fn parseModule(self: *Self) !ast.Module {
-    const items = try self.parseMany(ast.Item, parseItemLoud);
+    const items = try self.parseMany(Item, parseItemLoud);
     const location = self.getLocation();
     try self.expect(.eof);
     return .{
@@ -54,8 +55,8 @@ fn parseModule(self: *Self) !ast.Module {
     };
 }
 
-fn parseItemLoud(self: *Self) Error!ast.Item {
-    return self.parseEither(ast.Item, &.{
+fn parseItemLoud(self: *Self) Error!Item {
+    return self.parseEither(Item, &.{
         parseFunItem,
         parseStructItem,
         parseExtFunItem,
@@ -68,7 +69,7 @@ fn parseItemLoud(self: *Self) Error!ast.Item {
     };
 }
 
-fn parseUseItem(self: *Self) !ast.Item {
+fn parseUseItem(self: *Self) !Item {
     try self.expect(.use);
     const location = self.getLocation();
     const name = try self.parseNameLoud();
@@ -80,7 +81,7 @@ fn parseUseItem(self: *Self) !ast.Item {
     };
 }
 
-fn parseTypAliasItem(self: *Self) !ast.Item {
+fn parseTypAliasItem(self: *Self) !Item {
     try self.expect(.typ);
     const location = self.getLocation();
     const name = try self.parseNameLoud();
@@ -96,7 +97,7 @@ fn parseTypAliasItem(self: *Self) !ast.Item {
     };
 }
 
-fn parseConstantItem(self: *Self) !ast.Item {
+fn parseConstantItem(self: *Self) !Item {
     const named = try self.parseDeclare();
     return .{
         .name = named.name,
@@ -105,7 +106,7 @@ fn parseConstantItem(self: *Self) !ast.Item {
     };
 }
 
-fn parseExtFunItem(self: *Self) !ast.Item {
+fn parseExtFunItem(self: *Self) !Item {
     const ext_fun = try self.parseExtFun();
     return .{
         .name = self.tmp_name,
@@ -114,7 +115,7 @@ fn parseExtFunItem(self: *Self) !ast.Item {
     };
 }
 
-fn parseFunItem(self: *Self) !ast.Item {
+fn parseFunItem(self: *Self) !Item {
     const fun = try self.parseFun();
     return .{
         .name = self.tmp_name,
@@ -123,7 +124,7 @@ fn parseFunItem(self: *Self) !ast.Item {
     };
 }
 
-fn parseStructItem(self: *Self) !ast.Item {
+fn parseStructItem(self: *Self) !Item {
     const struc = try self.parseStruct();
     return .{
         .name = self.tmp_name,
@@ -132,13 +133,13 @@ fn parseStructItem(self: *Self) !ast.Item {
     };
 }
 
-fn parseStruct(self: *Self) !ast.Item.Struct {
+fn parseStruct(self: *Self) !Item.Struct {
     try self.expect(.struc);
     const location = self.getLocation();
     const name = try self.parseNameLoud();
-    const generics = try self.parseMaybe([]const ast.Item.Generic, parseGenerics) orelse &.{};
+    const generics = try self.parseMaybe([]const Item.Generic, parseGenerics) orelse &.{};
     try self.expectLoud(.curl);
-    const fields = try self.parseSep(ast.Item.Struct.Field, parseFieldDeclLoud);
+    const fields = try self.parseSep(Item.Struct.Field, parseFieldDeclLoud);
     try self.expect(.curr);
     self.tmp_location = location;
     self.tmp_name = name;
@@ -148,14 +149,14 @@ fn parseStruct(self: *Self) !ast.Item.Struct {
     };
 }
 
-fn parseGenerics(self: *Self) ![]const ast.Item.Generic {
+fn parseGenerics(self: *Self) ![]const Item.Generic {
     try self.expect(.les);
-    const res = try self.parseSep(ast.Item.Generic, parseGenericLoud);
+    const res = try self.parseSep(Item.Generic, parseGenericLoud);
     try self.expect(.mor);
     return res;
 }
 
-fn parseGenericLoud(self: *Self) !ast.Item.Generic {
+fn parseGenericLoud(self: *Self) !Item.Generic {
     const location = self.getLocation();
     const name = try self.parseNameLoud();
     return .{
@@ -164,7 +165,7 @@ fn parseGenericLoud(self: *Self) !ast.Item.Generic {
     };
 }
 
-fn parseFieldDeclLoud(self: *Self) !ast.Item.Struct.Field {
+fn parseFieldDeclLoud(self: *Self) !Item.Struct.Field {
     const location = self.getLocation();
     const name = try self.parseNameLoud();
     try self.expectLoud(.colon);
@@ -178,7 +179,7 @@ fn parseFieldDeclLoud(self: *Self) !ast.Item.Struct.Field {
     };
 }
 
-fn parseExtFun(self: *Self) !ast.Item.Fun.Extern {
+fn parseExtFun(self: *Self) !Item.Fun.Extern {
     try self.expect(.ext);
     const header = try self.parseHeaderLoud();
     try self.expectLoud(.semi);
@@ -187,21 +188,21 @@ fn parseExtFun(self: *Self) !ast.Item.Fun.Extern {
     };
 }
 
-fn parseHeaderLoud(self: *Self) !ast.Item.Fun.Header {
-    const header = try self.parseMaybe(ast.Item.Fun.Header, parseHeader);
+fn parseHeaderLoud(self: *Self) !Item.Fun.Header {
+    const header = try self.parseMaybe(Item.Fun.Header, parseHeader);
     return header orelse {
         try self.fail("`fn`");
         return error.ParseFailed;
     };
 }
 
-fn parseHeader(self: *Self) !ast.Item.Fun.Header {
+fn parseHeader(self: *Self) !Item.Fun.Header {
     try self.expect(.fun);
     self.tmp_location = self.getLocation();
     self.tmp_name = try self.parseNameLoud();
-    const generics = try self.parseMaybe([]const ast.Item.Generic, parseGenerics) orelse &.{};
+    const generics = try self.parseMaybe([]const Item.Generic, parseGenerics) orelse &.{};
     try self.expectLoud(.parl);
-    const params = try self.parseSep(ast.Item.Fun.Header.Param, parseParamLoud);
+    const params = try self.parseSep(Item.Fun.Header.Param, parseParamLoud);
     try self.expect(.parr);
     const ret_typ = try self.parseTypLoud();
     return .{
@@ -231,7 +232,7 @@ fn parseSep(self: *Self, T: type, parse: fn (*Self) Error!T) ![]T {
     return slice;
 }
 
-fn parseParamLoud(self: *Self) !ast.Item.Fun.Header.Param {
+fn parseParamLoud(self: *Self) !Item.Fun.Header.Param {
     const location = self.getLocation();
     const name = try self.parseNameLoud();
     try self.expectLoud(.colon);
@@ -372,7 +373,7 @@ fn parseMaybe(self: *Self, T: type, parse: fn (*Self) Error!T) !?T {
     return res;
 }
 
-fn parseFun(self: *Self) !ast.Item.Fun {
+fn parseFun(self: *Self) !Item.Fun {
     const header = try self.parseHeader();
     const location = self.tmp_location;
     const name = self.tmp_name;

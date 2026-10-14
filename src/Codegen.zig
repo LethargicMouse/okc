@@ -2,6 +2,7 @@ const std = @import("std");
 
 const ast = @import("ast/mod.zig");
 const HashMap = @import("hash_map.zig").HashMap;
+const Item = @import("Item.zig");
 const Typ = @import("typ/mod.zig").Typ;
 const Name = Typ.Name;
 
@@ -12,7 +13,7 @@ file: std.Io.File,
 writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 extra_buffer: std.ArrayList(u8) = .empty,
-items: std.StringHashMap(ast.Item),
+items: std.StringHashMap(Item),
 structs: HashMap(Name, Struct),
 consts: std.StringHashMap(Typ),
 vars: std.StringHashMap(Ref),
@@ -106,7 +107,7 @@ fn genSliceDecl(self: *Self) !void {
     try self.print("\n%\"[]\" = type {{ ptr, i64 }}", .{});
 }
 
-fn genExtFun(self: *Self, name: []const u8, ext_fun: ast.Item.Fun.Extern) !void {
+fn genExtFun(self: *Self, name: []const u8, ext_fun: Item.Fun.Extern) !void {
     try self.print("\ndeclare {f} @{s}(", .{
         LlvmTyp{ .inner = ext_fun.header.ret_typ },
         name,
@@ -174,7 +175,7 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
 fn genFun(
     self: *Self,
     name: Name,
-    fun: ast.Item.Fun,
+    fun: Item.Fun,
     fun_typ: Typ.Fun,
 ) !void {
     self.buffer = self.extra_buffer;
