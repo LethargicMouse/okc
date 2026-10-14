@@ -11,7 +11,7 @@ pub const Typ = union(enum) {
     err,
     fun: Fun,
     int,
-    lazy: *Typ,
+    lazy: *@This(),
     loc_name: Name.Located,
     name: Name,
     prime: Prime,
@@ -24,16 +24,16 @@ pub const Typ = union(enum) {
     pub const Ptr = @import("Ptr.zig");
     pub const Slice = @import("Slice.zig");
 
-    pub var memo: Memo(Typ) = undefined;
+    pub var memo: Memo(@This()) = undefined;
 
     pub fn check(
-        typ: Typ,
+        self: @This(),
         checker: *Checker,
-    ) error{OutOfMemory}!Typ {
-        if (typ == .name) {
-            return typ;
+    ) error{OutOfMemory}!@This() {
+        if (self == .name) {
+            return self;
         }
-        const res = try typ.updateRec(check, .{checker});
+        const res = try self.updateRec(check, .{checker});
         if (res == .loc_name) {
             for (checker.current_generics, 0..) |generic, i| {
                 if (std.mem.eql(u8, generic.name, res.loc_name.name.name)) {
@@ -51,31 +51,31 @@ pub const Typ = union(enum) {
         return res;
     }
 
-    pub fn getName(typ: Typ) ?Name {
-        return switch (typ) {
+    pub fn getName(self: @This()) ?Name {
+        return switch (self) {
             .name => |name| name,
             .loc_name => |located| located.name,
             else => null,
         };
     }
 
-    pub fn solve(typ: Typ) error{OutOfMemory}!Typ {
-        if (typ == .lazy) {
-            return typ.lazy.solve();
+    pub fn solve(self: @This()) error{OutOfMemory}!@This() {
+        if (self == .lazy) {
+            return self.lazy.solve();
         }
-        return typ.updateRec(solve, .{});
+        return self.updateRec(solve, .{});
     }
 
-    pub fn resolve(typ: Typ, map: std.StringHashMap(Typ)) error{OutOfMemory}!Typ {
-        if (typ.getName()) |name| {
+    pub fn resolve(self: @This(), map: std.StringHashMap(@This())) error{OutOfMemory}!@This() {
+        if (self.getName()) |name| {
             if (map.get(name.name)) |resolved| {
                 return resolved;
             }
         }
-        return typ.updateRec(resolve, .{map});
+        return self.updateRec(resolve, .{map});
     }
 
-    pub fn fromName(name: []const u8, location: Location) Typ {
+    pub fn fromName(name: []const u8, location: Location) @This() {
         if (std.meta.stringToEnum(Prime, name)) |prime| {
             return .{ .prime = prime };
         }
@@ -94,7 +94,7 @@ pub const Typ = union(enum) {
         }
     }
 
-    pub fn eql(a: Typ, b: Typ) bool {
+    pub fn eql(a: @This(), b: @This()) bool {
         if (@backingInt(a) != @backingInt(b)) {
             return false;
         }
@@ -114,9 +114,9 @@ pub const Typ = union(enum) {
         };
     }
 
-    pub fn hashIn(typ: Typ, hasher: *std.hash.Wyhash) void {
-        hasher.update(&.{@backingInt(typ)});
-        switch (typ) {
+    pub fn hashIn(self: @This(), hasher: *std.hash.Wyhash) void {
+        hasher.update(&.{@backingInt(self)});
+        switch (self) {
             .loc_name => |located| located.location.hashIn(hasher),
             .prime => |prime| prime.hashIn(hasher),
             .name => |name| name.hashIn(hasher),
@@ -129,8 +129,8 @@ pub const Typ = union(enum) {
         }
     }
 
-    pub fn format(typ: Typ, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        switch (typ) {
+    pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
+        switch (self) {
             .prime => |prime| try prime.format(writer),
             .loc_name => |located| try located.name.format(writer),
             .name => |name| try name.format(writer),
@@ -149,8 +149,8 @@ pub const Typ = union(enum) {
         }
     }
 
-    pub fn isNumber(typ: Typ) bool {
-        switch (typ) {
+    pub fn isNumber(self: @This()) bool {
+        switch (self) {
             .prime => |prime| return prime.isNumber(),
             .err, .int => return true,
             .lazy => |inner| return inner.isNumber(),
@@ -158,8 +158,8 @@ pub const Typ = union(enum) {
         }
     }
 
-    pub fn normalise(typ: Typ) Typ {
-        var res = typ;
+    pub fn normalise(self: @This()) @This() {
+        var res = self;
         if (res == .lazy) {
             res.lazy = res.lazy.shorten();
         }
@@ -170,21 +170,21 @@ pub const Typ = union(enum) {
         return res;
     }
 
-    pub fn shorten(typ: *Typ) *Typ {
-        if (typ.* == .lazy) {
-            typ.lazy = typ.lazy.shorten();
+    pub fn shorten(self: *@This()) *@This() {
+        if (self.* == .lazy) {
+            self.lazy = self.lazy.shorten();
             if (debug_lazies) {
-                std.log.debug("=> {f}\n", .{typ});
+                std.log.debug("=> {f}\n", .{self});
             }
-            return typ.lazy;
+            return self.lazy;
         } else {
-            return typ;
+            return self;
         }
     }
 
     pub const debug_unify = false;
 
-    pub fn unify(a: Typ, b: Typ, mode: UnifyMode) ?Typ {
+    pub fn unify(a: @This(), b: @This(), mode: UnifyMode) ?@This() {
         if (debug_unify) {
             std.log.debug("unify {f} vs {f}\n", .{ a, b });
         }
@@ -303,12 +303,12 @@ pub const Typ = union(enum) {
         passive,
     };
 
-    fn updateRec(typ: Typ, fun: anytype, args: anytype) !Typ {
-        switch (typ) {
+    fn updateRec(self: @This(), fun: anytype, args: anytype) !@This() {
+        switch (self) {
             .array => |array| {
                 const new = try @call(.auto, fun, .{array.typ.*} ++ args);
                 return .{ .array = .{
-                    .typ = try Typ.memo.box(new),
+                    .typ = try memo.box(new),
                     .len = array.len,
                 } };
             },
@@ -320,8 +320,8 @@ pub const Typ = union(enum) {
                 }
                 const new = try @call(.auto, fun, .{fun_typ.ret_typ.*} ++ args);
                 return .{ .fun = .{
-                    .params = try Typ.memo.save(params),
-                    .ret_typ = try Typ.memo.box(new),
+                    .params = try memo.save(params),
+                    .ret_typ = try memo.box(new),
                 } };
             },
             .name => |name| return .{ .name = try name.updateGenerics(fun, args) },
@@ -332,23 +332,23 @@ pub const Typ = union(enum) {
             .ptr => |ptr| {
                 const new = try @call(.auto, fun, .{ptr.typ.*} ++ args);
                 return .{ .ptr = .{
-                    .typ = try Typ.memo.box(new),
+                    .typ = try memo.box(new),
                     .mutable = ptr.mutable,
                 } };
             },
             .slice => |slice| {
                 const new = try @call(.auto, fun, .{slice.typ.*} ++ args);
                 return .{ .slice = .{
-                    .typ = try Typ.memo.box(new),
+                    .typ = try memo.box(new),
                     .mutable = false,
                 } };
             },
-            .any, .err, .prime, .int, .lazy => return typ,
+            .any, .err, .prime, .int, .lazy => return self,
         }
     }
 
-    pub fn isVoid(typ: Typ) bool {
-        return typ == .prime and typ.prime == .void;
+    pub fn isVoid(self: @This()) bool {
+        return self == .prime and self.prime == .void;
     }
 
     pub const Prime = enum {
