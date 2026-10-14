@@ -5,15 +5,6 @@ const Typ = @import("mod.zig").Typ;
 typ: *const Typ,
 mutable: bool,
 
-pub fn resolve(self: @This(), resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!@This() {
-    const new = try self.typ.resolve(resolve_map);
-    const new_ptr = try Typ.memo.box(new);
-    return .{
-        .typ = new_ptr,
-        .mutable = self.mutable,
-    };
-}
-
 pub fn eql(a: @This(), b: @This()) bool {
     return a.typ == b.typ and a.mutable == b.mutable;
 }

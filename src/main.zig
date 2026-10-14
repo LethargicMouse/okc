@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const ast = @import("ast/mod.zig");
 const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
 const Lexer = @import("Lexer.zig");
+const Module = @import("Module.zig");
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
 const Typ = @import("typ/mod.zig").Typ;
@@ -60,8 +60,8 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var lexer = try Lexer.init(gpa, source);
     const tokens = try lexer.lex(gpa);
 
-    ast.arena = .init(gpa);
-    defer ast.arena.deinit();
+    Module.arena = .init(gpa);
+    defer Module.arena.deinit();
 
     Typ.memo = .init(gpa);
     defer Typ.memo.deinit();

@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const ast = @import("ast/mod.zig");
 const Expr = @import("Expr/Expr.zig");
 const Failer = @import("Failer.zig");
 const Location = @import("Location.zig");
+const Module = @import("Module.zig");
 const Stmt = @import("Stmt.zig");
 const Typ = @import("typ/mod.zig").Typ;
 const Item = @import("Item.zig");
@@ -33,14 +33,14 @@ pub fn init(
     };
 }
 
-pub fn run(self: *@This(), module: ast.Module) error{ OutOfMemory, Handled }!void {
+pub fn run(self: *@This(), module: Module) error{ OutOfMemory, Handled }!void {
     defer self.deinit();
     try self.checkModule(module);
     try self.failer.ensureNoErrors();
     return;
 }
 
-fn checkModule(self: *@This(), module: ast.Module) !void {
+fn checkModule(self: *@This(), module: Module) !void {
     for (module.items) |*item| {
         try self.regItem(item);
     }
@@ -812,7 +812,7 @@ fn checkTypedStruc(
         generics = try self.makeGenerics(decl.generics.len);
     }
     defer if (name.generics.len == 0) {
-        defer ast.arena.allocator().free(generics);
+        defer Module.arena.allocator().free(generics);
     };
     var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
     defer resolve_map.deinit();
@@ -838,7 +838,7 @@ fn checkTypedStruc(
 }
 
 fn makeGenerics(self: *@This(), len: usize) ![]Typ {
-    const res = try ast.arena.allocator().alloc(Typ, len);
+    const res = try Module.arena.allocator().alloc(Typ, len);
     for (res) |*target| {
         const lazy = try self.fun_arena.allocator().create(Typ);
         lazy.* = .any;
@@ -1080,8 +1080,8 @@ fn fillFunMetaHeader(
     for (header.generics, fun_meta.generics) |generic, typ| {
         try resolve_map.put(generic.name, typ);
     }
-    const params = try ast.arena.allocator().alloc(Typ, header.params.len);
-    defer ast.arena.allocator().free(params);
+    const params = try Module.arena.allocator().alloc(Typ, header.params.len);
+    defer Module.arena.allocator().free(params);
     for (header.params, params) |param, *target| {
         target.* = try param.typ.resolve(resolve_map);
     }

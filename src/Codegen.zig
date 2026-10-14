@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const ast = @import("ast/mod.zig");
 const Expr = @import("Expr/Expr.zig");
 const HashMap = @import("hash_map.zig").HashMap;
 const Item = @import("Item.zig");
+const Module = @import("Module.zig");
 const Stmt = @import("Stmt.zig");
 const Typ = @import("typ/mod.zig").Typ;
 
@@ -54,7 +54,7 @@ pub fn init(
     };
 }
 
-pub fn run(self: *@This(), module: ast.Module) error{ WriteFailed, OutOfMemory }!void {
+pub fn run(self: *@This(), module: Module) error{ WriteFailed, OutOfMemory }!void {
     defer self.deinit();
     for (module.items) |item| {
         try self.items.put(item.name, item);

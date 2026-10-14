@@ -1,15 +1,15 @@
 const std = @import("std");
 
-const ast = @import("../ast/mod.zig");
 const Location = @import("../Location.zig");
+const Module = @import("../Module.zig");
 const Typ = @import("mod.zig").Typ;
 
 name: []const u8,
 generics: []const Typ = &.{},
 
 pub fn updateGenerics(self: @This(), fun: anytype, args: anytype) !@This() {
-    const generics = try ast.arena.allocator().alloc(Typ, self.generics.len);
-    defer ast.arena.allocator().free(generics);
+    const generics = try Module.arena.allocator().alloc(Typ, self.generics.len);
+    defer Module.arena.allocator().free(generics);
     for (generics, self.generics) |*target, generic| {
         target.* = try @call(.auto, fun, .{generic} ++ args);
     }
@@ -17,10 +17,6 @@ pub fn updateGenerics(self: @This(), fun: anytype, args: anytype) !@This() {
         .name = self.name,
         .generics = try Typ.memo.save(generics),
     };
-}
-
-pub fn resolve(self: @This(), resolve_map: std.StringHashMap(Typ)) error{OutOfMemory}!@This() {
-    return self.updateGenerics(Typ.resolve, .{resolve_map});
 }
 
 pub fn eql(a: @This(), b: @This()) bool {
