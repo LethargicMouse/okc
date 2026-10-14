@@ -71,7 +71,7 @@ fn checkItemUsage(self: *Self, name: []const u8, info: Item.Info) void {
     }
 }
 
-fn checkStructUsage(self: *Self, struc: Struct) void {
+fn checkStructUsage(self: *Self, struc: Item.Struct.Info) void {
     var iter = struc.fields.iterator();
     while (iter.next()) |entry| {
         if (!entry.value_ptr.used) {
@@ -202,7 +202,7 @@ fn checkMain(self: *Self, location: Location) void {
 
 fn regStruct(self: *Self, struc: Item.Struct) !Item.Info.Kind {
     try self.checkGenericsRedeclare(struc.generics);
-    var res = Struct{
+    var res = Item.Struct.Info{
         .generics = struc.generics,
         .fields = .init(self.gpa),
     };
@@ -850,7 +850,7 @@ fn makeGenerics(self: *Self, len: usize) ![]const Typ {
 
 fn checkFieldsInitialised(
     self: *Self,
-    decl_fields: std.StringHashMap(Field),
+    decl_fields: std.StringHashMap(Item.Struct.Field.Info),
     fields: []const Expr.Struct.Field,
     location: Location,
 ) void {
@@ -876,7 +876,7 @@ fn checkNewField(
     self: *Self,
     field: *Expr.Struct.Field,
     struc_typ: Typ,
-    decl_fields: std.StringHashMap(Field),
+    decl_fields: std.StringHashMap(Item.Struct.Field.Info),
     resolve_map: std.StringHashMap(Typ),
 ) !void {
     const f_decl = decl_fields.get(field.name) orelse {
@@ -1226,23 +1226,6 @@ const ControlFlow = enum(u2) {
     cont = 0,
     brek = 1,
     ret = 2,
-};
-
-const Field = struct {
-    location: Location,
-    typ: Typ,
-    defaulted: bool,
-    used: bool = false,
-};
-
-pub const Struct = struct {
-    generics: []const Item.Generic,
-    fields: std.StringHashMap(Field),
-
-    pub fn deinit(struc: *Struct) void {
-        struc.fields.deinit();
-        struc.* = undefined;
-    }
 };
 
 const SolveRequest = struct {

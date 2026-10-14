@@ -1,4 +1,5 @@
-const Checker = @import("Checker.zig");
+const std = @import("std");
+
 const Expr = @import("Expr/Expr.zig");
 const Location = @import("Location.zig");
 const Stmt = @import("Stmt.zig");
@@ -26,6 +27,23 @@ pub const Struct = struct {
         typ: Typ,
         default: ?Expr,
         location: Location,
+
+        pub const Info = struct {
+            location: Location,
+            typ: Typ,
+            defaulted: bool,
+            used: bool = false,
+        };
+    };
+
+    pub const Info = struct {
+        generics: []const Generic,
+        fields: std.StringHashMap(Field.Info),
+
+        pub fn deinit(self: *@This()) void {
+            self.fields.deinit();
+            self.* = undefined;
+        }
     };
 };
 
@@ -62,7 +80,7 @@ pub const Generic = struct {
 pub const Info = struct {
     pub const Kind = union(enum) {
         fun: *Fun.Header,
-        struc: Checker.Struct,
+        struc: Struct.Info,
         typ: Typ,
         vari: Stmt.Declare.Info,
     };
