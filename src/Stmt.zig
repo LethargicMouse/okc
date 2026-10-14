@@ -78,6 +78,13 @@ pub const Declare = struct {
         name: []const u8,
         declare: Declare,
     };
+
+    pub const Info = struct {
+        typ: Typ,
+        can_be_mutable: bool,
+        mutable: bool,
+        mutated: bool = false,
+    };
 };
 
 pub const OpAssign = struct {

@@ -64,7 +64,7 @@ pub const Info = struct {
         fun: *Fun.Header,
         struc: Checker.Struct,
         typ: Typ,
-        vari: Checker.Var,
+        vari: Stmt.Declare.Info,
     };
     kind: Info.Kind,
     location: Location,

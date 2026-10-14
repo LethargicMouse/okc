@@ -182,7 +182,7 @@ fn checkHeader(self: *Self, header: *Item.Fun.Header) !void {
     self.checkGenericsUsage();
 }
 
-fn checkVarUsage(self: *Self, vari: Var, location: Location) void {
+fn checkVarUsage(self: *Self, vari: Stmt.Declare.Info, location: Location) void {
     if (vari.mutable and !vari.mutated) {
         self.failer.fail(location, "variable is never mutated", .{});
         std.log.info("remove `mut` before name\n", .{});
@@ -559,7 +559,7 @@ fn checkDeclare(
     return .cont;
 }
 
-fn declareVar(self: *Self, name: []const u8, vari: Var, location: Location) !void {
+fn declareVar(self: *Self, name: []const u8, vari: Stmt.Declare.Info, location: Location) !void {
     if (self.items.get(name)) |prev| {
         self.failer.alreadyDeclared(location, name, prev.location);
         return;
@@ -1243,13 +1243,6 @@ pub const Struct = struct {
         struc.fields.deinit();
         struc.* = undefined;
     }
-};
-
-pub const Var = struct {
-    typ: Typ,
-    can_be_mutable: bool,
-    mutable: bool,
-    mutated: bool = false,
 };
 
 const SolveRequest = struct {
