@@ -1,5 +1,5 @@
 x 2026-10-14 2026-10-14 global Typ.memo +refactor
-2026-10-14 Checker owns arena +refactor
+x 2026-10-14 2026-10-14 Checker owns arena +refactor
 2026-10-14 items out of ast +refactor
 2026-10-14 exprs out of ast +refactor
 2026-10-14 stmts out of ast +refactor

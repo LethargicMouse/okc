@@ -7,12 +7,12 @@ const Typ = @import("typ/mod.zig").Typ;
 
 const Self = @This();
 gpa: std.mem.Allocator,
-arena: *std.heap.ArenaAllocator,
+arena: std.heap.ArenaAllocator,
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
 items: std.StringHashMap(Item),
 ret_typ: Typ = .any,
-failer: *Failer,
+failer: Failer,
 loops_nested: u16 = 0,
 current_generics: []const ast.Item.Generic = &.{},
 generics_usage: std.bit_set.Dynamic,
@@ -20,13 +20,11 @@ solve_queue: std.ArrayList(SolveRequest) = .empty,
 
 pub fn init(
     gpa: std.mem.Allocator,
-    arena: *std.heap.ArenaAllocator,
-    failer: *Failer,
 ) error{OutOfMemory}!Self {
     return .{
         .gpa = gpa,
-        .arena = arena,
-        .failer = failer,
+        .arena = .init(gpa),
+        .failer = .init(),
         .fun_arena = .init(gpa),
         .items = .init(gpa),
         .generics_usage = try .initEmpty(gpa, 0),
@@ -1162,6 +1160,7 @@ fn deinit(self: *Self) void {
     self.fun_arena.deinit();
     self.vars_stack.deinit(self.gpa);
     self.generics_usage.deinit(self.gpa);
+    self.arena.deinit();
     self.* = undefined;
 }
 

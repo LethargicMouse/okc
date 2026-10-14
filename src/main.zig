@@ -3,7 +3,6 @@ const std = @import("std");
 const ast = @import("ast/mod.zig");
 const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
-const Failer = @import("Failer.zig");
 const Lexer = @import("Lexer.zig");
 const Parser = @import("Parser.zig");
 const Source = @import("Source.zig");
@@ -70,16 +69,7 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var parser = Parser.init(gpa, tokens);
     const module = try parser.run();
 
-    var checker_arena = std.heap.ArenaAllocator.init(gpa);
-    defer checker_arena.deinit();
-
-    var failer = Failer.init();
-
-    var checker = try Checker.init(
-        gpa,
-        &checker_arena,
-        &failer,
-    );
+    var checker = try Checker.init(gpa);
     try checker.run(module);
 
     std.Io.Dir.cwd().createDirPath(io, build_dir_path) catch {
