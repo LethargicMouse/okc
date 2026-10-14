@@ -1,11 +1,13 @@
 const std = @import("std");
 
 const ast = @import("ast/mod.zig");
+const Expr = @import("Expr/Expr.zig");
 const HashMap = @import("hash_map.zig").HashMap;
 const Item = @import("Item.zig");
+const Stmt = @import("Stmt.zig");
 const Typ = @import("typ/mod.zig").Typ;
+
 const Name = Typ.Name;
-const Expr = @import("Expr/Expr.zig");
 
 const Self = @This();
 io: std.Io,
@@ -290,7 +292,7 @@ fn genParam(self: *Self, typ: Typ) !TypVal {
     return .{ .typ = typ, .val = .{ .tmp = tmp } };
 }
 
-fn genStmt(self: *Self, stmt: ast.Stmt) Error!void {
+fn genStmt(self: *Self, stmt: Stmt) Error!void {
     switch (stmt.kind) {
         .for_range => |forr| try self.genForRange(forr),
         .forr => |forr| try self.genFor(forr),
@@ -311,7 +313,7 @@ fn genUnreachable(self: *Self) !void {
     try self.print("\n  unreachable", .{});
 }
 
-fn genIgnore(self: *Self, ignore: ast.Stmt.Ignore) !void {
+fn genIgnore(self: *Self, ignore: Stmt.Ignore) !void {
     _ = try self.genExpr(ignore.expr);
 }
 
@@ -320,13 +322,13 @@ fn genBreak(self: *Self) !void {
     try self.uncond(self.loop_ends.getLast(), label);
 }
 
-fn genWhile(self: *Self, whi: ast.Stmt.While) !void {
+fn genWhile(self: *Self, whi: Stmt.While) !void {
     const condition_label = self.newTmp();
     try self.uncond(condition_label, condition_label);
     try self.genBranch(whi.branch, condition_label, .loop);
 }
 
-fn genForRange(self: *Self, forr: ast.Stmt.ForRange) !void {
+fn genForRange(self: *Self, forr: Stmt.ForRange) !void {
     // int i = start
     try self.genDeclare(forr.vari, .{
         .expr = forr.start,
@@ -363,7 +365,7 @@ fn genForRange(self: *Self, forr: ast.Stmt.ForRange) !void {
     try self.uncond(start_label, end_label);
 }
 
-fn genFor(self: *Self, forr: ast.Stmt.For) !void {
+fn genFor(self: *Self, forr: Stmt.For) !void {
     const slice = try self.genExprRef(forr.expr);
     // int i = 0
     const iref = try self.toStack(.{
@@ -432,7 +434,7 @@ fn uncond(self: *Self, to: u32, next: u32) !void {
     , .{ to, next });
 }
 
-fn genIf(self: *Self, iff: ast.Stmt.IfStmt) !void {
+fn genIf(self: *Self, iff: Stmt.IfStmt) !void {
     const end_label = self.newTmp();
     try self.genBranch(iff.branch, end_label, .simple);
     for (iff.else_ifs) |branch| {
@@ -444,7 +446,7 @@ fn genIf(self: *Self, iff: ast.Stmt.IfStmt) !void {
     try self.uncond(end_label, end_label);
 }
 
-fn genBranch(self: *Self, branch: ast.Stmt.Branch, end_label: u32, kind: ast.Stmt.Branch.Kind) !void {
+fn genBranch(self: *Self, branch: Stmt.Branch, end_label: u32, kind: Stmt.Branch.Kind) !void {
     const condition = try self.genExpr(branch.condition);
     const then_label = self.newTmp();
     const else_label = self.newTmp();
@@ -461,7 +463,7 @@ fn genBranch(self: *Self, branch: ast.Stmt.Branch, end_label: u32, kind: ast.Stm
     }
 }
 
-fn genOpAssign(self: *Self, op_assign: ast.Stmt.OpAssign) !void {
+fn genOpAssign(self: *Self, op_assign: Stmt.OpAssign) !void {
     const vari = try self.genExprRef(op_assign.left);
     const typ_val = try self.genBinaryExpr(.{
         .left = op_assign.left,
@@ -471,13 +473,13 @@ fn genOpAssign(self: *Self, op_assign: ast.Stmt.OpAssign) !void {
     try self.storeInto(vari.val, typ_val);
 }
 
-fn genAssign(self: *Self, assign: ast.Stmt.Assign) !void {
+fn genAssign(self: *Self, assign: Stmt.Assign) !void {
     const vari = try self.genExprRef(assign.left);
     const typ_val = try self.genExpr(assign.expr);
     try self.storeInto(vari.val, typ_val);
 }
 
-fn genDeclare(self: *Self, name: []const u8, declare: ast.Stmt.Declare) !void {
+fn genDeclare(self: *Self, name: []const u8, declare: Stmt.Declare) !void {
     const typ_val = try self.genExpr(declare.expr);
     const vari = try self.toStack(typ_val);
     try self.vars.put(name, vari);
@@ -571,7 +573,7 @@ fn newTmp(self: *Self) u32 {
     return self.next_tmp - 1;
 }
 
-fn genRet(self: *Self, ret: ast.Stmt.Return) !void {
+fn genRet(self: *Self, ret: Stmt.Return) !void {
     if (ret.expr) |expr| {
         const val = try self.genExpr(expr);
         try self.print("\n  ret {f}", .{val});

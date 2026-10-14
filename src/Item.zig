@@ -1,7 +1,7 @@
 const Checker = @import("Checker.zig");
 const Expr = @import("Expr/Expr.zig");
 const Location = @import("Location.zig");
-const Stmt = @import("ast/Stmt.zig");
+const Stmt = @import("Stmt.zig");
 const Typ = @import("typ/mod.zig").Typ;
 
 name: []const u8,

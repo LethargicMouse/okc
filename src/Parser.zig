@@ -1,12 +1,13 @@
 const std = @import("std");
 
 const ast = @import("ast/mod.zig");
+const Expr = @import("Expr/Expr.zig");
 const Item = @import("Item.zig");
 const Lexer = @import("Lexer.zig");
 const Lexeme = Lexer.Lexeme;
 const Location = @import("Location.zig");
+const Stmt = @import("Stmt.zig");
 const Typ = @import("typ/mod.zig").Typ;
-const Expr = @import("Expr/Expr.zig");
 
 const Self = @This();
 gpa: std.mem.Allocator,
@@ -387,15 +388,15 @@ fn parseFun(self: *Self) !Item.Fun {
     };
 }
 
-fn parseBlockLoud(self: *Self) Error![]ast.Stmt {
+fn parseBlockLoud(self: *Self) Error![]Stmt {
     try self.expectLoud(.curl);
-    const stmts = try self.parseMany(ast.Stmt, parseStmtLoud);
+    const stmts = try self.parseMany(Stmt, parseStmtLoud);
     try self.expect(.curr);
     return stmts;
 }
 
-fn parseStmtLoud(self: *Self) !ast.Stmt {
-    return self.parseEither(ast.Stmt, .{
+fn parseStmtLoud(self: *Self) !Stmt {
+    return self.parseEither(Stmt, .{
         parseUnreachableStmt,
         parseBreakStmt,
         parseRetStmt,
@@ -411,7 +412,7 @@ fn parseStmtLoud(self: *Self) !ast.Stmt {
     };
 }
 
-fn parseUnreachableStmt(self: *Self) !ast.Stmt {
+fn parseUnreachableStmt(self: *Self) !Stmt {
     const location = self.getLocation();
     try self.expect(.unre);
     try self.expectLoud(.semi);
@@ -421,7 +422,7 @@ fn parseUnreachableStmt(self: *Self) !ast.Stmt {
     };
 }
 
-fn parseBreakStmt(self: *Self) !ast.Stmt {
+fn parseBreakStmt(self: *Self) !Stmt {
     const location = self.getLocation();
     try self.expect(.brek);
     try self.expectLoud(.semi);
@@ -453,7 +454,7 @@ fn parseOpAssignBinOp(self: *Self) !Expr.Binary.Kind {
     return res;
 }
 
-fn parseIgnoreStmt(self: *Self) !ast.Stmt {
+fn parseIgnoreStmt(self: *Self) !Stmt {
     const location = self.getLocation();
     try self.expect(.wild);
     try self.expectLoud(.equ);
@@ -467,7 +468,7 @@ fn parseIgnoreStmt(self: *Self) !ast.Stmt {
     };
 }
 
-fn parseForStmt(self: *Self) !ast.Stmt {
+fn parseForStmt(self: *Self) !Stmt {
     const location = self.getLocation();
     try self.expect(.whi);
     try self.expectLoud(.parl);
@@ -506,19 +507,19 @@ fn parseRangeEnd(self: *Self) !Expr {
     return self.parseExprLoud();
 }
 
-fn parseWhileStmt(self: *Self) !ast.Stmt {
+fn parseWhileStmt(self: *Self) !Stmt {
     const location = self.getLocation();
     try self.expect(.whi);
     const branch = try self.parseBranch();
     return .{ .location = location, .kind = .{ .whi = .{ .branch = branch } } };
 }
 
-fn parseIfStmt(self: *Self) !ast.Stmt {
+fn parseIfStmt(self: *Self) !Stmt {
     const location = self.getLocation();
     try self.expect(.iff);
     const branch = try self.parseBranch();
-    const else_ifs = try self.parseMany(ast.Stmt.Branch, parseElseIf);
-    const else_branch = try self.parseMaybe([]ast.Stmt, parseElseLoud) orelse @constCast(&.{});
+    const else_ifs = try self.parseMany(Stmt.Branch, parseElseIf);
+    const else_branch = try self.parseMaybe([]Stmt, parseElseLoud) orelse @constCast(&.{});
     return .{
         .location = location,
         .kind = .{ .iff = .{
@@ -529,14 +530,14 @@ fn parseIfStmt(self: *Self) !ast.Stmt {
     };
 }
 
-fn parseElseIf(self: *Self) !ast.Stmt.Branch {
+fn parseElseIf(self: *Self) !Stmt.Branch {
     try self.expect(.els);
     try self.expect(.iff);
     const branch = try self.parseBranch();
     return branch;
 }
 
-fn parseBranch(self: *Self) !ast.Stmt.Branch {
+fn parseBranch(self: *Self) !Stmt.Branch {
     try self.expectLoud(.parl);
     const condition = try self.parseExprLoud();
     try self.expectLoud(.parr);
@@ -547,7 +548,7 @@ fn parseBranch(self: *Self) !ast.Stmt.Branch {
     };
 }
 
-fn parseElseLoud(self: *Self) ![]ast.Stmt {
+fn parseElseLoud(self: *Self) ![]Stmt {
     try self.expectLoud(.els);
     const body = try self.parseBlockLoud();
     return body;
@@ -563,7 +564,7 @@ fn parseAssignPostfix(self: *Self) !Expr {
     return self.parseExprLoud();
 }
 
-fn parseDeclareStmt(self: *Self) !ast.Stmt {
+fn parseDeclareStmt(self: *Self) !Stmt {
     const declare = try self.parseDeclare();
     return .{
         .location = self.tmp_location,
@@ -571,7 +572,7 @@ fn parseDeclareStmt(self: *Self) !ast.Stmt {
     };
 }
 
-fn parseDeclare(self: *Self) !ast.Stmt.Declare.Named {
+fn parseDeclare(self: *Self) !Stmt.Declare.Named {
     try self.expect(.let);
     const mutable = try self.parseMaybe(bool, parseMutable) orelse false;
     const location = self.getLocation();
@@ -602,7 +603,7 @@ fn parseTypAnnotLoud(self: *Self) !Typ {
     return typ;
 }
 
-fn parseExprStmt(self: *Self) !ast.Stmt {
+fn parseExprStmt(self: *Self) !Stmt {
     const expr = try self.parseExpr();
     const postfix = try self.parseExprStmtPostfix();
     try self.expectLoud(.semi);
@@ -649,7 +650,7 @@ fn parseCallPostfix(self: *Self) !Postfix {
     };
 }
 
-fn parseRetStmt(self: *Self) !ast.Stmt {
+fn parseRetStmt(self: *Self) !Stmt {
     const location = self.getLocation();
     try self.expect(.ret);
     const expr = try self.parseMaybe(Expr, parseExprLoud);
