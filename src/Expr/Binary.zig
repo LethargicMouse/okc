@@ -1,5 +1,5 @@
 const Expr = @import("Expr.zig");
-const Lexeme = @import("../../Lexer.zig").Lexeme;
+const Lexeme = @import("../Lexer.zig").Lexeme;
 
 left: Expr,
 kind: Kind,

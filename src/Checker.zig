@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const ast = @import("ast/mod.zig");
+const Expr = @import("Expr/Expr.zig");
 const Failer = @import("Failer.zig");
 const Location = @import("Location.zig");
 const Typ = @import("typ/mod.zig").Typ;
@@ -113,13 +114,13 @@ fn regConst(self: *Self, declare: *ast.Stmt.Declare) !Item.Info.Kind {
     } };
 }
 
-fn checkConstExpr(self: *Self, expr: *ast.Expr, hint: ExprHint) !Typ {
+fn checkConstExpr(self: *Self, expr: *Expr, hint: ExprHint) !Typ {
     const info = try self.checkExpr(expr, hint);
     self.checkExprComptime(expr.*);
     return info.typ;
 }
 
-fn checkExprComptime(self: *Self, expr: ast.Expr) void {
+fn checkExprComptime(self: *Self, expr: Expr) void {
     switch (expr.kind) {
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
         .call, .method => self.failer.fail(expr.location, "cannot evaluate at compile time", .{}),
@@ -134,29 +135,29 @@ fn checkExprComptime(self: *Self, expr: ast.Expr) void {
     }
 }
 
-fn checkElemComptime(self: *Self, elem: ast.Expr.Elem) void {
+fn checkElemComptime(self: *Self, elem: Expr.Elem) void {
     self.checkExprComptime(elem.expr);
     self.checkExprComptime(elem.index);
 }
 
-fn checkBinaryComptime(self: *Self, binary: ast.Expr.Binary) void {
+fn checkBinaryComptime(self: *Self, binary: Expr.Binary) void {
     self.checkExprComptime(binary.left);
     self.checkExprComptime(binary.right);
 }
 
-fn checkSubsliceComptime(self: *Self, subslice: ast.Expr.Subslice) void {
+fn checkSubsliceComptime(self: *Self, subslice: Expr.Subslice) void {
     self.checkExprComptime(subslice.expr);
     self.checkExprComptime(subslice.start);
     self.checkExprComptime(subslice.end);
 }
 
-fn checkStructExprComptime(self: *Self, struc: ast.Expr.Struct) void {
+fn checkStructExprComptime(self: *Self, struc: Expr.Struct) void {
     for (struc.fields) |field| {
         self.checkExprComptime(field.expr);
     }
 }
 
-fn checkArrayComptime(self: *Self, array: ast.Expr.Array) void {
+fn checkArrayComptime(self: *Self, array: Expr.Array) void {
     for (array.exprs) |elem| {
         self.checkExprComptime(elem);
     }
@@ -383,7 +384,7 @@ fn checkBreak(self: *Self, location: Location) error{OutOfMemory}!ControlFlow {
     return .brek;
 }
 
-fn checkExprStmt(self: *Self, expr: *ast.Expr) !ControlFlow {
+fn checkExprStmt(self: *Self, expr: *Expr) !ControlFlow {
     // no type hints to disallow `undefined;`
     const info = try self.checkExpr(expr, .{});
     _ = self.unify(expr.location, .{ .prime = .void }, info.typ);
@@ -447,7 +448,7 @@ fn checkAssign(self: *Self, assign: *ast.Stmt.Assign) !ControlFlow {
     return .cont;
 }
 
-fn checkUnary(self: *Self, unary: *ast.Expr.Unary, location: Location, hint: Typ) !ExprInfo {
+fn checkUnary(self: *Self, unary: *Expr.Unary, location: Location, hint: Typ) !ExprInfo {
     switch (unary.kind) {
         .deref => return self.checkDeref(&unary.expr, location),
         .notb => return self.checkNotb(&unary.expr),
@@ -456,7 +457,7 @@ fn checkUnary(self: *Self, unary: *ast.Expr.Unary, location: Location, hint: Typ
     }
 }
 
-fn checkNeg(self: *Self, expr: *ast.Expr) !ExprInfo {
+fn checkNeg(self: *Self, expr: *Expr) !ExprInfo {
     var info = try self.checkExpr(expr, .{});
     if (!info.typ.isNumber()) {
         self.failer.wrongTyp(expr.location, .int, info.typ);
@@ -468,7 +469,7 @@ fn checkNeg(self: *Self, expr: *ast.Expr) !ExprInfo {
     };
 }
 
-fn checkDeref(self: *Self, expr: *ast.Expr, location: Location) !ExprInfo {
+fn checkDeref(self: *Self, expr: *Expr, location: Location) !ExprInfo {
     const info = try self.checkExpr(expr, .{});
     const norm = info.typ.normalise();
     const err = ExprInfo{
@@ -491,7 +492,7 @@ fn checkDeref(self: *Self, expr: *ast.Expr, location: Location) !ExprInfo {
     }
 }
 
-fn checkElem(self: *Self, elem: *ast.Expr.Elem, location: Location) !ExprInfo {
+fn checkElem(self: *Self, elem: *Expr.Elem, location: Location) !ExprInfo {
     const info = try self.checkExpr(&elem.expr, .{});
     const index = try self.checkExpr(&elem.index, .{});
     _ = self.unify(elem.index.location, .{ .prime = .u64 }, index.typ);
@@ -569,7 +570,7 @@ fn declareVar(self: *Self, name: []const u8, vari: Var, location: Location) !voi
     });
 }
 
-fn checkExpr(self: *Self, expr: *ast.Expr, hint: ExprHint) error{OutOfMemory}!ExprInfo {
+fn checkExpr(self: *Self, expr: *Expr, hint: ExprHint) error{OutOfMemory}!ExprInfo {
     switch (expr.kind) {
         .method => unreachable,
         .subslice => |subslice| return self.checkSubslice(subslice, expr.location),
@@ -597,7 +598,7 @@ fn checkExpr(self: *Self, expr: *ast.Expr, hint: ExprHint) error{OutOfMemory}!Ex
     }
 }
 
-fn checkSubslice(self: *Self, subslice: *ast.Expr.Subslice, location: Location) !ExprInfo {
+fn checkSubslice(self: *Self, subslice: *Expr.Subslice, location: Location) !ExprInfo {
     const info = try self.checkExpr(&subslice.expr, .{});
     const start = try self.checkExpr(&subslice.start, .{});
     _ = self.unify(subslice.start.location, .{ .prime = .u64 }, start.typ);
@@ -636,7 +637,7 @@ fn checkSizeof(typ: Typ) !ExprInfo {
     };
 }
 
-fn checkArray(self: *Self, array: *ast.Expr.Array, hint: Typ, location: Location) !ExprInfo {
+fn checkArray(self: *Self, array: *Expr.Array, hint: Typ, location: Location) !ExprInfo {
     var inner_typ: Typ = .any;
     var inner_hint: Typ = .any;
     if (array.mtyp) |typ| {
@@ -684,7 +685,7 @@ fn checkStr() !ExprInfo {
     };
 }
 
-fn checkNotb(self: *Self, expr: *ast.Expr) !ExprInfo {
+fn checkNotb(self: *Self, expr: *Expr) !ExprInfo {
     var info = try self.checkExpr(expr, .{});
     if (!info.typ.isNumber()) {
         self.failer.wrongTyp(expr.location, .int, info.typ);
@@ -696,7 +697,7 @@ fn checkNotb(self: *Self, expr: *ast.Expr) !ExprInfo {
     };
 }
 
-fn checkPtr(self: *Self, expr: *ast.Expr, hint: Typ) !ExprInfo {
+fn checkPtr(self: *Self, expr: *Expr, hint: Typ) !ExprInfo {
     const mutable = if (hint == .ptr) hint.ptr.mutable else false;
     const info = try self.checkExpr(expr, .{ .mutable = mutable });
     const ptr = try Typ.memo.box(info.typ);
@@ -711,7 +712,7 @@ fn checkPtr(self: *Self, expr: *ast.Expr, hint: Typ) !ExprInfo {
 
 fn checkStructExpr(
     self: *Self,
-    struc: *ast.Expr.Struct,
+    struc: *Expr.Struct,
     location: Location,
     hint: Typ,
 ) error{OutOfMemory}!ExprInfo {
@@ -744,7 +745,7 @@ fn checkStructExpr(
 fn checkSliceStruc(
     self: *Self,
     slice: Typ.Slice,
-    fields: []ast.Expr.Struct.Field,
+    fields: []Expr.Struct.Field,
     typ_target: *Typ,
     location: Location,
 ) !ExprInfo {
@@ -790,7 +791,7 @@ fn checkSliceStruc(
 fn checkTypedStruc(
     self: *Self,
     name: Typ.Name,
-    struc: *ast.Expr.Struct,
+    struc: *Expr.Struct,
     location: Location,
 ) !ExprInfo {
     const err = ExprInfo{
@@ -849,7 +850,7 @@ fn makeGenerics(self: *Self, len: usize) ![]const Typ {
 fn checkFieldsInitialised(
     self: *Self,
     decl_fields: std.StringHashMap(Field),
-    fields: []const ast.Expr.Struct.Field,
+    fields: []const Expr.Struct.Field,
     location: Location,
 ) void {
     var iter = decl_fields.iterator();
@@ -872,7 +873,7 @@ fn checkFieldsInitialised(
 
 fn checkNewField(
     self: *Self,
-    field: *ast.Expr.Struct.Field,
+    field: *Expr.Struct.Field,
     struc_typ: Typ,
     decl_fields: std.StringHashMap(Field),
     resolve_map: std.StringHashMap(Typ),
@@ -886,11 +887,11 @@ fn checkNewField(
     _ = self.unify(field.expr.location, decl_typ, info.typ);
 }
 
-fn checkNamedStructExpr(self: *Self, named: *ast.Expr.Struct.Named, location: Location) !ExprInfo {
+fn checkNamedStructExpr(self: *Self, named: *Expr.Struct.Named, location: Location) !ExprInfo {
     return self.checkTypedStruc(.{ .name = named.name }, &named.struc, location);
 }
 
-fn checkUndef(undef: *ast.Expr.Undef, typ: Typ) !ExprInfo {
+fn checkUndef(undef: *Expr.Undef, typ: Typ) !ExprInfo {
     undef.typ = typ;
     return .{
         .typ = undef.typ,
@@ -898,7 +899,7 @@ fn checkUndef(undef: *ast.Expr.Undef, typ: Typ) !ExprInfo {
     };
 }
 
-fn checkInt(self: *Self, int: *ast.Expr.Int, location: Location) !ExprInfo {
+fn checkInt(self: *Self, int: *Expr.Int, location: Location) !ExprInfo {
     const ptr = try self.fun_arena.allocator().create(Typ);
     ptr.* = .int;
     int.typ = .{ .lazy = ptr };
@@ -914,7 +915,7 @@ fn checkInt(self: *Self, int: *ast.Expr.Int, location: Location) !ExprInfo {
 
 fn checkField(
     self: *Self,
-    field: *ast.Expr.Field,
+    field: *Expr.Field,
     location: Location,
     hint_mutable: bool,
 ) !ExprInfo {
@@ -1006,7 +1007,7 @@ fn getTypName(self: *Self, norm: Typ, location: Location) ?Typ.Name {
     }
 }
 
-fn checkBinary(self: *Self, binary: *ast.Expr.Binary) !ExprInfo {
+fn checkBinary(self: *Self, binary: *Expr.Binary) !ExprInfo {
     var left = try self.checkExpr(&binary.left, .{});
     if (!left.typ.isNumber()) {
         self.failer.wrongTyp(binary.left.location, .int, left.typ);
@@ -1026,7 +1027,7 @@ fn checkBinary(self: *Self, binary: *ast.Expr.Binary) !ExprInfo {
 
 fn checkVar(
     self: *Self,
-    vari: *ast.Expr.Var,
+    vari: *Expr.Var,
     location: Location,
     hint_mutable: bool,
 ) !ExprInfo {
@@ -1041,7 +1042,7 @@ fn checkVar(
     switch (item.kind) {
         .fun => |header| {
             item.used = true;
-            vari.fun_meta = @as(ast.Expr.FunMeta, undefined);
+            vari.fun_meta = @as(Expr.FunMeta, undefined);
             return self.fillFunMetaHeader(&vari.fun_meta.?, header.*, location);
         },
         .struc, .typ => {
@@ -1069,7 +1070,7 @@ fn checkVar(
 
 fn fillFunMetaHeader(
     self: *Self,
-    fun_meta: *ast.Expr.FunMeta,
+    fun_meta: *Expr.FunMeta,
     header: Item.Fun.Header,
     location: Location,
 ) !ExprInfo {
@@ -1108,7 +1109,7 @@ fn fillFunMetaHeader(
     };
 }
 
-fn checkCall(self: *Self, call: *ast.Expr.Call, hint: Typ) !ExprInfo {
+fn checkCall(self: *Self, call: *Expr.Call, hint: Typ) !ExprInfo {
     const callee_info = try self.checkExpr(&call.expr, .{});
     const fun = self.getFunTyp(callee_info.typ, call.expr.location) orelse
         return self.checkBadCall(call);
@@ -1135,7 +1136,7 @@ fn getFunTyp(self: *Self, typ: Typ, location: Location) ?Typ.Fun {
     }
 }
 
-fn checkBadCall(self: *Self, call: *ast.Expr.Call) !ExprInfo {
+fn checkBadCall(self: *Self, call: *Expr.Call) !ExprInfo {
     for (call.args) |*arg| {
         _ = try self.checkExpr(arg, .{});
     }

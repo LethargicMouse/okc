@@ -1,5 +1,5 @@
-const Location = @import("../../Location.zig");
-const Typ = @import("../../typ/mod.zig").Typ;
+const Location = @import("../Location.zig");
+const Typ = @import("../typ/mod.zig").Typ;
 pub const Binary = @import("Binary.zig");
 pub const Unary = @import("Unary.zig");
 
