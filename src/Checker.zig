@@ -584,7 +584,7 @@ pub fn checkExpr(self: *@This(), expr: *Expr, hint: ExprHint) error{OutOfMemory}
             .mutable = false,
         },
         .undef => |*undef| return checkUndef(undef, hint.typ),
-        .call => |call| return self.checkCall(call, hint.typ),
+        .call => |call| return call.check(hint.typ, &self.failer, self),
         .binary => |binary| return self.checkBinary(binary),
         .field => |field| return self.checkField(field, expr.location, hint.mutable),
         .named_struc => |*struc| return self.checkNamedStructExpr(struc, expr.location),
@@ -1053,22 +1053,6 @@ fn checkVar(
             };
         },
     }
-}
-
-fn checkCall(self: *@This(), call: *Expr.Call, hint: Typ) !Expr.Info {
-    const callee_info = try self.checkExpr(&call.expr, .{});
-    const fun = callee_info.typ.getFun(call.expr.location, &self.failer) orelse
-        return call.checkBad(self);
-    // to propagate hint to generics
-    _ = fun.ret_typ.unify(hint, .active);
-    for (call.args, fun.params) |*arg, param| {
-        const info = try self.checkExpr(arg, .{ .typ = param.normalise() });
-        _ = self.unify(arg.location, param, info.typ);
-    }
-    return .{
-        .typ = fun.ret_typ.*,
-        .mutable = false,
-    };
 }
 
 fn deinit(self: *@This()) void {

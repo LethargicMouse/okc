@@ -2,6 +2,7 @@ const std = @import("std");
 
 pub const Binary = @import("Binary.zig");
 const Checker = @import("../Checker.zig");
+const Failer = @import("../Failer.zig");
 const Item = @import("../Item.zig");
 const Location = @import("../Location.zig");
 const Module = @import("../Module.zig");
@@ -132,7 +133,23 @@ pub const Call = struct {
     expr: Expr,
     args: []Expr,
 
-    pub fn checkBad(call: *@This(), checker: *Checker) !Info {
+    pub fn check(self: *@This(), hint: Typ, failer: *Failer, checker: *Checker) !Expr.Info {
+        const callee_info = try checker.checkExpr(&self.expr, .{});
+        const fun = callee_info.typ.getFun(self.expr.location, failer) orelse
+            return self.checkBad(checker);
+        // to propagate hint to generics
+        _ = fun.ret_typ.unify(hint, .active);
+        for (self.args, fun.params) |*arg, param| {
+            const info = try checker.checkExpr(arg, .{ .typ = param.normalise() });
+            _ = checker.unify(arg.location, param, info.typ);
+        }
+        return .{
+            .typ = fun.ret_typ.*,
+            .mutable = false,
+        };
+    }
+
+    fn checkBad(call: *@This(), checker: *Checker) !Info {
         for (call.args) |*arg| {
             _ = try checker.checkExpr(arg, .{});
         }
