@@ -38,3 +38,11 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
         try self.typ.format(writer);
     }
 }
+
+pub fn makeGenerics(gpa: std.mem.Allocator, fun_arena: *std.heap.ArenaAllocator, len: usize) ![]Typ {
+    const res = try gpa.alloc(Typ, len);
+    for (res) |*target| {
+        target.* = .{ .lazy = try new(fun_arena, .any) };
+    }
+    return res;
+}

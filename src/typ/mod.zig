@@ -351,4 +351,9 @@ pub const Typ = union(enum) {
         generics_checker: *Item.Generic.Checker,
         failer: *Failer,
     };
+
+    pub const SolveReq = struct {
+        location: ?Location,
+        typ: *Typ,
+    };
 };
