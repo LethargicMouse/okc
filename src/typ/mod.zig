@@ -313,8 +313,8 @@ pub const Typ = union(enum) {
                 } };
             },
             .fun => |fun_typ| {
-                const params = try Module.arena.allocator().alloc(Typ, fun_typ.params.len);
-                defer Module.arena.allocator().free(params);
+                const params = try Module.arena.alloc(Typ, fun_typ.params.len);
+                defer Module.arena.free(params);
                 for (params, fun_typ.params) |*target, param| {
                     target.* = try @call(.auto, fun, .{param} ++ args);
                 }

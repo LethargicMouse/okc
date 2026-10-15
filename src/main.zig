@@ -60,8 +60,10 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var lexer = try Lexer.init(gpa, source);
     const tokens = try lexer.lex(gpa);
 
-    Module.arena = .init(gpa);
-    defer Module.arena.deinit();
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+
+    Module.arena = arena.allocator();
 
     Typ.memo = .init(gpa);
     defer Typ.memo.deinit();

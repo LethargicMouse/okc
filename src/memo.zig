@@ -25,7 +25,7 @@ pub fn Memo(T: type) type {
             if (self.map.getKey(&val)) |ptr| {
                 return ptr;
             }
-            const ptr = try Module.arena.allocator().create(T);
+            const ptr = try Module.arena.create(T);
             ptr.* = val;
             try self.map.put(ptr, {});
             return ptr;
@@ -35,7 +35,7 @@ pub fn Memo(T: type) type {
             if (self.slice_map.getKey(slice)) |res| {
                 return res;
             }
-            const res = try Module.arena.allocator().alloc(T, slice.len);
+            const res = try Module.arena.alloc(T, slice.len);
             @memcpy(res, slice);
             try self.slice_map.put(res, {});
             return res;

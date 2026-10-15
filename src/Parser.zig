@@ -217,7 +217,7 @@ fn sep(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) {
             } else break;
         }
     }
-    const slice = try Module.arena.allocator().alloc(ParseRes(parse, args), vec.items.len);
+    const slice = try Module.arena.alloc(ParseRes(parse, args), vec.items.len);
     @memcpy(slice, vec.items);
     return slice;
 }
@@ -346,7 +346,7 @@ fn many(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) 
     while (try self.maybe(parse, args)) |item| {
         try vec.append(self.gpa, item);
     }
-    const slice = try Module.arena.allocator().alloc(ParseRes(parse, args), vec.items.len);
+    const slice = try Module.arena.alloc(ParseRes(parse, args), vec.items.len);
     @memcpy(slice, vec.items);
     return slice;
 }
@@ -663,7 +663,7 @@ fn parseExpr(self: *@This(), mode: ParseMode) !Expr {
 fn parseExprPrior(self: *@This(), prior: u8, mode: ParseMode) Error!Expr {
     var res = try self.parseExprPosted(mode);
     while (try self.parseBinPostfix(prior)) |bin_postfix| {
-        const binary = try Module.arena.allocator().create(Expr.Binary);
+        const binary = try Module.arena.create(Expr.Binary);
         binary.* = .{
             .left = res,
             .kind = bin_postfix.kind,
@@ -708,7 +708,7 @@ fn parseExprPosted(self: *@This(), mode: ParseMode) Error!Expr {
     while (try self.maybe(parsePostfix, .{})) |postfix| {
         switch (postfix.kind) {
             .method => |method_postfix| {
-                const method = try Module.arena.allocator().create(Expr.Method);
+                const method = try Module.arena.create(Expr.Method);
                 method.* = .{
                     .expr = res,
                     .vari = method_postfix.vari,
@@ -721,7 +721,7 @@ fn parseExprPosted(self: *@This(), mode: ParseMode) Error!Expr {
                 };
             },
             .call => |args| {
-                const call = try Module.arena.allocator().create(Expr.Call);
+                const call = try Module.arena.create(Expr.Call);
                 call.* = .{
                     .expr = res,
                     .args = args,
@@ -732,7 +732,7 @@ fn parseExprPosted(self: *@This(), mode: ParseMode) Error!Expr {
                 };
             },
             .field => |name| {
-                const field = try Module.arena.allocator().create(Expr.Field);
+                const field = try Module.arena.create(Expr.Field);
                 field.* = .{
                     .expr = res,
                     .name = name,
@@ -743,7 +743,7 @@ fn parseExprPosted(self: *@This(), mode: ParseMode) Error!Expr {
                 };
             },
             .elem => |index| {
-                const elem = try Module.arena.allocator().create(Expr.Elem);
+                const elem = try Module.arena.create(Expr.Elem);
                 elem.* = .{
                     .expr = res,
                     .index = index,
@@ -754,7 +754,7 @@ fn parseExprPosted(self: *@This(), mode: ParseMode) Error!Expr {
                 };
             },
             .subslice => |subslice_postfix| {
-                const subslice = try Module.arena.allocator().create(Expr.Subslice);
+                const subslice = try Module.arena.create(Expr.Subslice);
                 subslice.* = .{
                     .expr = res,
                     .start = subslice_postfix.start,
@@ -903,7 +903,7 @@ fn parseUnaryExpr(self: *@This()) Error!Expr {
     const location = self.getLocation();
     const kind = try self.parseUnaryOp();
     const expr = try self.parseExprPosted(.loud);
-    const unary = try Module.arena.allocator().create(Expr.Unary);
+    const unary = try Module.arena.create(Expr.Unary);
     unary.* = .{
         .kind = kind,
         .expr = expr,

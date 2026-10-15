@@ -812,7 +812,7 @@ fn checkTypedStruc(
         generics = try self.makeGenerics(decl.generics.len);
     }
     defer if (name.generics.len == 0) {
-        defer Module.arena.allocator().free(generics);
+        defer Module.arena.free(generics);
     };
     var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
     defer resolve_map.deinit();
@@ -838,7 +838,7 @@ fn checkTypedStruc(
 }
 
 fn makeGenerics(self: *@This(), len: usize) ![]Typ {
-    const res = try Module.arena.allocator().alloc(Typ, len);
+    const res = try Module.arena.alloc(Typ, len);
     for (res) |*target| {
         const lazy = try self.fun_arena.allocator().create(Typ);
         lazy.* = .any;
@@ -1080,8 +1080,8 @@ fn fillFunMetaHeader(
     for (header.generics, fun_meta.generics) |generic, typ| {
         try resolve_map.put(generic.name, typ);
     }
-    const params = try Module.arena.allocator().alloc(Typ, header.params.len);
-    defer Module.arena.allocator().free(params);
+    const params = try Module.arena.alloc(Typ, header.params.len);
+    defer Module.arena.free(params);
     for (header.params, params) |param, *target| {
         target.* = try param.typ.resolve(resolve_map);
     }

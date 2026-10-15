@@ -24,4 +24,4 @@ pub const Info = struct {
     }
 };
 
-pub var arena: std.heap.ArenaAllocator = undefined;
+pub var arena: std.mem.Allocator = undefined;

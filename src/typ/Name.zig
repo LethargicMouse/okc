@@ -8,8 +8,8 @@ name: []const u8,
 generics: []const Typ = &.{},
 
 pub fn updateGenerics(self: @This(), fun: anytype, args: anytype) !@This() {
-    const generics = try Module.arena.allocator().alloc(Typ, self.generics.len);
-    defer Module.arena.allocator().free(generics);
+    const generics = try Module.arena.alloc(Typ, self.generics.len);
+    defer Module.arena.free(generics);
     for (generics, self.generics) |*target, generic| {
         target.* = try @call(.auto, fun, .{generic} ++ args);
     }
