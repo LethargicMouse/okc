@@ -1057,7 +1057,7 @@ fn checkVar(
 
 fn checkCall(self: *@This(), call: *Expr.Call, hint: Typ) !Expr.Info {
     const callee_info = try self.checkExpr(&call.expr, .{});
-    const fun = self.getFunTyp(callee_info.typ, call.expr.location) orelse
+    const fun = callee_info.typ.getFun(call.expr.location, &self.failer) orelse
         return self.checkBadCall(call);
     // to propagate hint to generics
     _ = fun.ret_typ.unify(hint, .active);
@@ -1069,17 +1069,6 @@ fn checkCall(self: *@This(), call: *Expr.Call, hint: Typ) !Expr.Info {
         .typ = fun.ret_typ.*,
         .mutable = false,
     };
-}
-
-fn getFunTyp(self: *@This(), typ: Typ, location: Location) ?Typ.Fun {
-    switch (typ.normalise()) {
-        .fun => |fun| return fun,
-        .err => return null,
-        else => {
-            self.failer.fail(location, "value of type `{f}` is not a function", .{typ});
-            return null;
-        },
-    }
 }
 
 fn checkBadCall(self: *@This(), call: *Expr.Call) !Expr.Info {

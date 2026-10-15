@@ -28,6 +28,17 @@ pub const Typ = union(enum) {
 
     pub var memo: Memo(@This()) = undefined;
 
+    pub fn getFun(self: @This(), location: Location, failer: *Failer) ?Typ.Fun {
+        switch (self.normalise()) {
+            .fun => |fun| return fun,
+            .err => return null,
+            else => {
+                failer.fail(location, "value of type `{f}` is not a function", .{self});
+                return null;
+            },
+        }
+    }
+
     pub fn check(
         self: @This(),
         ctx: Check,
