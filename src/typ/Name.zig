@@ -59,7 +59,7 @@ pub const Located = struct {
     location: Location,
 
     pub fn checkDecl(self: @This(), items: std.StringHashMap(Item.Info), failer: *Failer) error{BadType}!?Typ {
-        std.log.debug("checkTypDecl {f}\n", .{self.bare});
+        std.log.debug("checkTypDecl {f}", .{self.bare});
         const item = items.getPtr(self.bare.name) orelse {
             failer.fail(self.location, "item `{s}` is not declared", .{self.bare.name});
             return error.BadType;
@@ -75,7 +75,7 @@ pub const Located = struct {
             },
             .struc => |struc| {
                 item.used = true;
-                std.log.debug("item {s} used\n", .{self.bare.name});
+                std.log.debug("item {s} used", .{self.bare.name});
                 if (struc.generics.len != self.bare.generics.len) {
                     failer.fail(
                         self.location,

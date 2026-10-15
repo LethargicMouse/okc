@@ -28,6 +28,13 @@ pub const Typ = union(enum) {
 
     pub var memo: Memo(@This()) = undefined;
 
+    pub fn solve(self: @This()) error{OutOfMemory}!@This() {
+        if (self == .lazy) {
+            return self.lazy.typ.solve();
+        }
+        return self.updateRec(solve, .{});
+    }
+
     pub fn getFun(self: @This(), location: Location, failer: *Failer) ?Typ.Fun {
         switch (self.normalise()) {
             .fun => |fun| return fun,
@@ -67,13 +74,6 @@ pub const Typ = union(enum) {
             .loc_name => |located| located.bare,
             else => null,
         };
-    }
-
-    pub fn solve(self: @This()) error{OutOfMemory}!@This() {
-        if (self == .lazy) {
-            return self.lazy.typ.solve();
-        }
-        return self.updateRec(solve, .{});
     }
 
     pub fn resolve(self: @This(), map: std.StringHashMap(@This())) error{OutOfMemory}!@This() {
@@ -167,9 +167,7 @@ pub const Typ = union(enum) {
     pub const debug_unify = false;
 
     pub fn unify(a: @This(), b: @This(), mode: UnifyMode) ?@This() {
-        if (debug_unify) {
-            std.log.debug("unify {f} vs {f}\n", .{ a, b });
-        }
+        std.log.debug("unify {f} vs {f}", .{ a, b });
         if (a.eql(b)) {
             return a;
         }
@@ -361,10 +359,5 @@ pub const Typ = union(enum) {
         items: std.StringHashMap(Item.Info),
         generics_checker: *Item.Generic.Checker,
         failer: *Failer,
-    };
-
-    pub const SolveReq = struct {
-        location: ?Location,
-        typ: *Typ,
     };
 };

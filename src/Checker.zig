@@ -10,13 +10,11 @@ const Item = @import("Item.zig");
 
 gpa: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
-fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
 module: Module.Info,
 ret_typ: Typ = .any,
 failer: Failer,
 loops_nested: u16 = 0,
-solve_queue: std.ArrayList(Typ.SolveReq) = .empty,
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -25,7 +23,6 @@ pub fn init(
         .gpa = gpa,
         .arena = .init(gpa),
         .failer = .init(),
-        .fun_arena = .init(gpa),
         .module = .init(gpa),
     };
 }
@@ -259,11 +256,6 @@ fn checkFun(self: *@This(), fun: Item.Fun, location: Location) !void {
         self.failer.fail(location, "function may not return", .{});
     }
     self.freeVars(rbp);
-    for (self.solve_queue.items) |req| {
-        req.typ.* = try req.typ.solve();
-    }
-    self.solve_queue.clearRetainingCapacity();
-    _ = self.fun_arena.reset(.retain_capacity);
 }
 
 fn checkLoopBlock(self: *@This(), block: []Stmt) !Stmt.ControlFlow {
@@ -518,7 +510,7 @@ fn getElemExprInfo(self: *@This(), info: Expr.Info, location: Location) ?Expr.In
 pub fn unify(self: *@This(), location: Location, a: Typ, b: Typ) Typ {
     if (a.unify(b, .active)) |typ| {
         if (Typ.debug_unify) {
-            std.log.debug("==> {f}\n", .{typ});
+            std.log.debug("==> {f}", .{typ});
         }
         return typ;
     }
@@ -569,10 +561,10 @@ pub fn checkExpr(self: *@This(), expr: *Expr, hint: ExprHint) error{OutOfMemory}
         .method => unreachable,
         .subslice => |subslice| return self.checkSubslice(subslice, expr.location),
         .sizeof => |typ| return checkSizeof(typ),
-        .array => |*array| return self.checkArray(array, hint.typ, expr.location),
+        .array => |*array| return self.checkArray(array, hint.typ),
         .unary => |unary| return self.checkUnary(unary, expr.location, hint.typ),
         .struc => |*struc| return self.checkStructExpr(struc, expr.location, hint.typ),
-        .int => |*int| return self.checkInt(int, expr.location),
+        .int => |*int| return checkInt(int),
         .str => return checkStr(),
         .vari => |*vari| return self.checkVar(vari, expr.location, hint.mutable),
         .char => return .{
@@ -631,7 +623,7 @@ fn checkSizeof(typ: Typ) !Expr.Info {
     };
 }
 
-fn checkArray(self: *@This(), array: *Expr.Array, hint: Typ, location: Location) !Expr.Info {
+fn checkArray(self: *@This(), array: *Expr.Array, hint: Typ) !Expr.Info {
     var inner_typ: Typ = .any;
     var inner_hint: Typ = .any;
     if (array.mtyp) |typ| {
@@ -658,10 +650,6 @@ fn checkArray(self: *@This(), array: *Expr.Array, hint: Typ, location: Location)
         .typ = try Typ.memo.box(inner_typ),
         .len = array.exprs.len,
     } };
-    try self.solve_queue.append(self.gpa, .{
-        .typ = &array.typ,
-        .location = location,
-    });
     return .{
         .typ = array.typ,
         .mutable = false,
@@ -801,17 +789,17 @@ fn checkTypedStruc(
         self.failer.notStruct(location, .{ .name = name });
         return err;
     };
-    var generics = name.generics;
+    const generics = try self.gpa.alloc(Typ, decl.generics.len);
+    defer self.gpa.free(generics);
     if (name.generics.len == 0) {
-        generics = try Typ.Lazy.makeGenerics(self.gpa, &self.fun_arena, decl.generics.len);
+        @memset(generics, .any);
+    } else {
+        @memcpy(generics, name.generics);
     }
-    defer if (name.generics.len == 0) {
-        defer self.gpa.free(generics);
-    };
     var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
     defer resolve_map.deinit();
-    for (decl.generics, generics) |generic, typ| {
-        try resolve_map.put(generic.name, typ);
+    for (decl.generics, generics) |generic, *typ| {
+        try resolve_map.put(generic.name, .{ .lazy = .from(typ) });
     }
     for (struc.fields) |*field| {
         try self.checkNewField(field, .{ .name = name }, decl.fields, resolve_map);
@@ -821,10 +809,6 @@ fn checkTypedStruc(
         .generics = try Typ.memo.save(generics),
         .name = name.name,
     } };
-    try self.solve_queue.append(self.gpa, .{
-        .typ = &struc.typ,
-        .location = location,
-    });
     return .{
         .typ = struc.typ,
         .mutable = false,
@@ -867,7 +851,7 @@ fn checkNewField(
         return;
     };
     const decl_typ = try f_decl.typ.resolve(resolve_map);
-    const info = try self.checkExpr(&field.expr, .{ .typ = decl_typ });
+    const info = try self.checkExpr(&field.expr, .{ .typ = try decl_typ.solve() });
     _ = self.unify(field.expr.location, decl_typ, info.typ);
 }
 
@@ -883,14 +867,10 @@ fn checkUndef(undef: *Expr.Undef, typ: Typ) !Expr.Info {
     };
 }
 
-fn checkInt(self: *@This(), int: *Expr.Int, location: Location) !Expr.Info {
-    int.typ = .{ .lazy = try .new(&self.fun_arena, .int) };
-    try self.solve_queue.append(self.gpa, .{
-        .location = location,
-        .typ = &int.typ,
-    });
+fn checkInt(int: *Expr.Int) !Expr.Info {
+    std.debug.assert(int.typ == .int);
     return .{
-        .typ = int.typ,
+        .typ = .{ .lazy = .{ .typ = &int.typ } },
         .mutable = false,
     };
 }
@@ -1025,12 +1005,7 @@ fn checkVar(
         .fun => |header| {
             item.used = true;
             vari.fun_meta = @as(Expr.FunMeta, undefined);
-            return vari.fun_meta.?.fillFromHeader(
-                header.*,
-                location,
-                &self.fun_arena,
-                &self.solve_queue,
-            );
+            return vari.fun_meta.?.fillFromHeader(self.gpa, header.*);
         },
         .struc, .typ => {
             self.failer.fail(location, "it is a type", .{});
@@ -1057,8 +1032,6 @@ fn checkVar(
 
 fn deinit(self: *@This()) void {
     self.module.deinit();
-    self.solve_queue.deinit(self.gpa);
-    self.fun_arena.deinit();
     self.vars_stack.deinit(self.gpa);
     self.arena.deinit();
     self.* = undefined;

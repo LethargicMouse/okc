@@ -638,7 +638,7 @@ fn getLayout(self: *@This(), typ: Typ) !Layout {
 
 fn genArray(self: *@This(), array: Expr.Array) !TypVal {
     var res = TypVal{
-        .typ = array.typ,
+        .typ = try array.typ.solve(),
         .val = .undef,
     };
     for (array.exprs, 0..) |expr, i| {
@@ -863,7 +863,7 @@ fn load(self: *@This(), vari: Ref) !u32 {
 
 fn genInt(int: Expr.Int) TypVal {
     return .{
-        .typ = int.typ,
+        .typ = int.typ.normalise(),
         .val = .{ .int = int.val },
     };
 }
@@ -990,12 +990,14 @@ fn genFunPtr(self: *@This(), fun_name: []const u8, fun_meta: Expr.FunMeta) !TypV
     if (self.items.get(fun_name).?.kind == .ext_fun) {
         name.generics = &.{};
     }
+    const typ: Typ = .{ .fun = fun_meta.typ.fun };
+    const solved = try typ.solve();
     try self.fun_queue.append(self.gpa, .{
         .name = name,
-        .fun = fun_meta.typ.fun,
+        .fun = solved.fun,
     });
     return .{
-        .typ = .{ .fun = fun_meta.typ.fun },
+        .typ = solved,
         .val = .{ .global = name },
     };
 }
@@ -1209,6 +1211,7 @@ const LlvmTyp = struct {
     inner: Typ,
 
     pub fn format(typ: LlvmTyp, writer: *std.Io.Writer) !void {
+        std.log.debug("llvm of `{f}`", .{typ.inner});
         switch (typ.inner) {
             .prime => |prime| {
                 const sprime = switch (prime) {

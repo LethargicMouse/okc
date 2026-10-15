@@ -52,38 +52,26 @@ pub const FunMeta = struct {
 
     pub fn fillFromHeader(
         self: *@This(),
+        gpa: std.mem.Allocator,
         header: Item.Fun.Header,
-        location: Location,
-        fun_arena: *std.heap.ArenaAllocator,
-        solve_queue: *std.ArrayList(Typ.SolveReq),
     ) !Info {
-        var resolve_map: std.StringHashMap(Typ) = .init(fun_arena.child_allocator);
+        var resolve_map: std.StringHashMap(Typ) = .init(gpa);
         defer resolve_map.deinit();
-        self.generics = try Typ.Lazy.makeGenerics(Module.arena, fun_arena, header.generics.len);
-        for (header.generics, self.generics) |generic, typ| {
-            try resolve_map.put(generic.name, typ);
+        self.generics = try Module.arena.alloc(Typ, header.generics.len);
+        @memset(self.generics, .any);
+        for (header.generics, self.generics) |generic, *typ| {
+            try resolve_map.put(generic.name, .{ .lazy = .from(typ) });
         }
-        const params = try Module.arena.alloc(Typ, header.params.len);
-        defer Module.arena.free(params);
+        const params = try gpa.alloc(Typ, header.params.len);
+        defer gpa.free(params);
         for (header.params, params) |param, *target| {
             target.* = try param.typ.resolve(resolve_map);
-        }
-        for (self.generics, header.generics) |*target, generic| {
-            target.* = resolve_map.get(generic.name).?;
-            try solve_queue.append(fun_arena.child_allocator, .{
-                .typ = target,
-                .location = null,
-            });
         }
         const ret_typ = try header.ret_typ.resolve(resolve_map);
         self.typ = .{ .fun = .{
             .params = try Typ.memo.save(params),
             .ret_typ = try Typ.memo.box(ret_typ),
         } };
-        try solve_queue.append(fun_arena.child_allocator, .{
-            .typ = &self.typ,
-            .location = location,
-        });
         return .{
             .typ = self.typ,
             .mutable = false,
@@ -121,7 +109,7 @@ pub const Struct = struct {
 
 pub const Int = struct {
     val: u64,
-    typ: Typ = .any,
+    typ: Typ = .int,
 };
 
 // lol

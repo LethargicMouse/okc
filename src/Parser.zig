@@ -888,6 +888,7 @@ fn parseArrayExpr(self: *@This()) Error!Expr {
         .kind = .{ .array = .{
             .exprs = exprs,
             .mtyp = mtyp,
+            .typ = undefined,
         } },
     };
 }
