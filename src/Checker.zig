@@ -840,9 +840,7 @@ fn checkTypedStruc(
 fn makeGenerics(self: *@This(), len: usize) ![]Typ {
     const res = try Module.arena.alloc(Typ, len);
     for (res) |*target| {
-        const lazy = try self.fun_arena.allocator().create(Typ);
-        lazy.* = .any;
-        target.* = .{ .lazy = lazy };
+        target.* = .{ .lazy = try .new(&self.fun_arena, .any) };
     }
     return res;
 }
@@ -900,9 +898,7 @@ fn checkUndef(undef: *Expr.Undef, typ: Typ) !ExprInfo {
 }
 
 fn checkInt(self: *@This(), int: *Expr.Int, location: Location) !ExprInfo {
-    const ptr = try self.fun_arena.allocator().create(Typ);
-    ptr.* = .int;
-    int.typ = .{ .lazy = ptr };
+    int.typ = .{ .lazy = try .new(&self.fun_arena, .int) };
     try self.solve_queue.append(self.gpa, .{
         .location = location,
         .typ = &int.typ,

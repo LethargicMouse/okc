@@ -11,7 +11,7 @@ pub const Typ = union(enum) {
     err,
     fun: Fun,
     int,
-    lazy: *@This(),
+    lazy: Lazy,
     loc_name: Name.Located,
     name: Name,
     prime: Prime,
@@ -20,6 +20,7 @@ pub const Typ = union(enum) {
 
     pub const Array = @import("Array.zig");
     pub const Fun = @import("Fun.zig");
+    pub const Lazy = @import("Lazy.zig");
     pub const Name = @import("Name.zig");
     pub const Ptr = @import("Ptr.zig");
     pub const Slice = @import("Slice.zig");
@@ -61,7 +62,7 @@ pub const Typ = union(enum) {
 
     pub fn solve(self: @This()) error{OutOfMemory}!@This() {
         if (self == .lazy) {
-            return self.lazy.solve();
+            return self.lazy.typ.solve();
         }
         return self.updateRec(solve, .{});
     }
@@ -85,15 +86,6 @@ pub const Typ = union(enum) {
         } };
     }
 
-    const debug_lazies = false;
-
-    pub fn setLazy(lazy: *Typ, typ: Typ) void {
-        lazy.* = typ;
-        if (debug_lazies) {
-            std.log.debug("=> {f}\n", .{Typ{ .lazy = lazy }});
-        }
-    }
-
     pub fn eql(a: @This(), b: @This()) bool {
         if (@backingInt(a) != @backingInt(b)) {
             return false;
@@ -106,10 +98,7 @@ pub const Typ = union(enum) {
             .slice => |aslice| aslice.eql(b.slice),
             .ptr => |aptr| aptr.eql(b.ptr),
             .array => |arr| arr.eql(b.array),
-            // pointers in lazy types are not memoized
-            // but we need to discriminate lazy types by pointers
-            // as they are unique type variables
-            .lazy => |aptr| aptr == b.lazy,
+            .lazy => |alazy| alazy.typ == b.lazy.typ,
             .any, .err, .int => true,
         };
     }
@@ -138,11 +127,7 @@ pub const Typ = union(enum) {
             .ptr => |ptr| try ptr.format(writer),
             .array => |array| try array.format(writer),
             .slice => |slice| try slice.format(writer),
-            .lazy => |inner| if (debug_lazies) {
-                try writer.print("@{x}<{f}>", .{ @intFromPtr(inner) & 0xffff, inner });
-            } else {
-                try inner.format(writer);
-            },
+            .lazy => |lazy| try lazy.format(writer),
             .err => try writer.writeAll("<err>"),
             .any => try writer.writeAll("_"),
             .int => try writer.writeAll("<int>"),
@@ -153,7 +138,7 @@ pub const Typ = union(enum) {
         switch (self) {
             .prime => |prime| return prime.isNumber(),
             .err, .int => return true,
-            .lazy => |inner| return inner.isNumber(),
+            .lazy => |lazy| return lazy.typ.isNumber(),
             else => return false,
         }
     }
@@ -165,21 +150,9 @@ pub const Typ = union(enum) {
         }
         // may be 2 or 1 lazies on the way
         while (res == .lazy) {
-            res = res.lazy.*;
+            res = res.lazy.typ.*;
         }
         return res;
-    }
-
-    pub fn shorten(self: *@This()) *@This() {
-        if (self.* == .lazy) {
-            self.lazy = self.lazy.shorten();
-            if (debug_lazies) {
-                std.log.debug("=> {f}\n", .{self});
-            }
-            return self.lazy;
-        } else {
-            return self;
-        }
     }
 
     pub const debug_unify = false;
@@ -203,24 +176,24 @@ pub const Typ = union(enum) {
         if (a == .lazy and b == .lazy) {
             const aroot = a.lazy.shorten();
             const broot = b.lazy.shorten();
-            if (aroot != broot) {
-                const typ = aroot.unify(broot.*, mode) orelse return null;
-                aroot.setLazy(typ);
-                broot.setLazy(.{ .lazy = aroot });
+            if (aroot.typ != broot.typ) {
+                const typ = aroot.typ.unify(broot.typ.*, mode) orelse return null;
+                aroot.set(typ);
+                broot.set(.{ .lazy = aroot });
             }
             return .{ .lazy = aroot };
         }
         if (a == .lazy) {
-            const res = a.lazy.unify(b, mode) orelse return null;
+            const res = a.lazy.typ.unify(b, mode) orelse return null;
             if (mode == .active) {
-                a.lazy.setLazy(res);
+                a.lazy.set(res);
             }
             return a;
         }
         if (b == .lazy) {
-            const res = a.unify(b.lazy.*, mode) orelse return null;
+            const res = a.unify(b.lazy.typ.*, mode) orelse return null;
             if (mode == .active) {
-                b.lazy.setLazy(res);
+                b.lazy.set(res);
             }
             return b;
         }

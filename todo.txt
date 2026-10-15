@@ -15,6 +15,7 @@ x 2026-10-15 2026-10-14 no *Loud parse funs +refactor
 x 2026-10-15 2026-10-14 Module.Info +refactor
 x 2026-10-15 2026-10-14 move Declare to Item +refactor
 x 2026-10-15 2026-10-14 Module.arena: Allocator +refactor
-2026-10-15 Typ.Lazy +refactor
+x 2026-10-15 2026-10-15 Typ.Lazy +refactor
 2026-10-15 unify with updateRec +refactor
 2026-10-15 rebase +refactor
+2026-10-15 typ/mod -> typ/typ +refactor
