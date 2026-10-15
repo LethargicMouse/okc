@@ -10,7 +10,7 @@ kind: Kind,
 location: Location,
 
 pub const Kind = union(enum) {
-    constant: Stmt.Declare,
+    constant: Declare,
     ext_fun: Fun.Extern,
     fun: Fun,
     struc: Struct,
@@ -82,7 +82,7 @@ pub const Info = struct {
         fun: *Fun.Header,
         struc: Struct.Info,
         typ: Typ,
-        vari: Stmt.Declare.Info,
+        vari: Declare.Info,
     };
     kind: Info.Kind,
     location: Location,
@@ -94,4 +94,22 @@ pub const Info = struct {
             .fun, .vari, .typ => {},
         }
     }
+};
+
+pub const Declare = struct {
+    typ: ?Typ,
+    expr: Expr,
+    mutable: bool,
+
+    pub const Named = struct {
+        name: []const u8,
+        declare: Declare,
+    };
+
+    pub const Info = struct {
+        typ: Typ,
+        can_be_mutable: bool,
+        mutable: bool,
+        mutated: bool = false,
+    };
 };

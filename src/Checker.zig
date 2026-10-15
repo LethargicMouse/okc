@@ -101,7 +101,7 @@ fn regItem(self: *@This(), item: *Item) !void {
     });
 }
 
-fn regConst(self: *@This(), declare: *Stmt.Declare) !Item.Info.Kind {
+fn regConst(self: *@This(), declare: *Item.Declare) !Item.Info.Kind {
     const hint_typ = if (declare.typ) |typ| typ else .any;
     const typ = try self.checkConstExpr(&declare.expr, .{ .typ = hint_typ });
     if (declare.typ) |typ_decl| {
@@ -181,7 +181,7 @@ fn checkHeader(self: *@This(), header: *Item.Fun.Header) !void {
     self.checkGenericsUsage();
 }
 
-fn checkVarUsage(self: *@This(), vari: Stmt.Declare.Info, location: Location) void {
+fn checkVarUsage(self: *@This(), vari: Item.Declare.Info, location: Location) void {
     if (vari.mutable and !vari.mutated) {
         self.failer.fail(location, "variable is never mutated", .{});
         std.log.info("remove `mut` before name\n", .{});
@@ -544,7 +544,7 @@ fn unify(self: *@This(), location: Location, a: Typ, b: Typ) Typ {
 fn checkDeclare(
     self: *@This(),
     name: []const u8,
-    declare: *Stmt.Declare,
+    declare: *Item.Declare,
     location: Location,
 ) !ControlFlow {
     const typ_decl = if (declare.typ) |typ| typ else .any;
@@ -558,7 +558,7 @@ fn checkDeclare(
     return .cont;
 }
 
-fn declareVar(self: *@This(), name: []const u8, vari: Stmt.Declare.Info, location: Location) !void {
+fn declareVar(self: *@This(), name: []const u8, vari: Item.Declare.Info, location: Location) !void {
     if (self.module.items.get(name)) |prev| {
         self.failer.alreadyDeclared(location, name, prev.location);
         return;

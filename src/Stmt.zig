@@ -1,6 +1,6 @@
-const Location = @import("Location.zig");
-const Typ = @import("typ/mod.zig").Typ;
 const Expr = @import("Expr/Expr.zig");
+const Item = @import("Item.zig");
+const Location = @import("Location.zig");
 
 location: Location,
 kind: Kind,
@@ -8,7 +8,7 @@ kind: Kind,
 pub const Kind = union(enum) {
     assign: Assign,
     brek,
-    declare: Declare.Named,
+    declare: Item.Declare.Named,
     expr: Expr,
     for_range: ForRange,
     forr: For,
@@ -68,24 +68,6 @@ pub const Branch = struct {
 pub const Assign = struct {
     left: Expr,
     expr: Expr,
-};
-
-pub const Declare = struct {
-    typ: ?Typ,
-    expr: Expr,
-    mutable: bool,
-
-    pub const Named = struct {
-        name: []const u8,
-        declare: Declare,
-    };
-
-    pub const Info = struct {
-        typ: Typ,
-        can_be_mutable: bool,
-        mutable: bool,
-        mutated: bool = false,
-    };
 };
 
 pub const OpAssign = struct {

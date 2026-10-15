@@ -565,7 +565,7 @@ fn parseDeclareStmt(self: *@This()) !Stmt {
     };
 }
 
-fn parseDeclare(self: *@This()) !Stmt.Declare.Named {
+fn parseDeclare(self: *@This()) !Item.Declare.Named {
     try self.expect(.let, .quiet);
     const mutable = try self.maybe(parseMutable, .{}) orelse false;
     const location = self.getLocation();

@@ -478,7 +478,7 @@ fn genAssign(self: *@This(), assign: Stmt.Assign) !void {
     try self.storeInto(vari.val, typ_val);
 }
 
-fn genDeclare(self: *@This(), name: []const u8, declare: Stmt.Declare) !void {
+fn genDeclare(self: *@This(), name: []const u8, declare: Item.Declare) !void {
     const typ_val = try self.genExpr(declare.expr);
     const vari = try self.toStack(typ_val);
     try self.vars.put(name, vari);
