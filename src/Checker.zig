@@ -12,7 +12,7 @@ gpa: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
 fun_arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
-items: std.StringHashMap(Item.Info),
+module: Module.Info,
 ret_typ: Typ = .any,
 failer: Failer,
 loops_nested: u16 = 0,
@@ -28,7 +28,7 @@ pub fn init(
         .arena = .init(gpa),
         .failer = .init(),
         .fun_arena = .init(gpa),
-        .items = .init(gpa),
+        .module = .init(gpa),
         .generics_usage = try .initEmpty(gpa, 0),
     };
 }
@@ -52,7 +52,7 @@ fn checkModule(self: *@This(), module: Module) !void {
 }
 
 fn checkItemsUsage(self: *@This()) void {
-    var iter = self.items.iterator();
+    var iter = self.module.items.iterator();
     while (iter.next()) |entry| {
         self.checkItemUsage(entry.key_ptr.*, entry.value_ptr.*);
     }
@@ -91,11 +91,11 @@ fn regItem(self: *@This(), item: *Item) !void {
     if (kind == .fun) {
         try self.checkHeader(kind.fun);
     }
-    if (self.items.get(item.name)) |prev| {
+    if (self.module.items.get(item.name)) |prev| {
         self.failer.alreadyDeclared(item.location, item.name, prev.location);
         return;
     }
-    try self.items.put(item.name, .{
+    try self.module.items.put(item.name, .{
         .location = item.location,
         .kind = kind,
     });
@@ -189,7 +189,7 @@ fn checkVarUsage(self: *@This(), vari: Stmt.Declare.Info, location: Location) vo
 }
 
 fn checkMain(self: *@This(), location: Location) void {
-    const item = self.items.getPtr("main") orelse {
+    const item = self.module.items.getPtr("main") orelse {
         self.failer.fail(location, "`main` function not found", .{});
         return;
     };
@@ -230,7 +230,7 @@ fn checkGenericsRedeclare(self: *@This(), generics: []const Item.Generic) !void 
     var map = std.StringHashMap(Location).init(self.gpa);
     defer map.deinit();
     for (generics) |generic| {
-        if (self.items.get(generic.name)) |prev| {
+        if (self.module.items.get(generic.name)) |prev| {
             self.failer.alreadyDeclared(generic.location, generic.name, prev.location);
         }
         const entry = try map.getOrPut(generic.name);
@@ -363,7 +363,7 @@ fn checkFor(self: *@This(), forr: *Stmt.For) !ControlFlow {
 }
 
 fn freeVar(self: *@This(), name: []const u8) void {
-    const item = self.items.fetchRemove(name).?.value;
+    const item = self.module.items.fetchRemove(name).?.value;
     self.checkItemUsage(name, item);
 }
 
@@ -559,12 +559,12 @@ fn checkDeclare(
 }
 
 fn declareVar(self: *@This(), name: []const u8, vari: Stmt.Declare.Info, location: Location) !void {
-    if (self.items.get(name)) |prev| {
+    if (self.module.items.get(name)) |prev| {
         self.failer.alreadyDeclared(location, name, prev.location);
         return;
     }
     try self.vars_stack.append(self.gpa, name);
-    try self.items.put(name, .{
+    try self.module.items.put(name, .{
         .location = location,
         .kind = .{ .vari = vari },
     });
@@ -798,7 +798,7 @@ fn checkTypedStruc(
         .typ = .err,
         .mutable = false,
     };
-    const item = self.items.getPtr(name.name) orelse {
+    const item = self.module.items.getPtr(name.name) orelse {
         self.failer.notDeclared(location, name.name);
         return err;
     };
@@ -938,7 +938,7 @@ fn checkField(
         );
     }
     const name = self.getTypName(norm, field.expr.location) orelse return err;
-    const item = self.items.get(name.name) orelse {
+    const item = self.module.items.get(name.name) orelse {
         self.failer.notStruct(field.expr.location, norm);
         return err;
     };
@@ -1035,7 +1035,7 @@ fn checkVar(
         .typ = .err,
         .mutable = true,
     };
-    const item = self.items.getPtr(vari.name) orelse {
+    const item = self.module.items.getPtr(vari.name) orelse {
         self.failer.notDeclared(location, vari.name);
         return err;
     };
@@ -1165,18 +1165,18 @@ fn deinit(self: *@This()) void {
 }
 
 fn deinitItems(self: *@This()) void {
-    var items = self.items.valueIterator();
+    var items = self.module.items.valueIterator();
     while (items.next()) |item| {
         item.deinit();
     }
-    self.items.deinit();
+    self.module.items.deinit();
 }
 
 pub fn checkTypDecl(self: *@This(), located: Typ.Name.Located) error{BadType}!?Typ {
     if (debug_check_typ) {
         std.log.debug("checkTypDecl {f}\n", .{located.bare});
     }
-    const item = self.items.getPtr(located.bare.name) orelse {
+    const item = self.module.items.getPtr(located.bare.name) orelse {
         self.failer.fail(located.location, "item `{s}` is not declared", .{located.bare.name});
         return error.BadType;
     };
