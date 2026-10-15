@@ -15,12 +15,13 @@ pub const Info = struct {
         };
     }
 
-    pub fn deinit(self: @This()) void {
+    pub fn deinit(self: *@This()) void {
         var iter = self.items.valueIterator();
         while (iter.next()) |item| {
             item.deinit();
         }
         self.items.deinit();
+        self.* = undefined;
     }
 };
 

@@ -1145,20 +1145,12 @@ fn checkRet(self: *@This(), ret: *Stmt.Return, location: Location) !ControlFlow 
 }
 
 fn deinit(self: *@This()) void {
-    self.deinitItems();
+    self.module.deinit();
     self.solve_queue.deinit(self.gpa);
     self.fun_arena.deinit();
     self.vars_stack.deinit(self.gpa);
     self.arena.deinit();
     self.* = undefined;
-}
-
-fn deinitItems(self: *@This()) void {
-    var items = self.module.items.valueIterator();
-    while (items.next()) |item| {
-        item.deinit();
-    }
-    self.module.items.deinit();
 }
 
 const ExprHint = struct {
