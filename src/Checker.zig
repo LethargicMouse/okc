@@ -16,8 +16,6 @@ module: Module.Info,
 ret_typ: Typ = .any,
 failer: Failer,
 loops_nested: u16 = 0,
-current_generics: []const Item.Generic = &.{},
-generics_usage: std.bit_set.Dynamic,
 solve_queue: std.ArrayList(SolveRequest) = .empty,
 
 pub fn init(
@@ -29,7 +27,6 @@ pub fn init(
         .failer = .init(),
         .fun_arena = .init(gpa),
         .module = .init(gpa),
-        .generics_usage = try .initEmpty(gpa, 0),
     };
 }
 
@@ -172,13 +169,18 @@ fn checkItem(self: *@This(), item: Item) error{OutOfMemory}!void {
 }
 
 fn checkHeader(self: *@This(), header: *Item.Fun.Header) !void {
-    self.current_generics = header.generics;
-    try self.generics_usage.resize(self.gpa, header.generics.len, false);
+    var generics_checker: Item.Generic.Checker = try .init(self.gpa, header.generics);
+    defer generics_checker.deinit(self.gpa);
+    const typ_check = Typ.Check{
+        .failer = &self.failer,
+        .generics_checker = &generics_checker,
+        .items = self.module.items,
+    };
     for (header.params) |*param| {
-        param.typ = try param.typ.check(self);
+        param.typ = try param.typ.check(typ_check);
     }
-    header.ret_typ = try header.ret_typ.check(self);
-    self.checkGenericsUsage();
+    header.ret_typ = try header.ret_typ.check(typ_check);
+    generics_checker.checkUsage(&self.failer);
 }
 
 fn checkVarUsage(self: *@This(), vari: Item.Declare.Info, location: Location) void {
@@ -238,14 +240,6 @@ fn checkGenericsRedeclare(self: *@This(), generics: []const Item.Generic) !void 
             self.failer.alreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
         } else {
             entry.value_ptr.* = generic.location;
-        }
-    }
-}
-
-fn checkGenericsUsage(self: *@This()) void {
-    for (self.current_generics, 0..) |generic, i| {
-        if (!self.generics_usage.isSet(i)) {
-            self.failer.unused(generic.location, generic.name);
         }
     }
 }
@@ -1155,7 +1149,6 @@ fn deinit(self: *@This()) void {
     self.solve_queue.deinit(self.gpa);
     self.fun_arena.deinit();
     self.vars_stack.deinit(self.gpa);
-    self.generics_usage.deinit(self.gpa);
     self.arena.deinit();
     self.* = undefined;
 }
@@ -1167,42 +1160,6 @@ fn deinitItems(self: *@This()) void {
     }
     self.module.items.deinit();
 }
-
-pub fn checkTypDecl(self: *@This(), located: Typ.Name.Located) error{BadType}!?Typ {
-    if (debug_check_typ) {
-        std.log.debug("checkTypDecl {f}\n", .{located.bare});
-    }
-    const item = self.module.items.getPtr(located.bare.name) orelse {
-        self.failer.fail(located.location, "item `{s}` is not declared", .{located.bare.name});
-        return error.BadType;
-    };
-    switch (item.kind) {
-        .fun, .vari => {
-            self.failer.fail(located.location, "item `{s}` is not a type", .{located.bare.name});
-            return error.BadType;
-        },
-        .typ => |typ| {
-            item.used = true;
-            return typ;
-        },
-        .struc => |struc| {
-            item.used = true;
-            if (debug_check_typ) {
-                std.log.debug("item {s} used\n", .{located.bare.name});
-            }
-            if (struc.generics.len != located.bare.generics.len) {
-                self.failer.fail(
-                    located.location,
-                    "expected {} generics\n        found {}",
-                    .{ struc.generics.len, located.bare.generics.len },
-                );
-            }
-            return null;
-        },
-    }
-}
-
-const debug_check_typ = false;
 
 const ExprHint = struct {
     typ: Typ = .any,

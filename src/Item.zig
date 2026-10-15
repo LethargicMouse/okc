@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Expr = @import("Expr/Expr.zig");
+const Failer = @import("Failer.zig");
 const Location = @import("Location.zig");
 const Stmt = @import("Stmt.zig");
 const Typ = @import("typ/mod.zig").Typ;
@@ -75,6 +76,41 @@ pub const TypAlias = struct {
 pub const Generic = struct {
     name: []const u8,
     location: Location,
+
+    pub const Checker = struct {
+        generics: []const Generic,
+        usage: std.bit_set.Dynamic,
+
+        pub fn init(gpa: std.mem.Allocator, generics: []const Generic) !@This() {
+            return .{
+                .generics = generics,
+                .usage = try .initEmpty(gpa, generics.len),
+            };
+        }
+
+        pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+            self.usage.deinit(gpa);
+            self.* = undefined;
+        }
+
+        pub fn mark(self: *@This(), name: []const u8) bool {
+            for (self.generics, 0..) |generic, i| {
+                if (std.mem.eql(u8, generic.name, name)) {
+                    self.usage.set(i);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        pub fn checkUsage(self: *@This(), failer: *Failer) void {
+            for (self.generics, 0..) |generic, i| {
+                if (!self.usage.isSet(i)) {
+                    failer.unused(generic.location, generic.name);
+                }
+            }
+        }
+    };
 };
 
 pub const Info = struct {

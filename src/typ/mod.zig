@@ -1,6 +1,7 @@
 const std = @import("std");
 
-const Checker = @import("../Checker.zig");
+const Failer = @import("../Failer.zig");
+const Item = @import("../Item.zig");
 const Location = @import("../Location.zig");
 const Memo = @import("../memo.zig").Memo;
 const Module = @import("../Module.zig");
@@ -29,20 +30,17 @@ pub const Typ = union(enum) {
 
     pub fn check(
         self: @This(),
-        checker: *Checker,
+        ctx: Check,
     ) error{OutOfMemory}!@This() {
         if (self == .name) {
             return self;
         }
-        const res = try self.updateRec(check, .{checker});
+        const res = try self.updateRec(check, .{ctx});
         if (res == .loc_name) {
-            for (checker.current_generics, 0..) |generic, i| {
-                if (std.mem.eql(u8, generic.name, res.loc_name.bare.name)) {
-                    checker.generics_usage.set(i);
-                    return res;
-                }
+            if (ctx.generics_checker.mark(res.loc_name.bare.name)) {
+                return res;
             }
-            const maybe_resolved = checker.checkTypDecl(res.loc_name) catch |err| switch (err) {
+            const maybe_resolved = res.loc_name.checkDecl(ctx.items, ctx.failer) catch |err| switch (err) {
                 error.BadType => return .err,
             };
             if (maybe_resolved) |resolved| {
@@ -346,5 +344,11 @@ pub const Typ = union(enum) {
         pub fn hashIn(prime: Prime, hasher: *std.hash.Wyhash) void {
             hasher.update(&.{@backingInt(prime)});
         }
+    };
+
+    pub const Check = struct {
+        items: std.StringHashMap(Item.Info),
+        generics_checker: *Item.Generic.Checker,
+        failer: *Failer,
     };
 };
