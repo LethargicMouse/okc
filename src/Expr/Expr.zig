@@ -1,6 +1,7 @@
 const std = @import("std");
 
 pub const Binary = @import("Binary.zig");
+const Checker = @import("../Checker.zig");
 const Item = @import("../Item.zig");
 const Location = @import("../Location.zig");
 const Module = @import("../Module.zig");
@@ -130,6 +131,16 @@ pub const Undef = struct {
 pub const Call = struct {
     expr: Expr,
     args: []Expr,
+
+    pub fn checkBad(call: *@This(), checker: *Checker) !Info {
+        for (call.args) |*arg| {
+            _ = try checker.checkExpr(arg, .{});
+        }
+        return .{
+            .typ = .err,
+            .mutable = false,
+        };
+    }
 };
 
 pub const Field = struct {
