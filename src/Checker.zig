@@ -266,7 +266,7 @@ fn checkFun(self: *@This(), fun: Item.Fun, location: Location) !void {
     _ = self.fun_arena.reset(.retain_capacity);
 }
 
-fn checkLoopBlock(self: *@This(), block: []Stmt) !ControlFlow {
+fn checkLoopBlock(self: *@This(), block: []Stmt) !Stmt.ControlFlow {
     self.loops_nested += 1;
     const res = try self.checkBlock(block);
     self.loops_nested -= 1;
@@ -276,8 +276,8 @@ fn checkLoopBlock(self: *@This(), block: []Stmt) !ControlFlow {
     }
 }
 
-fn checkBlock(self: *@This(), block: []Stmt) !ControlFlow {
-    var res = ControlFlow.cont;
+fn checkBlock(self: *@This(), block: []Stmt) !Stmt.ControlFlow {
+    var res = Stmt.ControlFlow.cont;
     const rbp = self.vars_stack.items.len;
     for (block, 0..) |*stmt, i| {
         const control_flow = try self.checkStmt(stmt);
@@ -301,13 +301,13 @@ fn freeVars(self: *@This(), rbp: usize) void {
     self.vars_stack.shrinkRetainingCapacity(rbp);
 }
 
-fn checkStmt(self: *@This(), stmt: *Stmt) error{OutOfMemory}!ControlFlow {
+fn checkStmt(self: *@This(), stmt: *Stmt) error{OutOfMemory}!Stmt.ControlFlow {
     switch (stmt.kind) {
         .for_range => |*forr| return self.checkForRange(forr),
         .forr => |*forr| return self.checkFor(forr),
         .unre => return .ret,
         .brek => return self.checkBreak(stmt.location),
-        .ret => |*ret| return self.checkRet(ret, stmt.location),
+        .ret => |*ret| return ret.check(stmt.location, self.ret_typ, &self.failer, self),
         .expr => |*expr| return self.checkExprStmt(expr),
         .declare => |*named| return self.checkDeclare(named.name, &named.declare, stmt.location),
         .op_assign => |*op_assign| return self.checkOpAssign(op_assign),
@@ -318,7 +318,7 @@ fn checkStmt(self: *@This(), stmt: *Stmt) error{OutOfMemory}!ControlFlow {
     }
 }
 
-fn checkForRange(self: *@This(), forr: *Stmt.ForRange) !ControlFlow {
+fn checkForRange(self: *@This(), forr: *Stmt.ForRange) !Stmt.ControlFlow {
     var start = try self.checkExpr(&forr.start, .{});
     if (!start.typ.isNumber()) {
         self.failer.wrongTyp(forr.start.location, .int, start.typ);
@@ -338,7 +338,7 @@ fn checkForRange(self: *@This(), forr: *Stmt.ForRange) !ControlFlow {
     return self.checkLoopBlock(forr.body);
 }
 
-fn checkFor(self: *@This(), forr: *Stmt.For) !ControlFlow {
+fn checkFor(self: *@This(), forr: *Stmt.For) !Stmt.ControlFlow {
     const info = try self.checkExpr(&forr.expr, .{});
     const elem_info = self.getElemExprInfo(info, forr.expr.location) orelse Expr.Info{
         .typ = .err,
@@ -361,7 +361,7 @@ fn freeVar(self: *@This(), name: []const u8) void {
     self.checkItemUsage(name, item);
 }
 
-fn checkIgnore(self: *@This(), ignore: *Stmt.Ignore, location: Location) !ControlFlow {
+fn checkIgnore(self: *@This(), ignore: *Stmt.Ignore, location: Location) !Stmt.ControlFlow {
     const info = try self.checkExpr(&ignore.expr, .{});
     if (info.typ.isVoid()) {
         self.failer.fail(location, "redundant ignore", .{});
@@ -370,7 +370,7 @@ fn checkIgnore(self: *@This(), ignore: *Stmt.Ignore, location: Location) !Contro
     return .cont;
 }
 
-fn checkBreak(self: *@This(), location: Location) error{OutOfMemory}!ControlFlow {
+fn checkBreak(self: *@This(), location: Location) error{OutOfMemory}!Stmt.ControlFlow {
     if (self.loops_nested == 0) {
         self.failer.fail(location, "`break` outside of loop", .{});
         return .cont;
@@ -378,14 +378,14 @@ fn checkBreak(self: *@This(), location: Location) error{OutOfMemory}!ControlFlow
     return .brek;
 }
 
-fn checkExprStmt(self: *@This(), expr: *Expr) !ControlFlow {
+fn checkExprStmt(self: *@This(), expr: *Expr) !Stmt.ControlFlow {
     // no type hints to disallow `undefined;`
     const info = try self.checkExpr(expr, .{});
     _ = self.unify(expr.location, .{ .prime = .void }, info.typ);
     return .cont;
 }
 
-fn checkWhile(self: *@This(), whi: *Stmt.While) !ControlFlow {
+fn checkWhile(self: *@This(), whi: *Stmt.While) !Stmt.ControlFlow {
     const control_flow = try self.checkBranch(&whi.branch, .loop);
     switch (control_flow) {
         .cont, .brek => return .cont,
@@ -393,7 +393,7 @@ fn checkWhile(self: *@This(), whi: *Stmt.While) !ControlFlow {
     }
 }
 
-fn checkIf(self: *@This(), iff: *Stmt.IfStmt) !ControlFlow {
+fn checkIf(self: *@This(), iff: *Stmt.IfStmt) !Stmt.ControlFlow {
     var res = try self.checkBranch(&iff.branch, .simple);
     for (iff.else_ifs) |*branch| {
         const control_flow = try self.checkBranch(branch, .simple);
@@ -408,7 +408,7 @@ fn checkIf(self: *@This(), iff: *Stmt.IfStmt) !ControlFlow {
     return res;
 }
 
-fn checkBranch(self: *@This(), branch: *Stmt.Branch, kind: Stmt.Branch.Kind) !ControlFlow {
+fn checkBranch(self: *@This(), branch: *Stmt.Branch, kind: Stmt.Branch.Kind) !Stmt.ControlFlow {
     const info = try self.checkExpr(&branch.condition, .{});
     _ = self.unify(branch.condition.location, .{ .prime = .bool }, info.typ);
     if (kind == .loop) {
@@ -417,7 +417,7 @@ fn checkBranch(self: *@This(), branch: *Stmt.Branch, kind: Stmt.Branch.Kind) !Co
     return self.checkBlock(branch.body);
 }
 
-fn checkOpAssign(self: *@This(), op_assign: *Stmt.OpAssign) !ControlFlow {
+fn checkOpAssign(self: *@This(), op_assign: *Stmt.OpAssign) !Stmt.ControlFlow {
     var left = try self.checkExpr(&op_assign.left, .{ .mutable = true });
     if (!left.mutable) {
         self.failer.notMut(op_assign.left.location);
@@ -432,7 +432,7 @@ fn checkOpAssign(self: *@This(), op_assign: *Stmt.OpAssign) !ControlFlow {
     return .cont;
 }
 
-fn checkAssign(self: *@This(), assign: *Stmt.Assign) !ControlFlow {
+fn checkAssign(self: *@This(), assign: *Stmt.Assign) !Stmt.ControlFlow {
     const left = try self.checkExpr(&assign.left, .{ .mutable = true });
     if (!left.mutable) {
         self.failer.notMut(assign.left.location);
@@ -515,7 +515,7 @@ fn getElemExprInfo(self: *@This(), info: Expr.Info, location: Location) ?Expr.In
     }
 }
 
-fn unify(self: *@This(), location: Location, a: Typ, b: Typ) Typ {
+pub fn unify(self: *@This(), location: Location, a: Typ, b: Typ) Typ {
     if (a.unify(b, .active)) |typ| {
         if (Typ.debug_unify) {
             std.log.debug("==> {f}\n", .{typ});
@@ -540,7 +540,7 @@ fn checkDeclare(
     name: []const u8,
     declare: *Item.Declare,
     location: Location,
-) !ControlFlow {
+) !Stmt.ControlFlow {
     const typ_decl = if (declare.typ) |typ| typ else .any;
     const info = try self.checkExpr(&declare.expr, .{ .typ = typ_decl });
     const typ = self.unify(declare.expr.location, typ_decl, info.typ);
@@ -1081,16 +1081,6 @@ fn checkBadCall(self: *@This(), call: *Expr.Call) !Expr.Info {
     };
 }
 
-fn checkRet(self: *@This(), ret: *Stmt.Return, location: Location) !ControlFlow {
-    if (ret.expr) |*expr| {
-        const info = try self.checkExpr(expr, .{ .typ = self.ret_typ });
-        _ = self.unify(expr.location, self.ret_typ, info.typ);
-    } else if (self.ret_typ != .prime or self.ret_typ.prime != .void) {
-        self.failer.fail(location, "should return a value", .{});
-    }
-    return .ret;
-}
-
 fn deinit(self: *@This()) void {
     self.module.deinit();
     self.solve_queue.deinit(self.gpa);
@@ -1103,11 +1093,4 @@ fn deinit(self: *@This()) void {
 const ExprHint = struct {
     typ: Typ = .any,
     mutable: bool = false,
-};
-
-// numbered to enable `<`
-const ControlFlow = enum(u2) {
-    cont = 0,
-    brek = 1,
-    ret = 2,
 };

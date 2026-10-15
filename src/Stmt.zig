@@ -1,6 +1,9 @@
+const Checker = @import("Checker.zig");
 const Expr = @import("Expr/Expr.zig");
+const Failer = @import("Failer.zig");
 const Item = @import("Item.zig");
 const Location = @import("Location.zig");
+const Typ = @import("typ/mod.zig").Typ;
 
 location: Location,
 kind: Kind,
@@ -43,6 +46,22 @@ pub const Ignore = struct {
 
 pub const Return = struct {
     expr: ?Expr,
+
+    pub fn check(
+        ret: *@This(),
+        location: Location,
+        ret_typ: Typ,
+        failer: *Failer,
+        checker: *Checker,
+    ) !ControlFlow {
+        if (ret.expr) |*expr| {
+            const info = try checker.checkExpr(expr, .{ .typ = ret_typ });
+            _ = checker.unify(expr.location, ret_typ, info.typ);
+        } else if (!ret_typ.isVoid()) {
+            failer.fail(location, "should return a value", .{});
+        }
+        return .ret;
+    }
 };
 
 pub const While = struct {
@@ -74,4 +93,11 @@ pub const OpAssign = struct {
     left: Expr,
     kind: Expr.Binary.Kind,
     right: Expr,
+};
+
+// numbered to enable `<`
+pub const ControlFlow = enum(u2) {
+    cont = 0,
+    brek = 1,
+    ret = 2,
 };
