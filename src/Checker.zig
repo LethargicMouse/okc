@@ -575,7 +575,10 @@ pub fn checkExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) error{OutOfMemory
         .undef => |*undef| return checkUndef(undef, hint.typ),
         .call => |call| return call.check(hint.typ, self),
         .binary => |binary| return binary.check(self),
-        .field => |field| return self.checkField(field, expr.location, hint.mutable),
+        .field => |field| return field.check(expr.location, hint.mutable, .{
+            .gpa = self.gpa,
+            .items = self.module.items,
+        }, self),
         .named_struc => |*struc| return self.checkNamedStructExpr(struc, expr.location),
         .elem => |elem| return self.checkElem(elem, expr.location),
     }
@@ -868,50 +871,6 @@ fn checkInt(int: *Expr.Int) !Expr.Info {
     return .{
         .typ = .{ .lazy = .from(&int.typ) },
         .mutable = false,
-    };
-}
-
-fn checkField(
-    self: *@This(),
-    field: *Expr.Field,
-    location: Location,
-    hint_mutable: bool,
-) !Expr.Info {
-    var info = try self.checkExpr(&field.expr, .{ .mutable = hint_mutable });
-    const err = Expr.Info{
-        .typ = .err,
-        .mutable = true,
-    };
-    var norm = info.typ.normalise();
-    if (norm == .ptr) {
-        info.mutable = norm.ptr.mutable;
-        norm = norm.ptr.typ.normalise();
-    }
-    if (norm == .slice) {
-        return norm.slice.checkField(info.mutable, field.name, location);
-    }
-    const name = norm.getStructName(field.expr.location) orelse return err;
-    const item = self.module.items.get(name.name) orelse {
-        fail.notStruct(field.expr.location, norm);
-        return err;
-    };
-    const struc = if (item.kind == .struc) item.kind.struc else {
-        fail.notStruct(field.expr.location, norm);
-        return err;
-    };
-    const fiel = struc.fields.getPtr(field.name) orelse {
-        fail.noField(location, field.name, .{ .name = name });
-        return err;
-    };
-    fiel.used = true;
-    var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
-    defer resolve_map.deinit();
-    for (struc.generics, name.generics) |generic, typ| {
-        try resolve_map.put(generic.name, typ);
-    }
-    return .{
-        .typ = try fiel.typ.resolve(resolve_map),
-        .mutable = info.mutable,
     };
 }
 

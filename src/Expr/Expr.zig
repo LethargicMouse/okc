@@ -195,6 +195,54 @@ pub const Call = struct {
 pub const Field = struct {
     expr: Expr,
     name: []const u8,
+
+    pub fn check(
+        self: *@This(),
+        location: Location,
+        hint_mutable: bool,
+        ctx: struct {
+            gpa: std.mem.Allocator,
+            items: std.StringHashMap(Item.Info),
+        },
+        checker: *Checker,
+    ) !Expr.Info {
+        var info = try checker.checkExpr(&self.expr, .{ .mutable = hint_mutable });
+        const err = Expr.Info{
+            .typ = .err,
+            .mutable = true,
+        };
+        var norm = info.typ.normalise();
+        if (norm == .ptr) {
+            info.mutable = norm.ptr.mutable;
+            norm = norm.ptr.typ.normalise();
+        }
+        if (norm == .slice) {
+            return norm.slice.checkField(info.mutable, self.name, location);
+        }
+        const name = norm.getStructName(self.expr.location) orelse return err;
+        const item = ctx.items.get(name.name) orelse {
+            fail.notStruct(self.expr.location, norm);
+            return err;
+        };
+        const struc = if (item.kind == .struc) item.kind.struc else {
+            fail.notStruct(self.expr.location, norm);
+            return err;
+        };
+        const fiel = struc.fields.getPtr(self.name) orelse {
+            fail.noField(location, self.name, .{ .name = name });
+            return err;
+        };
+        fiel.used = true;
+        var resolve_map: std.StringHashMap(Typ) = .init(ctx.gpa);
+        defer resolve_map.deinit();
+        for (struc.generics, name.generics) |generic, typ| {
+            try resolve_map.put(generic.name, typ);
+        }
+        return .{
+            .typ = try fiel.typ.resolve(resolve_map),
+            .mutable = info.mutable,
+        };
+    }
 };
 
 pub const Elem = struct {
