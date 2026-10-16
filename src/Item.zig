@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Expr = @import("Expr/Expr.zig");
-const Failer = @import("Failer.zig");
+const fail = @import("fail.zig");
 const Location = @import("Location.zig");
 const Stmt = @import("Stmt.zig");
 const Typ = @import("typ/typ.zig").Typ;
@@ -103,10 +103,10 @@ pub const Generic = struct {
             return false;
         }
 
-        pub fn checkUsage(self: *@This(), failer: *Failer) void {
+        pub fn checkUsage(self: *@This()) void {
             for (self.generics, 0..) |generic, i| {
                 if (!self.usage.isSet(i)) {
-                    failer.unused(generic.location, generic.name);
+                    fail.unused(generic.location, generic.name);
                 }
             }
         }

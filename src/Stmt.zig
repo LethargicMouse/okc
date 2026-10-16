@@ -1,6 +1,6 @@
 const Checker = @import("Checker.zig");
 const Expr = @import("Expr/Expr.zig");
-const Failer = @import("Failer.zig");
+const fail = @import("fail.zig");
 const Item = @import("Item.zig");
 const Location = @import("Location.zig");
 const Typ = @import("typ/typ.zig").Typ;
@@ -51,14 +51,13 @@ pub const Return = struct {
         ret: *@This(),
         location: Location,
         ret_typ: Typ,
-        failer: *Failer,
         checker: *Checker,
     ) !ControlFlow {
         if (ret.expr) |*expr| {
             const info = try checker.checkExpr(expr, .{ .typ = ret_typ });
-            _ = checker.unify(expr.location, ret_typ, info.typ);
+            _ = Checker.unify(expr.location, ret_typ, info.typ);
         } else if (!ret_typ.isVoid()) {
-            failer.fail(location, "should return a value", .{});
+            fail.fail(location, "should return a value", .{});
         }
         return .ret;
     }

@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub const Binary = @import("Binary.zig");
 const Checker = @import("../Checker.zig");
-const Failer = @import("../Failer.zig");
+const fail = @import("../fail.zig");
 const Item = @import("../Item.zig");
 const Location = @import("../Location.zig");
 const Module = @import("../Module.zig");
@@ -35,6 +35,50 @@ pub const Kind = union(enum) {
 pub const Var = struct {
     name: []const u8,
     fun_meta: ?FunMeta = null,
+
+    pub fn check(
+        self: *@This(),
+        gpa: std.mem.Allocator,
+        location: Location,
+        hint_mutable: bool,
+        items: std.StringHashMap(Item.Info),
+    ) !Expr.Info {
+        const err = Expr.Info{
+            .typ = .err,
+            .mutable = true,
+        };
+        const item = items.getPtr(self.name) orelse {
+            fail.notDeclared(location, self.name);
+            return err;
+        };
+        switch (item.kind) {
+            .fun => |header| {
+                item.used = true;
+                self.fun_meta = @as(Expr.FunMeta, undefined);
+                return self.fun_meta.?.fillFromHeader(gpa, header.*);
+            },
+            .struc, .typ => {
+                fail.fail(location, "it is a type", .{});
+                return err;
+            },
+            .vari => |*vari_decl| {
+                item.used = true;
+                if (hint_mutable) {
+                    if (vari_decl.mutable) {
+                        vari_decl.mutated = true;
+                    } else {
+                        if (vari_decl.can_be_mutable) {
+                            std.log.info("add `mut` before name in {f}", .{item.location});
+                        }
+                    }
+                }
+                return .{
+                    .typ = vari_decl.typ,
+                    .mutable = vari_decl.mutable,
+                };
+            },
+        }
+    }
 };
 
 const Expr = @This();
@@ -121,15 +165,15 @@ pub const Call = struct {
     expr: Expr,
     args: []Expr,
 
-    pub fn check(self: *@This(), hint: Typ, failer: *Failer, checker: *Checker) !Expr.Info {
+    pub fn check(self: *@This(), hint: Typ, checker: *Checker) !Expr.Info {
         const callee_info = try checker.checkExpr(&self.expr, .{});
-        const fun = callee_info.typ.getFun(self.expr.location, failer) orelse
+        const fun = callee_info.typ.getFun(self.expr.location) orelse
             return self.checkBad(checker);
         // to propagate hint to generics
         _ = fun.ret_typ.unify(hint, .active);
         for (self.args, fun.params) |*arg, param| {
             const info = try checker.checkExpr(arg, .{ .typ = param.normalise() });
-            _ = checker.unify(arg.location, param, info.typ);
+            _ = Checker.unify(arg.location, param, info.typ);
         }
         return .{
             .typ = fun.ret_typ.*,

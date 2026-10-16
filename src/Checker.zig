@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Expr = @import("Expr/Expr.zig");
-const Failer = @import("Failer.zig");
+const fail = @import("fail.zig");
 const Location = @import("Location.zig");
 const Module = @import("Module.zig");
 const Stmt = @import("Stmt.zig");
@@ -13,7 +13,6 @@ arena: std.heap.ArenaAllocator,
 vars_stack: std.ArrayList([]const u8) = .empty,
 module: Module.Info,
 ret_typ: Typ = .any,
-failer: Failer,
 loops_nested: u16 = 0,
 
 pub fn init(
@@ -22,7 +21,6 @@ pub fn init(
     return .{
         .gpa = gpa,
         .arena = .init(gpa),
-        .failer = .init(),
         .module = .init(gpa),
     };
 }
@@ -30,7 +28,7 @@ pub fn init(
 pub fn run(self: *@This(), module: Module) error{ OutOfMemory, Handled }!void {
     defer self.deinit();
     try self.checkModule(module);
-    try self.failer.ensureNoErrors();
+    try fail.ensureNoErrors();
     return;
 }
 
@@ -48,27 +46,27 @@ fn checkModule(self: *@This(), module: Module) !void {
 fn checkItemsUsage(self: *@This()) void {
     var iter = self.module.items.iterator();
     while (iter.next()) |entry| {
-        self.checkItemUsage(entry.key_ptr.*, entry.value_ptr.*);
+        checkItemUsage(entry.key_ptr.*, entry.value_ptr.*);
     }
 }
 
-fn checkItemUsage(self: *@This(), name: []const u8, info: Item.Info) void {
+fn checkItemUsage(name: []const u8, info: Item.Info) void {
     if (info.used) {
         switch (info.kind) {
             .fun, .typ => {},
-            .vari => |vari| self.checkVarUsage(vari, info.location),
-            .struc => |struc| self.checkStructUsage(struc),
+            .vari => |vari| checkVarUsage(vari, info.location),
+            .struc => |struc| checkStructUsage(struc),
         }
     } else {
-        self.failer.unused(info.location, name);
+        fail.unused(info.location, name);
     }
 }
 
-fn checkStructUsage(self: *@This(), struc: Item.Struct.Info) void {
+fn checkStructUsage(struc: Item.Struct.Info) void {
     var iter = struc.fields.iterator();
     while (iter.next()) |entry| {
         if (!entry.value_ptr.used) {
-            self.failer.unused(entry.value_ptr.location, entry.key_ptr.*);
+            fail.unused(entry.value_ptr.location, entry.key_ptr.*);
         }
     }
 }
@@ -86,7 +84,7 @@ fn regItem(self: *@This(), item: *Item) !void {
         try self.checkHeader(kind.fun);
     }
     if (self.module.items.get(item.name)) |prev| {
-        self.failer.alreadyDeclared(item.location, item.name, prev.location);
+        fail.alreadyDeclared(item.location, item.name, prev.location);
         return;
     }
     try self.module.items.put(item.name, .{
@@ -99,7 +97,7 @@ fn regConst(self: *@This(), declare: *Item.Declare) !Item.Info.Kind {
     const hint_typ = if (declare.typ) |typ| typ else .any;
     const typ = try self.checkConstExpr(&declare.expr, .{ .typ = hint_typ });
     if (declare.typ) |typ_decl| {
-        _ = self.unify(declare.expr.location, typ_decl, typ);
+        _ = unify(declare.expr.location, typ_decl, typ);
     }
     return .{ .vari = .{
         .mutable = false,
@@ -117,7 +115,7 @@ fn checkConstExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) !Typ {
 fn checkExprComptime(self: *@This(), expr: Expr) void {
     switch (expr.kind) {
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
-        .call, .method => self.failer.fail(expr.location, "cannot evaluate at compile time", .{}),
+        .call, .method => fail.fail(expr.location, "cannot evaluate at compile time", .{}),
         .field => |field| self.checkExprComptime(field.expr),
         .unary => |unary| self.checkExprComptime(unary.expr),
         .elem => |elem| self.checkElemComptime(elem.*),
@@ -169,7 +167,6 @@ fn checkHeader(self: *@This(), header: *Item.Fun.Header) !void {
     var generics_checker: Item.Generic.Checker = try .init(self.gpa, header.generics);
     defer generics_checker.deinit(self.gpa);
     const typ_check = Typ.Check{
-        .failer = &self.failer,
         .generics_checker = &generics_checker,
         .items = self.module.items,
     };
@@ -177,23 +174,23 @@ fn checkHeader(self: *@This(), header: *Item.Fun.Header) !void {
         param.typ = try param.typ.check(typ_check);
     }
     header.ret_typ = try header.ret_typ.check(typ_check);
-    generics_checker.checkUsage(&self.failer);
+    generics_checker.checkUsage();
 }
 
-fn checkVarUsage(self: *@This(), vari: Item.Declare.Info, location: Location) void {
+fn checkVarUsage(vari: Item.Declare.Info, location: Location) void {
     if (vari.mutable and !vari.mutated) {
-        self.failer.fail(location, "variable is never mutated", .{});
+        fail.fail(location, "variable is never mutated", .{});
         std.log.info("remove `mut` before name\n", .{});
     }
 }
 
 fn checkMain(self: *@This(), location: Location) void {
     const item = self.module.items.getPtr("main") orelse {
-        self.failer.fail(location, "`main` function not found", .{});
+        fail.fail(location, "`main` function not found", .{});
         return;
     };
     if (item.kind != .fun) {
-        self.failer.fail(item.location, "item `main` is not a function", .{});
+        fail.fail(item.location, "item `main` is not a function", .{});
     }
     item.used = true;
 }
@@ -208,11 +205,11 @@ fn regStruct(self: *@This(), struc: Item.Struct) !Item.Info.Kind {
         var defaulted = false;
         if (field.default) |*expr| {
             const expr_typ = try self.checkConstExpr(expr, .{ .typ = field.typ });
-            _ = self.unify(expr.location, field.typ, expr_typ);
+            _ = unify(expr.location, field.typ, expr_typ);
             defaulted = true;
         }
         if (res.fields.get(field.name)) |prev| {
-            self.failer.alreadyDeclared(field.location, field.name, prev.location);
+            fail.alreadyDeclared(field.location, field.name, prev.location);
             continue;
         }
         try res.fields.put(field.name, .{
@@ -230,11 +227,11 @@ fn checkGenericsRedeclare(self: *@This(), generics: []const Item.Generic) !void 
     defer map.deinit();
     for (generics) |generic| {
         if (self.module.items.get(generic.name)) |prev| {
-            self.failer.alreadyDeclared(generic.location, generic.name, prev.location);
+            fail.alreadyDeclared(generic.location, generic.name, prev.location);
         }
         const entry = try map.getOrPut(generic.name);
         if (entry.found_existing) {
-            self.failer.alreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
+            fail.alreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
         } else {
             entry.value_ptr.* = generic.location;
         }
@@ -253,7 +250,7 @@ fn checkFun(self: *@This(), fun: Item.Fun, location: Location) !void {
     }
     const control_flow = try self.checkBlock(fun.body);
     if (control_flow != .ret and !fun.header.ret_typ.isVoid()) {
-        self.failer.fail(location, "function may not return", .{});
+        fail.fail(location, "function may not return", .{});
     }
     self.freeVars(rbp);
 }
@@ -278,7 +275,7 @@ fn checkBlock(self: *@This(), block: []Stmt) !Stmt.ControlFlow {
                 res = control_flow;
             }
             if (i + 1 != block.len) {
-                self.failer.fail(block[i + 1].location, "Stmt is unreachable", .{});
+                fail.fail(block[i + 1].location, "Stmt is unreachable", .{});
             }
         }
     }
@@ -299,7 +296,7 @@ fn checkStmt(self: *@This(), stmt: *Stmt) error{OutOfMemory}!Stmt.ControlFlow {
         .forr => |*forr| return self.checkFor(forr),
         .unre => return .ret,
         .brek => return self.checkBreak(stmt.location),
-        .ret => |*ret| return ret.check(stmt.location, self.ret_typ, &self.failer, self),
+        .ret => |*ret| return ret.check(stmt.location, self.ret_typ, self),
         .expr => |*expr| return self.checkExprStmt(expr),
         .declare => |*named| return self.checkDeclare(named.name, &named.declare, stmt.location),
         .op_assign => |*op_assign| return self.checkOpAssign(op_assign),
@@ -313,11 +310,11 @@ fn checkStmt(self: *@This(), stmt: *Stmt) error{OutOfMemory}!Stmt.ControlFlow {
 fn checkForRange(self: *@This(), forr: *Stmt.ForRange) !Stmt.ControlFlow {
     var start = try self.checkExpr(&forr.start, .{});
     if (!start.typ.isNumber()) {
-        self.failer.wrongTyp(forr.start.location, .int, start.typ);
+        fail.wrongTyp(forr.start.location, .int, start.typ);
         start.typ = .err;
     }
     const end = try self.checkExpr(&forr.end, .{});
-    const typ = self.unify(forr.end.location, start.typ, end.typ);
+    const typ = unify(forr.end.location, start.typ, end.typ);
     try self.declareVar(forr.vari, .{
         .typ = typ,
         .mutable = false,
@@ -332,7 +329,7 @@ fn checkForRange(self: *@This(), forr: *Stmt.ForRange) !Stmt.ControlFlow {
 
 fn checkFor(self: *@This(), forr: *Stmt.For) !Stmt.ControlFlow {
     const info = try self.checkExpr(&forr.expr, .{});
-    const elem_info = self.getElemExprInfo(info, forr.expr.location) orelse Expr.Info{
+    const elem_info = getElemExprInfo(info, forr.expr.location) orelse Expr.Info{
         .typ = .err,
         .mutable = true,
     };
@@ -350,13 +347,13 @@ fn checkFor(self: *@This(), forr: *Stmt.For) !Stmt.ControlFlow {
 
 fn freeVar(self: *@This(), name: []const u8) void {
     const item = self.module.items.fetchRemove(name).?.value;
-    self.checkItemUsage(name, item);
+    checkItemUsage(name, item);
 }
 
 fn checkIgnore(self: *@This(), ignore: *Stmt.Ignore, location: Location) !Stmt.ControlFlow {
     const info = try self.checkExpr(&ignore.expr, .{});
     if (info.typ.isVoid()) {
-        self.failer.fail(location, "redundant ignore", .{});
+        fail.fail(location, "redundant ignore", .{});
         std.log.info("remove `_ =` before expr\n", .{});
     }
     return .cont;
@@ -364,7 +361,7 @@ fn checkIgnore(self: *@This(), ignore: *Stmt.Ignore, location: Location) !Stmt.C
 
 fn checkBreak(self: *@This(), location: Location) error{OutOfMemory}!Stmt.ControlFlow {
     if (self.loops_nested == 0) {
-        self.failer.fail(location, "`break` outside of loop", .{});
+        fail.fail(location, "`break` outside of loop", .{});
         return .cont;
     }
     return .brek;
@@ -373,7 +370,7 @@ fn checkBreak(self: *@This(), location: Location) error{OutOfMemory}!Stmt.Contro
 fn checkExprStmt(self: *@This(), expr: *Expr) !Stmt.ControlFlow {
     // no type hints to disallow `undefined;`
     const info = try self.checkExpr(expr, .{});
-    _ = self.unify(expr.location, .{ .prime = .void }, info.typ);
+    _ = unify(expr.location, .{ .prime = .void }, info.typ);
     return .cont;
 }
 
@@ -402,7 +399,7 @@ fn checkIf(self: *@This(), iff: *Stmt.IfStmt) !Stmt.ControlFlow {
 
 fn checkBranch(self: *@This(), branch: *Stmt.Branch, kind: Stmt.Branch.Kind) !Stmt.ControlFlow {
     const info = try self.checkExpr(&branch.condition, .{});
-    _ = self.unify(branch.condition.location, .{ .prime = .bool }, info.typ);
+    _ = unify(branch.condition.location, .{ .prime = .bool }, info.typ);
     if (kind == .loop) {
         return self.checkLoopBlock(branch.body);
     }
@@ -412,25 +409,25 @@ fn checkBranch(self: *@This(), branch: *Stmt.Branch, kind: Stmt.Branch.Kind) !St
 fn checkOpAssign(self: *@This(), op_assign: *Stmt.OpAssign) !Stmt.ControlFlow {
     var left = try self.checkExpr(&op_assign.left, .{ .mutable = true });
     if (!left.mutable) {
-        self.failer.notMut(op_assign.left.location);
+        fail.notMut(op_assign.left.location);
     }
     std.debug.assert(op_assign.kind.getClass() == .arith);
     if (!left.typ.isNumber()) {
-        self.failer.wrongTyp(op_assign.left.location, .int, left.typ);
+        fail.wrongTyp(op_assign.left.location, .int, left.typ);
         left.typ = .err;
     }
     const right = try self.checkExpr(&op_assign.right, .{});
-    _ = self.unify(op_assign.right.location, left.typ, right.typ);
+    _ = unify(op_assign.right.location, left.typ, right.typ);
     return .cont;
 }
 
 fn checkAssign(self: *@This(), assign: *Stmt.Assign) !Stmt.ControlFlow {
     const left = try self.checkExpr(&assign.left, .{ .mutable = true });
     if (!left.mutable) {
-        self.failer.notMut(assign.left.location);
+        fail.notMut(assign.left.location);
     }
     const info = try self.checkExpr(&assign.expr, .{ .typ = left.typ });
-    _ = self.unify(assign.expr.location, left.typ, info.typ);
+    _ = unify(assign.expr.location, left.typ, info.typ);
     return .cont;
 }
 
@@ -446,7 +443,7 @@ fn checkUnary(self: *@This(), unary: *Expr.Unary, location: Location, hint: Typ)
 fn checkNeg(self: *@This(), expr: *Expr) !Expr.Info {
     var info = try self.checkExpr(expr, .{});
     if (!info.typ.isNumber()) {
-        self.failer.wrongTyp(expr.location, .int, info.typ);
+        fail.wrongTyp(expr.location, .int, info.typ);
         info.typ = .err;
     }
     return .{
@@ -471,7 +468,7 @@ fn checkDeref(self: *@This(), expr: *Expr, location: Location) !Expr.Info {
         },
         .err => return err,
         .prime, .name, .any, .array, .slice, .fun, .int, .loc_name => {
-            self.failer.fail(location, "cannot dereference type `{f}`", .{info.typ});
+            fail.fail(location, "cannot dereference type `{f}`", .{info.typ});
             return err;
         },
         .lazy => unreachable,
@@ -481,14 +478,14 @@ fn checkDeref(self: *@This(), expr: *Expr, location: Location) !Expr.Info {
 fn checkElem(self: *@This(), elem: *Expr.Elem, location: Location) !Expr.Info {
     const info = try self.checkExpr(&elem.expr, .{});
     const index = try self.checkExpr(&elem.index, .{});
-    _ = self.unify(elem.index.location, .{ .prime = .u64 }, index.typ);
-    return self.getElemExprInfo(info, location) orelse .{
+    _ = unify(elem.index.location, .{ .prime = .u64 }, index.typ);
+    return getElemExprInfo(info, location) orelse .{
         .typ = .err,
         .mutable = true,
     };
 }
 
-fn getElemExprInfo(self: *@This(), info: Expr.Info, location: Location) ?Expr.Info {
+fn getElemExprInfo(info: Expr.Info, location: Location) ?Expr.Info {
     switch (info.typ.normalise()) {
         .array => |array| return .{
             .typ = array.typ.*,
@@ -500,21 +497,21 @@ fn getElemExprInfo(self: *@This(), info: Expr.Info, location: Location) ?Expr.In
         },
         .err => return null,
         .prime, .name, .loc_name, .ptr, .any, .fun, .int => {
-            self.failer.fail(location, "type `{f}` does not support indexing", .{info.typ});
+            fail.fail(location, "type `{f}` does not support indexing", .{info.typ});
             return null;
         },
         .lazy => unreachable,
     }
 }
 
-pub fn unify(self: *@This(), location: Location, a: Typ, b: Typ) Typ {
+pub fn unify(location: Location, a: Typ, b: Typ) Typ {
     if (a.unify(b, .active)) |typ| {
         if (Typ.debug_unify) {
             std.log.debug("==> {f}", .{typ});
         }
         return typ;
     }
-    self.failer.wrongTyp(location, a, b);
+    fail.wrongTyp(location, a, b);
     if (a == .ptr and
         a.ptr.typ.* == .prime and
         a.ptr.typ.prime == .u8 and
@@ -535,7 +532,7 @@ fn checkDeclare(
 ) !Stmt.ControlFlow {
     const typ_decl = if (declare.typ) |typ| typ else .any;
     const info = try self.checkExpr(&declare.expr, .{ .typ = typ_decl });
-    const typ = self.unify(declare.expr.location, typ_decl, info.typ);
+    const typ = unify(declare.expr.location, typ_decl, info.typ);
     try self.declareVar(name, .{
         .typ = typ,
         .mutable = declare.mutable,
@@ -546,7 +543,7 @@ fn checkDeclare(
 
 fn declareVar(self: *@This(), name: []const u8, vari: Item.Declare.Info, location: Location) !void {
     if (self.module.items.get(name)) |prev| {
-        self.failer.alreadyDeclared(location, name, prev.location);
+        fail.alreadyDeclared(location, name, prev.location);
         return;
     }
     try self.vars_stack.append(self.gpa, name);
@@ -566,7 +563,7 @@ pub fn checkExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) error{OutOfMemory
         .struc => |*struc| return self.checkStructExpr(struc, expr.location, hint.typ),
         .int => |*int| return checkInt(int),
         .str => return checkStr(),
-        .vari => |*vari| return self.checkVar(vari, expr.location, hint.mutable),
+        .vari => |*vari| return vari.check(self.gpa, expr.location, hint.mutable, self.module.items),
         .char => return .{
             .typ = .{ .prime = .u8 },
             .mutable = false,
@@ -576,7 +573,7 @@ pub fn checkExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) error{OutOfMemory
             .mutable = false,
         },
         .undef => |*undef| return checkUndef(undef, hint.typ),
-        .call => |call| return call.check(hint.typ, &self.failer, self),
+        .call => |call| return call.check(hint.typ, self),
         .binary => |binary| return self.checkBinary(binary),
         .field => |field| return self.checkField(field, expr.location, hint.mutable),
         .named_struc => |*struc| return self.checkNamedStructExpr(struc, expr.location),
@@ -587,9 +584,9 @@ pub fn checkExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) error{OutOfMemory
 fn checkSubslice(self: *@This(), subslice: *Expr.Subslice, location: Location) !Expr.Info {
     const info = try self.checkExpr(&subslice.expr, .{});
     const start = try self.checkExpr(&subslice.start, .{});
-    _ = self.unify(subslice.start.location, .{ .prime = .u64 }, start.typ);
+    _ = unify(subslice.start.location, .{ .prime = .u64 }, start.typ);
     const end = try self.checkExpr(&subslice.end, .{});
-    _ = self.unify(subslice.end.location, .{ .prime = .u64 }, end.typ);
+    _ = unify(subslice.end.location, .{ .prime = .u64 }, end.typ);
     switch (info.typ.normalise()) {
         .array => |array| return .{
             .typ = .{ .slice = .{
@@ -603,7 +600,7 @@ fn checkSubslice(self: *@This(), subslice: *Expr.Subslice, location: Location) !
             .mutable = info.mutable,
         },
         else => |typ| {
-            self.failer.fail(location, "cannot take slice of `{f}`", .{typ});
+            fail.fail(location, "cannot take slice of `{f}`", .{typ});
             return .{
                 .typ = .{ .slice = .{
                     .typ = try Typ.memo.box(.err),
@@ -644,7 +641,7 @@ fn checkArray(self: *@This(), array: *Expr.Array, hint: Typ) !Expr.Info {
     }
     for (array.exprs) |*expr| {
         const info = try self.checkExpr(expr, .{ .typ = inner_hint });
-        inner_typ = self.unify(expr.location, inner_typ, info.typ);
+        inner_typ = unify(expr.location, inner_typ, info.typ);
     }
     array.typ = Typ{ .array = .{
         .typ = try Typ.memo.box(inner_typ),
@@ -670,7 +667,7 @@ fn checkStr() !Expr.Info {
 fn checkNotb(self: *@This(), expr: *Expr) !Expr.Info {
     var info = try self.checkExpr(expr, .{});
     if (!info.typ.isNumber()) {
-        self.failer.wrongTyp(expr.location, .int, info.typ);
+        fail.wrongTyp(expr.location, .int, info.typ);
         info.typ = .err;
     }
     return .{
@@ -714,7 +711,7 @@ fn checkStructExpr(
         .err => return err,
         .lazy => unreachable,
         .prime, .ptr, .any, .array, .fun, .int => {
-            self.failer.cannotInfer(.any, location);
+            fail.cannotInfer(.any, location);
             for (struc.fields) |*field| {
                 _ = try self.checkExpr(&field.expr, .{});
             }
@@ -736,29 +733,29 @@ fn checkSliceStruc(
     for (fields) |*field| {
         if (std.mem.eql(u8, field.name, "ptr")) {
             if (was_ptr) |_| {
-                self.failer.newFieldSecond(field.location, field.name);
+                fail.newFieldSecond(field.location, field.name);
             }
             const expected = Typ{ .ptr = .{
                 .typ = slice.typ,
                 .mutable = slice.mutable,
             } };
             const info = try self.checkExpr(&field.expr, .{ .typ = expected });
-            const typ = self.unify(field.expr.location, expected, info.typ);
+            const typ = unify(field.expr.location, expected, info.typ);
             was_ptr = if (typ == .ptr) typ.ptr.typ else try Typ.memo.box(.err);
         } else if (std.mem.eql(u8, field.name, "len")) {
             if (was_len) {
-                self.failer.newFieldSecond(field.location, field.name);
+                fail.newFieldSecond(field.location, field.name);
             }
             const info = try self.checkExpr(&field.expr, .{ .typ = .{ .prime = .u64 } });
-            _ = self.unify(field.expr.location, .{ .prime = .u64 }, info.typ);
+            _ = unify(field.expr.location, .{ .prime = .u64 }, info.typ);
             was_len = true;
         }
     }
     if (!was_len) {
-        self.failer.notInit(location, "len");
+        fail.notInit(location, "len");
     }
     if (was_ptr == null) {
-        self.failer.notInit(location, "ptr");
+        fail.notInit(location, "ptr");
     }
     typ_target.* = Typ{ .slice = .{
         .typ = was_ptr.?,
@@ -781,12 +778,12 @@ fn checkTypedStruc(
         .mutable = false,
     };
     const item = self.module.items.getPtr(name.name) orelse {
-        self.failer.notDeclared(location, name.name);
+        fail.notDeclared(location, name.name);
         return err;
     };
     item.used = true;
     const decl = if (item.kind == .struc) item.kind.struc else {
-        self.failer.notStruct(location, .{ .name = name });
+        fail.notStruct(location, .{ .name = name });
         return err;
     };
     const generics = try self.gpa.alloc(Typ, decl.generics.len);
@@ -804,7 +801,7 @@ fn checkTypedStruc(
     for (struc.fields) |*field| {
         try self.checkNewField(field, .{ .name = name }, decl.fields, resolve_map);
     }
-    self.checkFieldsInitialised(decl.fields, struc.fields, location);
+    checkFieldsInitialised(decl.fields, struc.fields, location);
     struc.typ = Typ{ .name = .{
         .generics = try Typ.memo.save(generics),
         .name = name.name,
@@ -816,7 +813,6 @@ fn checkTypedStruc(
 }
 
 fn checkFieldsInitialised(
-    self: *@This(),
     decl_fields: std.StringHashMap(Item.Struct.Field.Info),
     fields: []const Expr.Struct.Field,
     location: Location,
@@ -834,7 +830,7 @@ fn checkFieldsInitialised(
             }
         }
         if (not_init) {
-            self.failer.notInit(location, entry.key_ptr.*);
+            fail.notInit(location, entry.key_ptr.*);
         }
     }
 }
@@ -847,12 +843,12 @@ fn checkNewField(
     resolve_map: std.StringHashMap(Typ),
 ) !void {
     const f_decl = decl_fields.get(field.name) orelse {
-        self.failer.noField(field.location, field.name, struc_typ);
+        fail.noField(field.location, field.name, struc_typ);
         return;
     };
     const decl_typ = try f_decl.typ.resolve(resolve_map);
     const info = try self.checkExpr(&field.expr, .{ .typ = try decl_typ.solve() });
-    _ = self.unify(field.expr.location, decl_typ, info.typ);
+    _ = unify(field.expr.location, decl_typ, info.typ);
 }
 
 fn checkNamedStructExpr(self: *@This(), named: *Expr.Struct.Named, location: Location) !Expr.Info {
@@ -892,24 +888,24 @@ fn checkField(
         norm = norm.ptr.typ.normalise();
     }
     if (norm == .slice) {
-        return self.checkSliceField(
+        return checkSliceField(
             norm.slice,
             info.mutable,
             field.name,
             location,
         );
     }
-    const name = self.getTypName(norm, field.expr.location) orelse return err;
+    const name = getTypName(norm, field.expr.location) orelse return err;
     const item = self.module.items.get(name.name) orelse {
-        self.failer.notStruct(field.expr.location, norm);
+        fail.notStruct(field.expr.location, norm);
         return err;
     };
     const struc = if (item.kind == .struc) item.kind.struc else {
-        self.failer.notStruct(field.expr.location, norm);
+        fail.notStruct(field.expr.location, norm);
         return err;
     };
     const fiel = struc.fields.getPtr(field.name) orelse {
-        self.failer.noField(location, field.name, .{ .name = name });
+        fail.noField(location, field.name, .{ .name = name });
         return err;
     };
     fiel.used = true;
@@ -925,7 +921,6 @@ fn checkField(
 }
 
 fn checkSliceField(
-    self: *@This(),
     slice: Typ.Slice,
     mutable: bool,
     name: []const u8,
@@ -946,14 +941,14 @@ fn checkSliceField(
             .mutable = mutable,
         };
     }
-    self.failer.noField(location, name, .{ .slice = slice });
+    fail.noField(location, name, .{ .slice = slice });
     return .{
         .typ = .err,
         .mutable = true,
     };
 }
 
-fn getTypName(self: *@This(), norm: Typ, location: Location) ?Typ.Name {
+fn getTypName(norm: Typ, location: Location) ?Typ.Name {
     switch (norm) {
         .err => return null,
         .name => |name| return name,
@@ -963,7 +958,7 @@ fn getTypName(self: *@This(), norm: Typ, location: Location) ?Typ.Name {
             unreachable;
         },
         .fun, .prime, .ptr => {
-            self.failer.notStruct(location, norm);
+            fail.notStruct(location, norm);
             return null;
         },
     }
@@ -972,11 +967,11 @@ fn getTypName(self: *@This(), norm: Typ, location: Location) ?Typ.Name {
 fn checkBinary(self: *@This(), binary: *Expr.Binary) !Expr.Info {
     var left = try self.checkExpr(&binary.left, .{});
     if (!left.typ.isNumber()) {
-        self.failer.wrongTyp(binary.left.location, .int, left.typ);
+        fail.wrongTyp(binary.left.location, .int, left.typ);
         left.typ = .err;
     }
     const right = try self.checkExpr(&binary.right, .{});
-    const unityp = self.unify(binary.right.location, left.typ, right.typ);
+    const unityp = unify(binary.right.location, left.typ, right.typ);
     const typ = switch (binary.kind.getClass()) {
         .arith => unityp,
         .bool => Typ{ .prime = .bool },
@@ -985,49 +980,6 @@ fn checkBinary(self: *@This(), binary: *Expr.Binary) !Expr.Info {
         .typ = typ,
         .mutable = false,
     };
-}
-
-fn checkVar(
-    self: *@This(),
-    vari: *Expr.Var,
-    location: Location,
-    hint_mutable: bool,
-) !Expr.Info {
-    const err = Expr.Info{
-        .typ = .err,
-        .mutable = true,
-    };
-    const item = self.module.items.getPtr(vari.name) orelse {
-        self.failer.notDeclared(location, vari.name);
-        return err;
-    };
-    switch (item.kind) {
-        .fun => |header| {
-            item.used = true;
-            vari.fun_meta = @as(Expr.FunMeta, undefined);
-            return vari.fun_meta.?.fillFromHeader(self.gpa, header.*);
-        },
-        .struc, .typ => {
-            self.failer.fail(location, "it is a type", .{});
-            return err;
-        },
-        .vari => |*vari_decl| {
-            item.used = true;
-            if (hint_mutable) {
-                if (vari_decl.mutable) {
-                    vari_decl.mutated = true;
-                } else {
-                    if (vari_decl.can_be_mutable) {
-                        std.log.info("add `mut` before name in {f}", .{item.location});
-                    }
-                }
-            }
-            return .{
-                .typ = vari_decl.typ,
-                .mutable = vari_decl.mutable,
-            };
-        },
-    }
 }
 
 fn deinit(self: *@This()) void {
