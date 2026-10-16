@@ -895,7 +895,7 @@ fn checkField(
             location,
         );
     }
-    const name = getTypName(norm, field.expr.location) orelse return err;
+    const name = norm.getStructName(field.expr.location) orelse return err;
     const item = self.module.items.get(name.name) orelse {
         fail.notStruct(field.expr.location, norm);
         return err;
@@ -946,22 +946,6 @@ fn checkSliceField(
         .typ = .err,
         .mutable = true,
     };
-}
-
-fn getTypName(norm: Typ, location: Location) ?Typ.Name {
-    switch (norm) {
-        .err => return null,
-        .name => |name| return name,
-        .loc_name => |located| return located.bare,
-        .slice, .array, .any, .lazy, .int => {
-            std.log.err("getTypName: {f}", .{norm});
-            unreachable;
-        },
-        .fun, .prime, .ptr => {
-            fail.notStruct(location, norm);
-            return null;
-        },
-    }
 }
 
 fn deinit(self: *@This()) void {

@@ -28,6 +28,22 @@ pub const Typ = union(enum) {
 
     pub var memo: Memo(@This()) = undefined;
 
+    pub fn getStructName(norm: Typ, location: Location) ?Typ.Name {
+        switch (norm) {
+            .err => return null,
+            .name => |name| return name,
+            .loc_name => |located| return located.bare,
+            .slice, .array, .any, .lazy, .int => {
+                std.log.err("getTypName: {f}", .{norm});
+                unreachable;
+            },
+            .fun, .prime, .ptr => {
+                fail.notStruct(location, norm);
+                return null;
+            },
+        }
+    }
+
     pub fn solve(self: @This()) error{OutOfMemory}!@This() {
         if (self == .lazy) {
             return self.lazy.typ.solve();
