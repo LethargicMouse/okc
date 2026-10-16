@@ -10,6 +10,14 @@ name: []const u8,
 kind: Kind,
 location: Location,
 
+pub fn check(self: @This(), ctx: Check) error{OutOfMemory}!void {
+    switch (self.kind) {
+        .typ_alias, .constant, .struc, .ext_fun => {},
+        .fun => |fun| try fun.check(self.location, ctx),
+        .use => unreachable,
+    }
+}
+
 pub const Kind = union(enum) {
     constant: Stmt.Declare,
     ext_fun: Fun.Extern,

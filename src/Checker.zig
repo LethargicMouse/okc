@@ -41,7 +41,7 @@ fn checkModule(self: *@This(), module: Module) !void {
         try self.regItem(item, item_check);
     }
     for (module.items) |item| {
-        try checkItem(item, item_check);
+        try item.check(item_check);
     }
     item_check.checkMain(module.location);
     self.checkItemsUsage();
@@ -91,14 +91,6 @@ fn regConst(self: *@This(), declare: *Stmt.Declare) !Item.Info.Kind {
         .typ = typ,
         .can_be_mutable = true,
     } };
-}
-
-fn checkItem(item: Item, ctx: Item.Check) error{OutOfMemory}!void {
-    switch (item.kind) {
-        .typ_alias, .constant, .struc, .ext_fun => {},
-        .fun => |fun| try fun.check(item.location, ctx),
-        .use => unreachable,
-    }
 }
 
 fn deinit(self: *@This()) void {
