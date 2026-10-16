@@ -2,7 +2,6 @@ const std = @import("std");
 
 const Failer = @import("Failer.zig");
 const Module = @import("Module.zig");
-const Stmt = @import("Stmt.zig");
 const Typ = @import("typ/typ.zig").Typ;
 const Item = @import("Item.zig");
 
@@ -38,7 +37,7 @@ fn checkModule(self: *@This(), module: Module) !void {
         .items = &self.module.items,
     };
     for (module.items) |*item| {
-        try self.regItem(item, item_check);
+        try item.reg(item_check);
     }
     for (module.items) |item| {
         try item.check(item_check);
@@ -52,45 +51,6 @@ fn checkItemsUsage(self: *@This()) void {
     while (iter.next()) |entry| {
         entry.value_ptr.checkUsage(entry.key_ptr.*, &self.failer);
     }
-}
-
-fn regItem(self: *@This(), item: *Item, ctx: Item.Check) !void {
-    const kind: Item.Info.Kind = switch (item.kind) {
-        .typ_alias => |alias| .{ .typ = alias.typ },
-        .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
-        .struc => |struc| .{ .struc = try struc.reg(ctx) },
-        .fun => |*fun| .{ .fun = &fun.header },
-        .constant => |*declare| try self.regConst(declare),
-        .use => unreachable,
-    };
-    if (kind == .fun) {
-        try kind.fun.check(ctx);
-    }
-    if (self.module.items.get(item.name)) |prev| {
-        self.failer.alreadyDeclared(item.location, item.name, prev.location);
-        return;
-    }
-    try self.module.items.put(item.name, .{
-        .location = item.location,
-        .kind = kind,
-    });
-}
-
-fn regConst(self: *@This(), declare: *Stmt.Declare) !Item.Info.Kind {
-    const hint_typ = if (declare.typ) |typ| typ else .any;
-    const typ = try declare.expr.checkConst(.{ .typ = hint_typ }, .{
-        .gpa = self.gpa,
-        .items = self.module.items,
-        .failer = &self.failer,
-    });
-    if (declare.typ) |typ_decl| {
-        _ = typ_decl.unify(typ, declare.expr.location, &self.failer);
-    }
-    return .{ .vari = .{
-        .mutable = false,
-        .typ = typ,
-        .can_be_mutable = true,
-    } };
 }
 
 fn deinit(self: *@This()) void {

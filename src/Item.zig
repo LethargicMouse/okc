@@ -10,6 +10,28 @@ name: []const u8,
 kind: Kind,
 location: Location,
 
+pub fn reg(self: *@This(), ctx: Check) !void {
+    const kind: Info.Kind = switch (self.kind) {
+        .typ_alias => |alias| .{ .typ = alias.typ },
+        .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
+        .struc => |struc| .{ .struc = try struc.reg(ctx) },
+        .fun => |*fun| .{ .fun = &fun.header },
+        .constant => |*constt| try constt.reg(ctx),
+        .use => unreachable,
+    };
+    if (kind == .fun) {
+        try kind.fun.check(ctx);
+    }
+    if (ctx.items.get(self.name)) |prev| {
+        ctx.failer.alreadyDeclared(self.location, self.name, prev.location);
+        return;
+    }
+    try ctx.items.put(self.name, .{
+        .location = self.location,
+        .kind = kind,
+    });
+}
+
 pub fn check(self: @This(), ctx: Check) error{OutOfMemory}!void {
     switch (self.kind) {
         .typ_alias, .constant, .struc, .ext_fun => {},
@@ -19,12 +41,29 @@ pub fn check(self: @This(), ctx: Check) error{OutOfMemory}!void {
 }
 
 pub const Kind = union(enum) {
-    constant: Stmt.Declare,
+    constant: Const,
     ext_fun: Fun.Extern,
     fun: Fun,
     struc: Struct,
     typ_alias: TypAlias,
     use,
+};
+
+pub const Const = struct {
+    declare: Stmt.Declare,
+
+    pub fn reg(self: *@This(), ctx: Check) !Info.Kind {
+        const hint_typ = if (self.declare.typ) |typ| typ else .any;
+        const typ = try self.declare.expr.checkConst(.{ .typ = hint_typ }, ctx.checkExpr());
+        if (self.declare.typ) |typ_decl| {
+            _ = typ_decl.unify(typ, self.declare.expr.location, ctx.failer);
+        }
+        return .{ .vari = .{
+            .mutable = false,
+            .typ = typ,
+            .can_be_mutable = true,
+        } };
+    }
 };
 
 pub const Struct = struct {

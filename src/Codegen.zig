@@ -1020,7 +1020,7 @@ fn genConst(self: *@This(), name: []const u8) !void {
     if (was.found_existing) {
         return;
     }
-    const expr = self.items.get(name).?.kind.constant.expr;
+    const expr = self.items.get(name).?.kind.constant.declare.expr;
     const buffer = self.buffer.?;
     self.buffer = .empty;
     defer {

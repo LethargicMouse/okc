@@ -103,7 +103,7 @@ fn parseConstantItem(self: *@This()) !Item {
     return .{
         .name = named.name,
         .location = self.tmp_location,
-        .kind = .{ .constant = named.bare },
+        .kind = .{ .constant = .{ .declare = named.bare } },
     };
 }
 
