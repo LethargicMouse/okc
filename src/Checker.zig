@@ -108,7 +108,7 @@ fn regConst(self: *@This(), declare: *Item.Declare) !Item.Info.Kind {
     } };
 }
 
-fn checkConstExpr(self: *@This(), expr: *Expr, hint: ExprHint) !Typ {
+fn checkConstExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) !Typ {
     const info = try self.checkExpr(expr, hint);
     self.checkExprComptime(expr.*);
     return info.typ;
@@ -556,7 +556,7 @@ fn declareVar(self: *@This(), name: []const u8, vari: Item.Declare.Info, locatio
     });
 }
 
-pub fn checkExpr(self: *@This(), expr: *Expr, hint: ExprHint) error{OutOfMemory}!Expr.Info {
+pub fn checkExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) error{OutOfMemory}!Expr.Info {
     switch (expr.kind) {
         .method => unreachable,
         .subslice => |subslice| return self.checkSubslice(subslice, expr.location),
@@ -1036,8 +1036,3 @@ fn deinit(self: *@This()) void {
     self.arena.deinit();
     self.* = undefined;
 }
-
-const ExprHint = struct {
-    typ: Typ = .any,
-    mutable: bool = false,
-};

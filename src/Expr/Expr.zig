@@ -162,3 +162,8 @@ pub const Info = struct {
     typ: Typ,
     mutable: bool,
 };
+
+pub const Hint = struct {
+    typ: Typ = .any,
+    mutable: bool = false,
+};
