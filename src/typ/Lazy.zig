@@ -1,10 +1,10 @@
 const std = @import("std");
 
-const Typ = @import("typ.zig").Typ;
+const okc = @import("okc");
 
-typ: *Typ,
+typ: *okc.Typ,
 
-pub fn from(typ: *Typ) @This() {
+pub fn from(typ: *okc.Typ) @This() {
     const res = @This(){ .typ = typ };
     std.log.debug("=> {f}", .{res});
     return res;
@@ -22,9 +22,9 @@ pub fn shorten(self: @This()) @This() {
 
 const debug = true;
 
-pub fn set(self: @This(), typ: Typ) void {
+pub fn set(self: @This(), typ: okc.Typ) void {
     self.typ.* = typ;
-    std.log.debug("=> {f}", .{Typ{ .lazy = self }});
+    std.log.debug("=> {f}", .{okc.Typ{ .lazy = self }});
 }
 
 pub fn format(self: @This(), writer: *std.Io.Writer) !void {

@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const Typ = @import("typ.zig").Typ;
+const okc = @import("okc");
 
 len: u64,
-typ: *const Typ,
+typ: *const okc.Typ,
 
 pub fn eql(a: @This(), b: @This()) bool {
     return a.len == b.len and a.typ == b.typ;

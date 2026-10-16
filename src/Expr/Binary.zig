@@ -1,12 +1,10 @@
-const Expr = @import("Expr.zig");
-const Lexeme = @import("../Lexer.zig").Lexeme;
-const Typ = @import("../typ/typ.zig").Typ;
+const okc = @import("okc");
 
-left: Expr,
+left: okc.Expr,
 kind: Kind,
-right: Expr,
+right: okc.Expr,
 
-pub fn check(self: *@This(), ctx: Expr.Check) !Expr.Info {
+pub fn check(self: *@This(), ctx: okc.Expr.Check) !okc.Expr.Info {
     var left = try self.left.check(.{}, ctx);
     if (!left.typ.isNumber()) {
         ctx.failer.wrongTyp(self.left.location, .int, left.typ);
@@ -16,7 +14,7 @@ pub fn check(self: *@This(), ctx: Expr.Check) !Expr.Info {
     const unityp = left.typ.unify(right.typ, self.right.location, ctx.failer);
     const typ = switch (self.kind.getClass()) {
         .arith => unityp,
-        .bool => Typ{ .prime = .bool },
+        .bool => okc.Typ{ .prime = .bool },
     };
     return .{
         .typ = typ,
@@ -48,7 +46,7 @@ pub const Kind = enum {
         }
     }
 
-    pub fn fromLexeme(lexeme: Lexeme) ?Kind {
+    pub fn fromLexeme(lexeme: okc.Lexeme) ?Kind {
         return switch (lexeme) {
             .pipe => .orb,
             .amp => .andb,

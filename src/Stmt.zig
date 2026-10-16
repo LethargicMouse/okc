@@ -1,22 +1,31 @@
-const std = @import("std");
+const okc = @import("okc");
 
-const Expr = @import("Expr/Expr.zig");
-const Failer = @import("Failer.zig");
-const Item = @import("Item.zig");
-const Location = @import("Location.zig");
-const Typ = @import("typ/typ.zig").Typ;
+pub const Assign = @import("Stmt/Assign.zig");
+pub const Block = @import("Stmt/Block.zig");
+pub const Branch = @import("Stmt/Branch.zig");
+pub const brek = @import("Stmt/brek.zig");
+pub const Check = @import("Stmt/Check.zig");
+pub const Declare = @import("Stmt/Declare.zig");
+pub const Expr = @import("Stmt/Expr.zig");
+pub const For = @import("Stmt/For.zig");
+pub const ForRange = @import("Stmt/ForRange.zig");
+pub const IfStmt = @import("Stmt/IfStmt.zig");
+pub const Ignore = @import("Stmt/Ignore.zig");
+pub const OpAssign = @import("Stmt/OpAssign.zig");
+pub const Return = @import("Stmt/Return.zig");
+pub const While = @import("Stmt/While.zig");
 
-location: Location,
+location: okc.Location,
 kind: Kind,
 
-fn check(self: *@This(), ctx: *Stmt.Check) error{OutOfMemory}!Stmt.ControlFlow {
+pub fn check(self: *@This(), ctx: *Check) error{OutOfMemory}!okc.ControlFlow {
     switch (self.kind) {
         .for_range => |*forr| return forr.check(ctx),
         .forr => |*forr| return forr.check(ctx),
         .unre => return .ret,
         .brek => return brek.check(self.location, ctx.*),
         .ret => |*ret| return ret.check(self.location, ctx.ret_typ, ctx.exprCheck()),
-        .expr => |*expr| return ExprStmt.check(expr, ctx.exprCheck()),
+        .expr => |*expr| return Expr.check(expr, ctx.exprCheck()),
         .declare => |*named| return named.check(self.location, ctx),
         .op_assign => |*op_assign| return op_assign.check(ctx.exprCheck()),
         .assign => |*assign| return assign.check(ctx.exprCheck()),
@@ -25,28 +34,6 @@ fn check(self: *@This(), ctx: *Stmt.Check) error{OutOfMemory}!Stmt.ControlFlow {
         .ignore => |*ignore| return ignore.check(self.location, ctx.exprCheck()),
     }
 }
-
-const brek = struct {
-    fn check(location: Location, ctx: Stmt.Check) error{OutOfMemory}!Stmt.ControlFlow {
-        if (ctx.loops_nested == 0) {
-            ctx.failer.fail(location, "`break` outside of loop", .{});
-            return .cont;
-        }
-        return .brek;
-    }
-};
-
-const ExprStmt = struct {
-    expr: Expr,
-
-    fn check(expr: *Expr, ctx: Expr.Check) !Stmt.ControlFlow {
-        // no type hints to disallow `undefined;`
-        const info = try expr.check(.{}, ctx);
-        const expected: Typ = .{ .prime = .void };
-        _ = expected.unify(info.typ, expr.location, ctx.failer);
-        return .cont;
-    }
-};
 
 pub const Kind = union(enum) {
     assign: Assign,
@@ -61,315 +48,4 @@ pub const Kind = union(enum) {
     ret: Return,
     unre,
     whi: While,
-};
-
-const Stmt = @This();
-
-pub const For = struct {
-    vari: []const u8,
-    expr: Expr,
-    body: Block,
-    vari_location: Location,
-
-    fn check(self: *@This(), ctx: *Stmt.Check) !Stmt.ControlFlow {
-        const info = try self.expr.check(.{}, ctx.exprCheck());
-        const elem_info = info.getElem(self.expr.location, ctx.failer) orelse Expr.Info{
-            .typ = .err,
-            .mutable = true,
-        };
-        try ctx.declare(self.vari, self.vari_location, .{
-            .typ = elem_info.typ,
-            .mutable = false,
-            .can_be_mutable = false,
-        }, ctx.failer);
-        defer {
-            _ = ctx.vars_stack.pop();
-            ctx.freeVar(self.vari);
-        }
-        return self.body.checkLoop(ctx);
-    }
-};
-
-pub const ForRange = struct {
-    vari: []const u8,
-    start: Expr,
-    end: Expr,
-    body: Block,
-    vari_location: Location,
-
-    fn check(self: *@This(), ctx: *Stmt.Check) !Stmt.ControlFlow {
-        var start = try self.start.check(.{}, ctx.exprCheck());
-        if (!start.typ.isNumber()) {
-            ctx.failer.wrongTyp(self.start.location, .int, start.typ);
-            start.typ = .err;
-        }
-        const end = try self.end.check(.{}, ctx.exprCheck());
-        const typ = start.typ.unify(end.typ, self.end.location, ctx.failer);
-        try ctx.declare(self.vari, self.vari_location, .{
-            .typ = typ,
-            .mutable = false,
-            .can_be_mutable = false,
-        }, ctx.failer);
-        defer {
-            _ = ctx.vars_stack.pop();
-            ctx.freeVar(self.vari);
-        }
-        return self.body.checkLoop(ctx);
-    }
-};
-
-pub const Ignore = struct {
-    expr: Expr,
-
-    fn check(self: *@This(), location: Location, ctx: Expr.Check) !ControlFlow {
-        const info = try self.expr.check(.{}, ctx);
-        if (info.typ.isVoid()) {
-            ctx.failer.fail(location, "redundant ignore", .{});
-            std.log.info("remove `_ =` before expr\n", .{});
-        }
-        return .cont;
-    }
-};
-
-pub const Return = struct {
-    expr: ?Expr,
-
-    pub fn check(
-        ret: *@This(),
-        location: Location,
-        ret_typ: Typ,
-        ctx: Expr.Check,
-    ) !ControlFlow {
-        if (ret.expr) |*expr| {
-            const info = try expr.check(.{ .typ = ret_typ }, ctx);
-            _ = ret_typ.unify(info.typ, expr.location, ctx.failer);
-        } else if (!ret_typ.isVoid()) {
-            ctx.failer.fail(location, "should return a value", .{});
-        }
-        return .ret;
-    }
-};
-
-pub const While = struct {
-    branch: Branch,
-
-    fn check(self: *@This(), ctx: *Stmt.Check) !Stmt.ControlFlow {
-        const control_flow = try self.branch.check(.loop, ctx);
-        switch (control_flow) {
-            .cont, .brek => return .cont,
-            .ret => return .ret,
-        }
-    }
-};
-
-pub const IfStmt = struct {
-    branch: Branch,
-    else_ifs: []Branch,
-    else_block: Block,
-
-    fn check(self: *@This(), ctx: *Stmt.Check) !Stmt.ControlFlow {
-        var res = try self.branch.check(.simple, ctx);
-        for (self.else_ifs) |*branch| {
-            const control_flow = try branch.check(.simple, ctx);
-            if (@backingInt(control_flow) < @backingInt(res)) {
-                res = control_flow;
-            }
-        }
-        const control_flow = try self.else_block.check(ctx);
-        if (@backingInt(control_flow) < @backingInt(res)) {
-            res = control_flow;
-        }
-        return res;
-    }
-};
-
-pub const Block = struct {
-    stmts: []Stmt,
-
-    pub const empty = @This(){ .stmts = @constCast(&.{}) };
-
-    fn checkLoop(self: @This(), ctx: *Stmt.Check) !Stmt.ControlFlow {
-        ctx.loops_nested += 1;
-        const res = try self.check(ctx);
-        ctx.loops_nested -= 1;
-        switch (res) {
-            .ret => return .ret,
-            .brek, .cont => return .cont,
-        }
-    }
-
-    pub fn check(self: @This(), ctx: *Check) !ControlFlow {
-        var res = Stmt.ControlFlow.cont;
-        const rbp = ctx.vars_stack.items.len;
-        for (self.stmts, 0..) |*stmt, i| {
-            const control_flow = try stmt.check(ctx);
-            if (control_flow != .cont) {
-                if (res == .cont) {
-                    res = control_flow;
-                }
-                if (i + 1 != self.stmts.len) {
-                    ctx.failer.fail(self.stmts[i + 1].location, "Stmt is unreachable", .{});
-                }
-            }
-        }
-        ctx.freeVars(rbp);
-        return res;
-    }
-};
-
-pub const Branch = struct {
-    condition: Expr,
-    body: Block,
-
-    pub fn check(
-        self: *@This(),
-        kind: Stmt.Branch.Kind,
-        ctx: *Stmt.Check,
-    ) !ControlFlow {
-        const info = try self.condition.check(.{}, ctx.exprCheck());
-        const expected: Typ = .{ .prime = .bool };
-        _ = expected.unify(info.typ, self.condition.location, ctx.failer);
-        if (kind == .loop) {
-            return self.body.checkLoop(ctx);
-        } else {
-            return self.body.check(ctx);
-        }
-    }
-
-    pub const Kind = enum {
-        loop,
-        simple,
-    };
-};
-
-pub const Assign = struct {
-    left: Expr,
-    expr: Expr,
-
-    pub fn check(self: *@This(), ctx: Expr.Check) !ControlFlow {
-        const left = try self.left.check(.{ .mutable = true }, ctx);
-        if (!left.mutable) {
-            ctx.failer.notMut(self.left.location);
-        }
-        const info = try self.expr.check(.{ .typ = left.typ }, ctx);
-        _ = left.typ.unify(info.typ, self.expr.location, ctx.failer);
-        return .cont;
-    }
-};
-
-pub const OpAssign = struct {
-    left: Expr,
-    kind: Expr.Binary.Kind,
-    right: Expr,
-
-    pub fn check(self: *@This(), ctx: Expr.Check) !ControlFlow {
-        var left = try self.left.check(.{ .mutable = true }, ctx);
-        if (!left.mutable) {
-            ctx.failer.notMut(self.left.location);
-        }
-        std.debug.assert(self.kind.getClass() == .arith);
-        if (!left.typ.isNumber()) {
-            ctx.failer.wrongTyp(self.left.location, .int, left.typ);
-            left.typ = .err;
-        }
-        const right = try self.right.check(.{}, ctx);
-        _ = left.typ.unify(right.typ, self.right.location, ctx.failer);
-        return .cont;
-    }
-};
-
-// numbered to enable `<`
-pub const ControlFlow = enum(u2) {
-    cont = 0,
-    brek = 1,
-    ret = 2,
-};
-
-pub const Declare = struct {
-    typ: ?Typ,
-    expr: Expr,
-    mutable: bool,
-
-    pub const Named = struct {
-        name: []const u8,
-        bare: Declare,
-
-        pub fn check(self: *@This(), location: Location, ctx: *Stmt.Check) !Stmt.ControlFlow {
-            const typ_decl = if (self.bare.typ) |typ| typ else .any;
-            const info = try self.bare.expr.check(.{ .typ = typ_decl }, ctx.exprCheck());
-            const typ = typ_decl.unify(info.typ, self.bare.expr.location, ctx.failer);
-            try ctx.declare(self.name, location, .{
-                .typ = typ,
-                .mutable = self.bare.mutable,
-                .can_be_mutable = true,
-            }, ctx.failer);
-            return .cont;
-        }
-    };
-
-    pub const Info = struct {
-        typ: Typ,
-        can_be_mutable: bool,
-        mutable: bool,
-        mutated: bool = false,
-
-        pub fn checkUsage(self: @This(), location: Location, failer: *Failer) void {
-            if (self.mutable and !self.mutated) {
-                failer.fail(location, "variable is never mutated", .{});
-                std.log.info("remove `mut` before name\n", .{});
-            }
-        }
-    };
-};
-
-pub const Check = struct {
-    gpa: std.mem.Allocator,
-    items: *std.StringHashMap(Item.Info),
-    vars_stack: std.ArrayList([]const u8) = .empty,
-    loops_nested: u16 = 0,
-    ret_typ: Typ,
-    failer: *Failer,
-
-    pub fn deinit(self: *@This()) void {
-        self.vars_stack.deinit(self.gpa);
-        self.* = undefined;
-    }
-
-    pub fn declare(
-        self: *@This(),
-        name: []const u8,
-        location: Location,
-        vari: Stmt.Declare.Info,
-        failer: *Failer,
-    ) !void {
-        if (self.items.get(name)) |prev| {
-            failer.alreadyDeclared(location, name, prev.location);
-            return;
-        }
-        try self.vars_stack.append(self.gpa, name);
-        try self.items.put(name, .{
-            .location = location,
-            .kind = .{ .vari = vari },
-        });
-    }
-
-    pub fn exprCheck(self: @This()) Expr.Check {
-        return .{
-            .gpa = self.gpa,
-            .items = self.items.*,
-            .failer = self.failer,
-        };
-    }
-
-    pub fn freeVars(self: *@This(), rbp: usize) void {
-        for (self.vars_stack.items[rbp..]) |name| {
-            self.freeVar(name);
-        }
-        self.vars_stack.shrinkRetainingCapacity(rbp);
-    }
-
-    fn freeVar(self: @This(), name: []const u8) void {
-        const item = self.items.fetchRemove(name).?.value;
-        item.checkUsage(name, self.failer);
-    }
 };

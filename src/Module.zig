@@ -7,11 +7,12 @@ const Location = @import("Location.zig");
 items: []Item,
 location: Location,
 
-pub fn check(self: @This(), gpa: std.mem.Allocator, failer: *Failer) !void {
+pub fn check(self: @This(), gpa: std.mem.Allocator, arena: std.mem.Allocator, failer: *Failer) !void {
     var info: Info = .init(gpa);
     defer info.deinit();
     const item_check: Item.Check = .{
         .gpa = gpa,
+        .arena = arena,
         .failer = failer,
         .items = &info.items,
     };
@@ -50,5 +51,3 @@ pub const Info = struct {
         self.* = undefined;
     }
 };
-
-pub var arena: std.mem.Allocator = undefined;

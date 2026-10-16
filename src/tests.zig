@@ -1,12 +1,12 @@
 const std = @import("std");
 
-const main = @import("main.zig");
+const okc = @import("okc");
 
 fn testFile(comptime name: []const u8, output: []const u8) !void {
     const ok_path = std.fmt.comptimePrint("examples/{s}.ok", .{name});
-    try main.compile(std.testing.io, std.testing.allocator, ok_path);
+    try okc.compile(std.testing.io, std.testing.allocator, ok_path);
 
-    const run_res = try std.process.run(std.testing.allocator, std.testing.io, .{ .argv = &.{main.out_path} });
+    const run_res = try std.process.run(std.testing.allocator, std.testing.io, .{ .argv = &.{okc.out_path} });
     defer std.testing.allocator.free(run_res.stdout);
     defer std.testing.allocator.free(run_res.stderr);
     try std.testing.expect(run_res.term.exited == 0);
@@ -14,7 +14,7 @@ fn testFile(comptime name: []const u8, output: []const u8) !void {
 }
 
 test "Empty.ok" {
-    const code = try main.runFile(std.testing.io, std.testing.allocator, "examples/Empty.ok");
+    const code = try okc.runFile(std.testing.io, std.testing.allocator, "examples/Empty.ok");
     try std.testing.expectEqual(123, code);
 }
 
@@ -94,7 +94,7 @@ test "Struct.ok" {
 }
 
 test "RawTerm.ok" {
-    try main.compile(std.testing.io, std.testing.allocator, "examples/RawTerm.ok");
+    try okc.compile(std.testing.io, std.testing.allocator, "examples/RawTerm.ok");
 }
 
 test "NestRet.ok" {

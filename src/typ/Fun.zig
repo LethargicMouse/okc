@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const Typ = @import("typ.zig").Typ;
+const okc = @import("okc");
 
-params: []const Typ,
-ret_typ: *const Typ,
+params: []const okc.Typ,
+ret_typ: *const okc.Typ,
 
 pub fn eql(a: @This(), b: @This()) bool {
     if (a.ret_typ != b.ret_typ) {

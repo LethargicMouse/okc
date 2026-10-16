@@ -1,10 +1,6 @@
 const std = @import("std");
 
-const Failer = @import("../Failer.zig");
-const Item = @import("../Item.zig");
-const Location = @import("../Location.zig");
-const Memo = @import("../memo.zig").Memo;
-const Module = @import("../Module.zig");
+const okc = @import("okc");
 
 pub const Typ = union(enum) {
     any,
@@ -19,16 +15,16 @@ pub const Typ = union(enum) {
     ptr: Ptr,
     slice: Slice,
 
-    pub const Array = @import("Array.zig");
-    pub const Fun = @import("Fun.zig");
-    pub const Lazy = @import("Lazy.zig");
-    pub const Name = @import("Name.zig");
-    pub const Ptr = @import("Ptr.zig");
-    pub const Slice = @import("Slice.zig");
+    pub const Array = @import("typ/Array.zig");
+    pub const Fun = @import("typ/Fun.zig");
+    pub const Lazy = @import("typ/Lazy.zig");
+    pub const Name = @import("typ/Name.zig");
+    pub const Ptr = @import("typ/Ptr.zig");
+    pub const Slice = @import("typ/Slice.zig");
 
-    pub var memo: Memo(@This()) = undefined;
+    pub var memo: okc.Memo(@This()) = undefined;
 
-    pub fn getStructName(norm: Typ, location: Location, failer: *Failer) ?Typ.Name {
+    pub fn getStructName(norm: Typ, location: okc.Location, failer: *okc.Failer) ?Typ.Name {
         switch (norm) {
             .err => return null,
             .name => |name| return name,
@@ -44,14 +40,14 @@ pub const Typ = union(enum) {
         }
     }
 
-    pub fn solve(self: @This()) error{OutOfMemory}!@This() {
+    pub fn solve(self: @This(), arena: std.mem.Allocator) error{OutOfMemory}!@This() {
         if (self == .lazy) {
-            return self.lazy.typ.solve();
+            return self.lazy.typ.solve(arena);
         }
-        return self.updateRec(solve, .{});
+        return self.updateRec(solve, .{arena}, arena);
     }
 
-    pub fn getFun(self: @This(), location: Location, failer: *Failer) ?Typ.Fun {
+    pub fn getFun(self: @This(), location: okc.Location, failer: *okc.Failer) ?Typ.Fun {
         switch (self.normalise()) {
             .fun => |fun| return fun,
             .err => return null,
@@ -69,7 +65,7 @@ pub const Typ = union(enum) {
         if (self == .name) {
             return self;
         }
-        const res = try self.updateRec(check, .{ctx});
+        const res = try self.updateRec(check, .{ctx}, ctx.arena);
         if (res == .loc_name) {
             if (ctx.generics_checker.mark(res.loc_name.bare.name)) {
                 return res;
@@ -92,16 +88,16 @@ pub const Typ = union(enum) {
         };
     }
 
-    pub fn resolve(self: @This(), map: std.StringHashMap(@This())) error{OutOfMemory}!@This() {
+    pub fn resolve(self: @This(), map: std.StringHashMap(@This()), arena: std.mem.Allocator) error{OutOfMemory}!@This() {
         if (self.getName()) |name| {
             if (map.get(name.name)) |resolved| {
                 return resolved;
             }
         }
-        return self.updateRec(resolve, .{map});
+        return self.updateRec(resolve, .{ map, arena }, arena);
     }
 
-    pub fn fromName(name: []const u8, location: Location) @This() {
+    pub fn fromName(name: []const u8, location: okc.Location) @This() {
         if (std.meta.stringToEnum(Prime, name)) |prime| {
             return .{ .prime = prime };
         }
@@ -182,7 +178,7 @@ pub const Typ = union(enum) {
 
     pub const debug_unify = false;
 
-    pub fn unify(a: Typ, b: Typ, location: Location, failer: *Failer) Typ {
+    pub fn unify(a: Typ, b: Typ, location: okc.Location, failer: *okc.Failer) Typ {
         if (a.unifyOrNull(b, .active)) |typ| {
             if (Typ.debug_unify) {
                 std.log.debug("==> {f}", .{typ});
@@ -319,43 +315,43 @@ pub const Typ = union(enum) {
         passive,
     };
 
-    fn updateRec(self: @This(), fun: anytype, args: anytype) !@This() {
+    fn updateRec(self: @This(), fun: anytype, args: anytype, arena: std.mem.Allocator) !@This() {
         switch (self) {
             .array => |array| {
                 const new = try @call(.auto, fun, .{array.typ.*} ++ args);
                 return .{ .array = .{
-                    .typ = try memo.box(new),
+                    .typ = try memo.box(new, arena),
                     .len = array.len,
                 } };
             },
             .fun => |fun_typ| {
-                const params = try Module.arena.alloc(Typ, fun_typ.params.len);
-                defer Module.arena.free(params);
+                const params = try arena.alloc(Typ, fun_typ.params.len);
+                defer arena.free(params);
                 for (params, fun_typ.params) |*target, param| {
                     target.* = try @call(.auto, fun, .{param} ++ args);
                 }
                 const new = try @call(.auto, fun, .{fun_typ.ret_typ.*} ++ args);
                 return .{ .fun = .{
-                    .params = try memo.save(params),
-                    .ret_typ = try memo.box(new),
+                    .params = try memo.save(params, arena),
+                    .ret_typ = try memo.box(new, arena),
                 } };
             },
-            .name => |name| return .{ .name = try name.updateGenerics(fun, args) },
+            .name => |name| return .{ .name = try name.updateGenerics(fun, args, arena) },
             .loc_name => |located| return .{ .loc_name = .{
                 .location = located.location,
-                .bare = try located.bare.updateGenerics(fun, args),
+                .bare = try located.bare.updateGenerics(fun, args, arena),
             } },
             .ptr => |ptr| {
                 const new = try @call(.auto, fun, .{ptr.typ.*} ++ args);
                 return .{ .ptr = .{
-                    .typ = try memo.box(new),
+                    .typ = try memo.box(new, arena),
                     .mutable = ptr.mutable,
                 } };
             },
             .slice => |slice| {
                 const new = try @call(.auto, fun, .{slice.typ.*} ++ args);
                 return .{ .slice = .{
-                    .typ = try memo.box(new),
+                    .typ = try memo.box(new, arena),
                     .mutable = false,
                 } };
             },
@@ -392,8 +388,9 @@ pub const Typ = union(enum) {
     };
 
     pub const Check = struct {
-        items: std.StringHashMap(Item.Info),
-        generics_checker: *Item.Generic.Checker,
-        failer: *Failer,
+        arena: std.mem.Allocator,
+        items: std.StringHashMap(okc.Item.Info),
+        generics_checker: *okc.Item.Generic.Checker,
+        failer: *okc.Failer,
     };
 };

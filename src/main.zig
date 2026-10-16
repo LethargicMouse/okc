@@ -1,12 +1,23 @@
 const std = @import("std");
 
-const Codegen = @import("Codegen.zig");
-const Failer = @import("Failer.zig");
-const Lexer = @import("Lexer.zig");
-const Module = @import("Module.zig");
-const Parser = @import("Parser.zig");
-const Source = @import("Source.zig");
-const Typ = @import("typ/typ.zig").Typ;
+pub const Codegen = @import("Codegen.zig");
+pub const ConcatStr = @import("ConcatStr.zig");
+pub const Expr = @import("Expr.zig");
+pub const Failer = @import("Failer.zig");
+pub const HashMap = @import("hash_map.zig").HashMap;
+pub const Item = @import("Item.zig");
+pub const Lexeme = @import("lexeme.zig").Lexeme;
+pub const Lexer = @import("Lexer.zig");
+pub const Location = @import("Location.zig");
+pub const Memo = @import("memo.zig").Memo;
+pub const Module = @import("Module.zig");
+pub const Parser = @import("Parser.zig");
+pub const Pos = @import("Pos.zig");
+pub const PtrHashMap = @import("ptr_hash_map.zig").PtrHashMap;
+pub const SliceHashMap = @import("slice_hash_map.zig").SliceHashMap;
+pub const Source = @import("Source.zig");
+pub const Stmt = @import("Stmt.zig");
+pub const Typ = @import("typ.zig").Typ;
 
 pub fn main(init: std.process.Init) u8 {
     const code = run(init) catch |err| {
@@ -63,16 +74,14 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
-    Module.arena = arena.allocator();
-
     Typ.memo = .init(gpa);
     defer Typ.memo.deinit();
 
-    var parser = Parser.init(gpa, tokens);
+    var parser = Parser.init(gpa, arena.allocator(), tokens);
     const module = try parser.run();
 
     var failer: Failer = .init();
-    try module.check(gpa, &failer);
+    try module.check(gpa, arena.allocator(), &failer);
     try failer.ensureNoErrors();
 
     std.Io.Dir.cwd().createDirPath(io, build_dir_path) catch {
@@ -81,12 +90,7 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     };
 
     var write_buf: [4096]u8 = undefined;
-    var gen = try Codegen.init(
-        io,
-        gpa,
-        &write_buf,
-        out_ll_path,
-    );
+    var gen = try Codegen.init(io, gpa, arena.allocator(), &write_buf, out_ll_path);
     gen.run(module) catch |err| switch (err) {
         error.WriteFailed => {
             std.log.err("failed to write to `" ++ out_ll_path ++ "`", .{});
@@ -102,11 +106,11 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
 
 fn runCmd(io: std.Io, argv: []const []const u8) !u8 {
     var child = std.process.spawn(io, .{ .argv = argv }) catch {
-        std.log.err("failed to run `{f}`", .{ConcatStr(" "){ .items = argv }});
+        std.log.err("failed to run `{f}`", .{ConcatStr{ .items = argv }});
         return error.Handled;
     };
     const term = child.wait(io) catch {
-        std.log.err("failed to wait for `{f}`", .{ConcatStr(" "){ .items = argv }});
+        std.log.err("failed to wait for `{f}`", .{ConcatStr{ .items = argv }});
         return error.Handled;
     };
     return switch (term) {
@@ -115,20 +119,12 @@ fn runCmd(io: std.Io, argv: []const []const u8) !u8 {
     };
 }
 
-fn ConcatStr(sep: []const u8) type {
-    return struct {
-        items: []const []const u8,
-
-        pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-            if (self.items.len != 0) {
-                try writer.writeAll(self.items[0]);
-                for (self.items[1..]) |item| {
-                    try writer.print("{s}{s}", .{ sep, item });
-                }
-            }
-        }
-    };
-}
+// numbered to enable `<`
+pub const ControlFlow = enum(u2) {
+    cont = 0,
+    brek = 1,
+    ret = 2,
+};
 
 test {
     _ = &main;

@@ -1,23 +1,24 @@
 const std = @import("std");
 
-const Failer = @import("../Failer.zig");
-const Item = @import("../Item.zig");
-const Location = @import("../Location.zig");
-const Module = @import("../Module.zig");
-const Typ = @import("typ.zig").Typ;
+const okc = @import("okc");
 
 name: []const u8,
-generics: []const Typ = &.{},
+generics: []const okc.Typ = &.{},
 
-pub fn updateGenerics(self: @This(), fun: anytype, args: anytype) !@This() {
-    const generics = try Module.arena.alloc(Typ, self.generics.len);
-    defer Module.arena.free(generics);
+pub fn updateGenerics(
+    self: @This(),
+    fun: anytype,
+    args: anytype,
+    arena: std.mem.Allocator,
+) !@This() {
+    const generics = try arena.alloc(okc.Typ, self.generics.len);
+    defer arena.free(generics);
     for (generics, self.generics) |*target, generic| {
         target.* = try @call(.auto, fun, .{generic} ++ args);
     }
     return .{
         .name = self.name,
-        .generics = try Typ.memo.save(generics),
+        .generics = try okc.Typ.memo.save(generics, arena),
     };
 }
 
@@ -56,9 +57,9 @@ const Name = @This();
 
 pub const Located = struct {
     bare: Name,
-    location: Location,
+    location: okc.Location,
 
-    pub fn checkDecl(self: @This(), items: std.StringHashMap(Item.Info), failer: *Failer) error{BadType}!?Typ {
+    pub fn checkDecl(self: @This(), items: std.StringHashMap(okc.Item.Info), failer: *okc.Failer) error{BadType}!?okc.Typ {
         std.log.debug("checkTypDecl {f}", .{self.bare});
         const item = items.getPtr(self.bare.name) orelse {
             failer.fail(self.location, "item `{s}` is not declared", .{self.bare.name});

@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const Typ = @import("typ.zig").Typ;
+const okc = @import("okc");
 
-typ: *const Typ,
+typ: *const okc.Typ,
 mutable: bool,
 
 pub fn eql(a: @This(), b: @This()) bool {

@@ -1,15 +1,13 @@
 const std = @import("std");
 
-const Location = @import("Location.zig");
-const Pos = @import("Pos.zig");
-const Source = @import("Source.zig");
+const okc = @import("okc");
 
-source: Source,
-poses: []const Pos,
+source: okc.Source,
+poses: []const okc.Pos,
 cursor: usize = 0,
 
-pub fn init(gpa: std.mem.Allocator, source: Source) error{OutOfMemory}!@This() {
-    const poses = try Pos.makePoses(gpa, source.code);
+pub fn init(gpa: std.mem.Allocator, source: okc.Source) error{OutOfMemory}!@This() {
+    const poses = try okc.Pos.makePoses(gpa, source.code);
     return .{
         .source = source,
         .poses = poses,
@@ -236,8 +234,8 @@ fn isNameChar(c: u8) bool {
     return isNameFirstChar(c) or std.ascii.isDigit(c);
 }
 
-fn makeToken(self: *@This(), lexeme: Lexeme, len: usize) Token {
-    const location = Location{
+fn makeToken(self: *@This(), lexeme: okc.Lexeme, len: usize) Token {
+    const location = okc.Location{
         .name = self.source.name,
         .start = self.poses[self.cursor],
         .end = self.poses[self.cursor + len],
@@ -252,120 +250,6 @@ fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     self.* = undefined;
 }
 
-pub const Token = struct { lexeme: Lexeme, location: Location };
+pub const Token = struct { lexeme: okc.Lexeme, location: okc.Location };
 
-pub const Lexeme = union(enum) {
-    amp,
-    att,
-    bral,
-    brar,
-    brek,
-    char: u8,
-    colon,
-    comma,
-    curl,
-    curr,
-    dot,
-    dot2,
-    els,
-    eof,
-    equ,
-    equ2,
-    ext,
-    fals,
-    forr,
-    fun,
-    iff,
-    int: u64,
-    int_too_big,
-    invalid,
-    invalid_char,
-    les,
-    let,
-    minus,
-    mor,
-    moreq,
-    mut,
-    name: []const u8,
-    parl,
-    parr,
-    pipe,
-    plus,
-    rem,
-    ret,
-    semi,
-    slash,
-    star,
-    str: []const u8,
-    struc,
-    tild,
-    tru,
-    typ,
-    unclosed_char,
-    unclosed_str,
-    undef,
-    unre,
-    use,
-    whi,
-    wild,
-
-    pub fn describe(lexeme: @typeInfo(Lexeme).@"union".tag_type.?) []const u8 {
-        return switch (lexeme) {
-            .use => "`use`",
-            .typ => "`type`",
-            .fals => "`false`",
-            .dot2 => "`..`",
-            .forr => "`for`",
-            .int_too_big => "<int too big>",
-            .unclosed_char => "<unclosed char>",
-            .invalid_char => "<invalid char>",
-            .att => "`@`",
-            .moreq => "`>=`",
-            .mor => "`>`",
-            .unre => "`unreachable`",
-            .brek => "`break`",
-            .tru => "`true`",
-            .undef => "`undefined`",
-            .pipe => "`|`",
-            .tild => "`~`",
-            .bral => "`[`",
-            .brar => "`]`",
-            .struc => "`struct`",
-            .mut => "`mut`",
-            .wild => "`_`",
-            .char => "<char>",
-            .dot => "`.`",
-            .els => "`else`",
-            .rem => "`%`",
-            .les => "`<`",
-            .whi => "`while`",
-            .equ2 => "`==`",
-            .iff => "`if`",
-            .slash => "`/`",
-            .minus => "`-`",
-            .plus => "`+`",
-            .equ => "`=`",
-            .let => "`let`",
-            .comma => "`,`",
-            .str => "<str>",
-            .unclosed_str => "<unclosed string>",
-            .name => "<name>",
-            .int => "<int>",
-            .ret => "`return`",
-            .invalid => "<invalid>",
-            .amp => "`&`",
-            .star => "`*`",
-            .colon => "`:`",
-            .ext => "`extern`",
-            .fun => "`fn`",
-            .parl => "`(`",
-            .parr => "`)`",
-            .curl => "`{`",
-            .semi => "`;`",
-            .curr => "`}`",
-            .eof => "<eof>",
-        };
-    }
-};
-
-const LexPair = struct { str: []const u8, lexeme: Lexeme };
+const LexPair = struct { str: []const u8, lexeme: okc.Lexeme };

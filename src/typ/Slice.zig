@@ -1,11 +1,8 @@
 const std = @import("std");
 
-const Expr = @import("../Expr/Expr.zig");
-const Failer = @import("../Failer.zig");
-const Location = @import("../Location.zig");
-const Typ = @import("typ.zig").Typ;
+const okc = @import("okc");
 
-typ: *const Typ,
+typ: *const okc.Typ,
 mutable: bool,
 
 pub fn eql(a: @This(), b: @This()) bool {
@@ -29,9 +26,9 @@ pub fn checkField(
     self: @This(),
     mutable: bool,
     name: []const u8,
-    location: Location,
-    failer: *Failer,
-) !Expr.Info {
+    location: okc.Location,
+    failer: *okc.Failer,
+) !okc.Expr.Info {
     if (std.mem.eql(u8, name, "ptr")) {
         return .{
             .typ = .{ .ptr = .{

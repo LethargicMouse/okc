@@ -11,6 +11,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    exe.root_module.addImport("okc", exe.root_module);
     b.installArtifact(exe);
     const run_step = b.step("run", "Run the app");
     const run_cmd = b.addRunArtifact(exe);
