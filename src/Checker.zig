@@ -561,7 +561,7 @@ pub fn checkExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) error{OutOfMemory
         .array => |*array| return self.checkArray(array, hint.typ),
         .unary => |unary| return self.checkUnary(unary, expr.location, hint.typ),
         .struc => |*struc| return self.checkStructExpr(struc, expr.location, hint.typ),
-        .int => |*int| return checkInt(int),
+        .int => |*int| return int.check(),
         .str => return checkStr(),
         .vari => |*vari| return vari.check(self.gpa, expr.location, hint.mutable, self.module.items),
         .char => return .{
@@ -862,14 +862,6 @@ fn checkUndef(undef: *Expr.Undef, typ: Typ) !Expr.Info {
     undef.typ = typ;
     return .{
         .typ = undef.typ,
-        .mutable = false,
-    };
-}
-
-fn checkInt(int: *Expr.Int) !Expr.Info {
-    std.debug.assert(int.typ == .int);
-    return .{
-        .typ = .{ .lazy = .from(&int.typ) },
         .mutable = false,
     };
 }

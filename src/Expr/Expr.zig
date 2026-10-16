@@ -154,6 +154,14 @@ pub const Struct = struct {
 pub const Int = struct {
     val: u64,
     typ: Typ = .int,
+
+    pub fn check(self: *@This()) !Info {
+        std.debug.assert(self.typ == .int);
+        return .{
+            .typ = .{ .lazy = .from(&self.typ) },
+            .mutable = false,
+        };
+    }
 };
 
 // lol
