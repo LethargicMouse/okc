@@ -167,6 +167,14 @@ pub const Int = struct {
 // lol
 pub const Undef = struct {
     typ: Typ = .any,
+
+    pub fn check(self: *@This(), typ: Typ) !Info {
+        self.typ = typ;
+        return .{
+            .typ = self.typ,
+            .mutable = false,
+        };
+    }
 };
 
 pub const Call = struct {

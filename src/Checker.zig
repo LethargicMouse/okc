@@ -572,7 +572,7 @@ pub fn checkExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) error{OutOfMemory
             .typ = .{ .prime = .bool },
             .mutable = false,
         },
-        .undef => |*undef| return checkUndef(undef, hint.typ),
+        .undef => |*undef| return undef.check(hint.typ),
         .call => |call| return call.check(hint.typ, self),
         .binary => |binary| return binary.check(self),
         .field => |field| return field.check(expr.location, hint.mutable, .{
@@ -856,14 +856,6 @@ fn checkNewField(
 
 fn checkNamedStructExpr(self: *@This(), named: *Expr.Struct.Named, location: Location) !Expr.Info {
     return self.checkTypedStruc(.{ .name = named.name }, &named.struc, location);
-}
-
-fn checkUndef(undef: *Expr.Undef, typ: Typ) !Expr.Info {
-    undef.typ = typ;
-    return .{
-        .typ = undef.typ,
-        .mutable = false,
-    };
 }
 
 fn deinit(self: *@This()) void {
