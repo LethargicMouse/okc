@@ -4,7 +4,7 @@ const Failer = @import("../Failer.zig");
 const Item = @import("../Item.zig");
 const Location = @import("../Location.zig");
 const Module = @import("../Module.zig");
-const Typ = @import("mod.zig").Typ;
+const Typ = @import("typ.zig").Typ;
 
 name: []const u8,
 generics: []const Typ = &.{},

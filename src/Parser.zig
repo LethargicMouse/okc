@@ -7,7 +7,7 @@ const Lexeme = Lexer.Lexeme;
 const Location = @import("Location.zig");
 const Module = @import("Module.zig");
 const Stmt = @import("Stmt.zig");
-const Typ = @import("typ/mod.zig").Typ;
+const Typ = @import("typ/typ.zig").Typ;
 
 gpa: std.mem.Allocator,
 tokens: []const Lexer.Token,

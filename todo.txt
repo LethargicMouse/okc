@@ -17,8 +17,7 @@ x 2026-10-15 2026-10-14 move Declare to Item +refactor
 x 2026-10-15 2026-10-14 Module.arena: Allocator +refactor
 x 2026-10-15 2026-10-15 Typ.Lazy +refactor
 2026-10-15 rebase +refactor
-2026-10-15 typ/mod -> typ/typ +refactor
-2026-10-15 remove `if (debug...` +refactor
+x 2026-10-16 2026-10-15 typ/mod -> typ/typ +refactor
 2026-10-15 total modularity & root imports +refactor
 2026-10-16 big audit +refactor
 x 2026-10-16 2026-10-16 Typ.Lazy all inputs visible +refactor

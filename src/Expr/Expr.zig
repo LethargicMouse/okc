@@ -6,7 +6,7 @@ const Failer = @import("../Failer.zig");
 const Item = @import("../Item.zig");
 const Location = @import("../Location.zig");
 const Module = @import("../Module.zig");
-const Typ = @import("../typ/mod.zig").Typ;
+const Typ = @import("../typ/typ.zig").Typ;
 pub const Unary = @import("Unary.zig");
 
 location: Location,

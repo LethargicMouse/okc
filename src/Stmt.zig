@@ -3,7 +3,7 @@ const Expr = @import("Expr/Expr.zig");
 const Failer = @import("Failer.zig");
 const Item = @import("Item.zig");
 const Location = @import("Location.zig");
-const Typ = @import("typ/mod.zig").Typ;
+const Typ = @import("typ/typ.zig").Typ;
 
 location: Location,
 kind: Kind,

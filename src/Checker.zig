@@ -5,7 +5,7 @@ const Failer = @import("Failer.zig");
 const Location = @import("Location.zig");
 const Module = @import("Module.zig");
 const Stmt = @import("Stmt.zig");
-const Typ = @import("typ/mod.zig").Typ;
+const Typ = @import("typ/typ.zig").Typ;
 const Item = @import("Item.zig");
 
 gpa: std.mem.Allocator,

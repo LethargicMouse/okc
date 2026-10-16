@@ -4,7 +4,7 @@ const Expr = @import("Expr/Expr.zig");
 const Failer = @import("Failer.zig");
 const Location = @import("Location.zig");
 const Stmt = @import("Stmt.zig");
-const Typ = @import("typ/mod.zig").Typ;
+const Typ = @import("typ/typ.zig").Typ;
 
 name: []const u8,
 kind: Kind,

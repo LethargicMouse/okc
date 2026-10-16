@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Typ = @import("mod.zig").Typ;
+const Typ = @import("typ.zig").Typ;
 
 params: []const Typ,
 ret_typ: *const Typ,

@@ -5,7 +5,7 @@ const HashMap = @import("hash_map.zig").HashMap;
 const Item = @import("Item.zig");
 const Module = @import("Module.zig");
 const Stmt = @import("Stmt.zig");
-const Typ = @import("typ/mod.zig").Typ;
+const Typ = @import("typ/typ.zig").Typ;
 
 const Name = Typ.Name;
 
