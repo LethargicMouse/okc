@@ -103,7 +103,7 @@ fn parseConstantItem(self: *@This()) !Item {
     return .{
         .name = named.name,
         .location = self.tmp_location,
-        .kind = .{ .constant = named.declare },
+        .kind = .{ .constant = named.bare },
     };
 }
 
@@ -577,7 +577,7 @@ fn parseDeclare(self: *@This()) !Item.Declare.Named {
     self.tmp_location = location;
     return .{
         .name = name,
-        .declare = .{
+        .bare = .{
             .typ = typ,
             .expr = expr,
             .mutable = mutable,

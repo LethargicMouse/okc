@@ -37,7 +37,11 @@ fn checkModule(self: *@This(), module: Module) !void {
         try self.regItem(item);
     }
     for (module.items) |item| {
-        try self.checkItem(item);
+        try self.checkItem(item, .{
+            .gpa = self.gpa,
+            .items = &self.module.items,
+            .vars_stack = &self.vars_stack,
+        });
     }
     self.checkMain(module.location);
     self.checkItemsUsage();
@@ -95,9 +99,12 @@ fn regItem(self: *@This(), item: *Item) !void {
 
 fn regConst(self: *@This(), declare: *Item.Declare) !Item.Info.Kind {
     const hint_typ = if (declare.typ) |typ| typ else .any;
-    const typ = try self.checkConstExpr(&declare.expr, .{ .typ = hint_typ });
+    const typ = try self.checkConstExpr(&declare.expr, .{ .typ = hint_typ }, .{
+        .gpa = self.gpa,
+        .items = self.module.items,
+    });
     if (declare.typ) |typ_decl| {
-        _ = unify(declare.expr.location, typ_decl, typ);
+        _ = typ_decl.unify(typ, declare.expr.location);
     }
     return .{ .vari = .{
         .mutable = false,
@@ -106,8 +113,8 @@ fn regConst(self: *@This(), declare: *Item.Declare) !Item.Info.Kind {
     } };
 }
 
-fn checkConstExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) !Typ {
-    const info = try self.checkExpr(expr, hint);
+fn checkConstExpr(self: *@This(), expr: *Expr, hint: Expr.Hint, ctx: Expr.Check) !Typ {
+    const info = try expr.check(hint, ctx);
     self.checkExprComptime(expr.*);
     return info.typ;
 }
@@ -155,10 +162,10 @@ fn checkArrayComptime(self: *@This(), array: Expr.Array) void {
     }
 }
 
-fn checkItem(self: *@This(), item: Item) error{OutOfMemory}!void {
+fn checkItem(self: *@This(), item: Item, ctx: Stmt.Check) error{OutOfMemory}!void {
     switch (item.kind) {
         .typ_alias, .constant, .struc, .ext_fun => {},
-        .fun => |fun| try self.checkFun(fun, item.location),
+        .fun => |fun| try self.checkFun(fun, item.location, ctx),
         .use => unreachable,
     }
 }
@@ -204,8 +211,11 @@ fn regStruct(self: *@This(), struc: Item.Struct) !Item.Info.Kind {
     for (struc.fields) |*field| {
         var defaulted = false;
         if (field.default) |*expr| {
-            const expr_typ = try self.checkConstExpr(expr, .{ .typ = field.typ });
-            _ = unify(expr.location, field.typ, expr_typ);
+            const expr_typ = try self.checkConstExpr(expr, .{ .typ = field.typ }, .{
+                .gpa = self.gpa,
+                .items = self.module.items,
+            });
+            _ = field.typ.unify(expr_typ, expr.location);
             defaulted = true;
         }
         if (res.fields.get(field.name)) |prev| {
@@ -238,26 +248,27 @@ fn checkGenericsRedeclare(self: *@This(), generics: []const Item.Generic) !void 
     }
 }
 
-fn checkFun(self: *@This(), fun: Item.Fun, location: Location) !void {
+fn checkFun(self: *@This(), fun: Item.Fun, location: Location, ctx: Stmt.Check) !void {
     self.ret_typ = fun.header.ret_typ;
     const rbp = self.vars_stack.items.len;
     for (fun.header.params) |param| {
-        try self.declareVar(param.name, .{
+        const vari: Item.Declare.Info = .{
             .typ = param.typ,
             .mutable = false,
             .can_be_mutable = false,
-        }, param.location);
+        };
+        try vari.declare(param.name, param.location, ctx);
     }
-    const control_flow = try self.checkBlock(fun.body);
+    const control_flow = try self.checkBlock(fun.body, ctx);
     if (control_flow != .ret and !fun.header.ret_typ.isVoid()) {
         fail.fail(location, "function may not return", .{});
     }
     self.freeVars(rbp);
 }
 
-fn checkLoopBlock(self: *@This(), block: []Stmt) !Stmt.ControlFlow {
+fn checkLoopBlock(self: *@This(), block: []Stmt, ctx: Stmt.Check) !Stmt.ControlFlow {
     self.loops_nested += 1;
-    const res = try self.checkBlock(block);
+    const res = try self.checkBlock(block, ctx);
     self.loops_nested -= 1;
     switch (res) {
         .ret => return .ret,
@@ -265,11 +276,11 @@ fn checkLoopBlock(self: *@This(), block: []Stmt) !Stmt.ControlFlow {
     }
 }
 
-fn checkBlock(self: *@This(), block: []Stmt) !Stmt.ControlFlow {
+fn checkBlock(self: *@This(), block: []Stmt, ctx: Stmt.Check) !Stmt.ControlFlow {
     var res = Stmt.ControlFlow.cont;
     const rbp = self.vars_stack.items.len;
     for (block, 0..) |*stmt, i| {
-        const control_flow = try self.checkStmt(stmt);
+        const control_flow = try self.checkStmt(stmt, ctx);
         if (control_flow != .cont) {
             if (res == .cont) {
                 res = control_flow;
@@ -290,59 +301,61 @@ fn freeVars(self: *@This(), rbp: usize) void {
     self.vars_stack.shrinkRetainingCapacity(rbp);
 }
 
-fn checkStmt(self: *@This(), stmt: *Stmt) error{OutOfMemory}!Stmt.ControlFlow {
+fn checkStmt(self: *@This(), stmt: *Stmt, ctx: Stmt.Check) error{OutOfMemory}!Stmt.ControlFlow {
     switch (stmt.kind) {
-        .for_range => |*forr| return self.checkForRange(forr),
-        .forr => |*forr| return self.checkFor(forr),
+        .for_range => |*forr| return self.checkForRange(forr, ctx),
+        .forr => |*forr| return self.checkFor(forr, ctx),
         .unre => return .ret,
         .brek => return self.checkBreak(stmt.location),
-        .ret => |*ret| return ret.check(stmt.location, self.ret_typ, self),
-        .expr => |*expr| return self.checkExprStmt(expr),
-        .declare => |*named| return self.checkDeclare(named.name, &named.declare, stmt.location),
-        .op_assign => |*op_assign| return self.checkOpAssign(op_assign),
-        .assign => |*assign| return self.checkAssign(assign),
-        .iff => |*iff| return self.checkIf(iff),
-        .whi => |*whi| return self.checkWhile(whi),
-        .ignore => |*ignore| return self.checkIgnore(ignore, stmt.location),
+        .ret => |*ret| return ret.check(stmt.location, self.ret_typ, ctx.exprCheck()),
+        .expr => |*expr| return checkExprStmt(expr, ctx.exprCheck()),
+        .declare => |*named| return named.check(stmt.location, ctx),
+        .op_assign => |*op_assign| return checkOpAssign(op_assign, ctx.exprCheck()),
+        .assign => |*assign| return checkAssign(assign, ctx.exprCheck()),
+        .iff => |*iff| return self.checkIf(iff, ctx),
+        .whi => |*whi| return self.checkWhile(whi, ctx),
+        .ignore => |*ignore| return checkIgnore(ignore, stmt.location, ctx.exprCheck()),
     }
 }
 
-fn checkForRange(self: *@This(), forr: *Stmt.ForRange) !Stmt.ControlFlow {
-    var start = try self.checkExpr(&forr.start, .{});
+fn checkForRange(self: *@This(), forr: *Stmt.ForRange, ctx: Stmt.Check) !Stmt.ControlFlow {
+    var start = try forr.start.check(.{}, ctx.exprCheck());
     if (!start.typ.isNumber()) {
         fail.wrongTyp(forr.start.location, .int, start.typ);
         start.typ = .err;
     }
-    const end = try self.checkExpr(&forr.end, .{});
-    const typ = unify(forr.end.location, start.typ, end.typ);
-    try self.declareVar(forr.vari, .{
+    const end = try forr.end.check(.{}, ctx.exprCheck());
+    const typ = start.typ.unify(end.typ, forr.end.location);
+    const vari: Item.Declare.Info = .{
         .typ = typ,
         .mutable = false,
         .can_be_mutable = false,
-    }, forr.vari_location);
+    };
+    try vari.declare(forr.vari, forr.vari_location, ctx);
     defer {
         _ = self.vars_stack.pop();
         self.freeVar(forr.vari);
     }
-    return self.checkLoopBlock(forr.body);
+    return self.checkLoopBlock(forr.body, ctx);
 }
 
-fn checkFor(self: *@This(), forr: *Stmt.For) !Stmt.ControlFlow {
-    const info = try self.checkExpr(&forr.expr, .{});
-    const elem_info = getElemExprInfo(info, forr.expr.location) orelse Expr.Info{
+fn checkFor(self: *@This(), forr: *Stmt.For, ctx: Stmt.Check) !Stmt.ControlFlow {
+    const info = try forr.expr.check(.{}, ctx.exprCheck());
+    const elem_info = info.getElem(forr.expr.location) orelse Expr.Info{
         .typ = .err,
         .mutable = true,
     };
-    try self.declareVar(forr.vari, .{
+    const vari: Item.Declare.Info = .{
         .typ = elem_info.typ,
         .mutable = false,
         .can_be_mutable = false,
-    }, forr.vari_location);
+    };
+    try vari.declare(forr.vari, forr.vari_location, ctx);
     defer {
         _ = self.vars_stack.pop();
         self.freeVar(forr.vari);
     }
-    return self.checkLoopBlock(forr.body);
+    return self.checkLoopBlock(forr.body, ctx);
 }
 
 fn freeVar(self: *@This(), name: []const u8) void {
@@ -350,8 +363,8 @@ fn freeVar(self: *@This(), name: []const u8) void {
     checkItemUsage(name, item);
 }
 
-fn checkIgnore(self: *@This(), ignore: *Stmt.Ignore, location: Location) !Stmt.ControlFlow {
-    const info = try self.checkExpr(&ignore.expr, .{});
+fn checkIgnore(ignore: *Stmt.Ignore, location: Location, ctx: Expr.Check) !Stmt.ControlFlow {
+    const info = try ignore.expr.check(.{}, ctx);
     if (info.typ.isVoid()) {
         fail.fail(location, "redundant ignore", .{});
         std.log.info("remove `_ =` before expr\n", .{});
@@ -367,47 +380,54 @@ fn checkBreak(self: *@This(), location: Location) error{OutOfMemory}!Stmt.Contro
     return .brek;
 }
 
-fn checkExprStmt(self: *@This(), expr: *Expr) !Stmt.ControlFlow {
+fn checkExprStmt(expr: *Expr, ctx: Expr.Check) !Stmt.ControlFlow {
     // no type hints to disallow `undefined;`
-    const info = try self.checkExpr(expr, .{});
-    _ = unify(expr.location, .{ .prime = .void }, info.typ);
+    const info = try expr.check(.{}, ctx);
+    const expected: Typ = .{ .prime = .void };
+    _ = expected.unify(info.typ, expr.location);
     return .cont;
 }
 
-fn checkWhile(self: *@This(), whi: *Stmt.While) !Stmt.ControlFlow {
-    const control_flow = try self.checkBranch(&whi.branch, .loop);
+fn checkWhile(self: *@This(), whi: *Stmt.While, ctx: Stmt.Check) !Stmt.ControlFlow {
+    const control_flow = try self.checkBranch(&whi.branch, .loop, ctx);
     switch (control_flow) {
         .cont, .brek => return .cont,
         .ret => return .ret,
     }
 }
 
-fn checkIf(self: *@This(), iff: *Stmt.IfStmt) !Stmt.ControlFlow {
-    var res = try self.checkBranch(&iff.branch, .simple);
+fn checkIf(self: *@This(), iff: *Stmt.IfStmt, ctx: Stmt.Check) !Stmt.ControlFlow {
+    var res = try self.checkBranch(&iff.branch, .simple, ctx);
     for (iff.else_ifs) |*branch| {
-        const control_flow = try self.checkBranch(branch, .simple);
+        const control_flow = try self.checkBranch(branch, .simple, ctx);
         if (@backingInt(control_flow) < @backingInt(res)) {
             res = control_flow;
         }
     }
-    const control_flow = try self.checkBlock(iff.else_branch);
+    const control_flow = try self.checkBlock(iff.else_branch, ctx);
     if (@backingInt(control_flow) < @backingInt(res)) {
         res = control_flow;
     }
     return res;
 }
 
-fn checkBranch(self: *@This(), branch: *Stmt.Branch, kind: Stmt.Branch.Kind) !Stmt.ControlFlow {
-    const info = try self.checkExpr(&branch.condition, .{});
-    _ = unify(branch.condition.location, .{ .prime = .bool }, info.typ);
+fn checkBranch(
+    self: *@This(),
+    branch: *Stmt.Branch,
+    kind: Stmt.Branch.Kind,
+    ctx: Stmt.Check,
+) !Stmt.ControlFlow {
+    const info = try branch.condition.check(.{}, ctx.exprCheck());
+    const expected: Typ = .{ .prime = .bool };
+    _ = expected.unify(info.typ, branch.condition.location);
     if (kind == .loop) {
-        return self.checkLoopBlock(branch.body);
+        return self.checkLoopBlock(branch.body, ctx);
     }
-    return self.checkBlock(branch.body);
+    return self.checkBlock(branch.body, ctx);
 }
 
-fn checkOpAssign(self: *@This(), op_assign: *Stmt.OpAssign) !Stmt.ControlFlow {
-    var left = try self.checkExpr(&op_assign.left, .{ .mutable = true });
+fn checkOpAssign(op_assign: *Stmt.OpAssign, ctx: Expr.Check) !Stmt.ControlFlow {
+    var left = try op_assign.left.check(.{ .mutable = true }, ctx);
     if (!left.mutable) {
         fail.notMut(op_assign.left.location);
     }
@@ -416,403 +436,19 @@ fn checkOpAssign(self: *@This(), op_assign: *Stmt.OpAssign) !Stmt.ControlFlow {
         fail.wrongTyp(op_assign.left.location, .int, left.typ);
         left.typ = .err;
     }
-    const right = try self.checkExpr(&op_assign.right, .{});
-    _ = unify(op_assign.right.location, left.typ, right.typ);
+    const right = try op_assign.right.check(.{}, ctx);
+    _ = left.typ.unify(right.typ, op_assign.right.location);
     return .cont;
 }
 
-fn checkAssign(self: *@This(), assign: *Stmt.Assign) !Stmt.ControlFlow {
-    const left = try self.checkExpr(&assign.left, .{ .mutable = true });
+fn checkAssign(assign: *Stmt.Assign, ctx: Expr.Check) !Stmt.ControlFlow {
+    const left = try assign.left.check(.{ .mutable = true }, ctx);
     if (!left.mutable) {
         fail.notMut(assign.left.location);
     }
-    const info = try self.checkExpr(&assign.expr, .{ .typ = left.typ });
-    _ = unify(assign.expr.location, left.typ, info.typ);
+    const info = try assign.expr.check(.{ .typ = left.typ }, ctx);
+    _ = left.typ.unify(info.typ, assign.expr.location);
     return .cont;
-}
-
-fn checkUnary(self: *@This(), unary: *Expr.Unary, location: Location, hint: Typ) !Expr.Info {
-    switch (unary.kind) {
-        .deref => return self.checkDeref(&unary.expr, location),
-        .notb => return self.checkNotb(&unary.expr),
-        .ptr => return self.checkPtr(&unary.expr, hint),
-        .neg => return self.checkNeg(&unary.expr),
-    }
-}
-
-fn checkNeg(self: *@This(), expr: *Expr) !Expr.Info {
-    var info = try self.checkExpr(expr, .{});
-    if (!info.typ.isNumber()) {
-        fail.wrongTyp(expr.location, .int, info.typ);
-        info.typ = .err;
-    }
-    return .{
-        .typ = info.typ,
-        .mutable = false,
-    };
-}
-
-fn checkDeref(self: *@This(), expr: *Expr, location: Location) !Expr.Info {
-    const info = try self.checkExpr(expr, .{});
-    const norm = info.typ.normalise();
-    const err = Expr.Info{
-        .typ = .err,
-        .mutable = true,
-    };
-    switch (norm) {
-        .ptr => |ptr| {
-            return .{
-                .typ = ptr.typ.*,
-                .mutable = ptr.mutable,
-            };
-        },
-        .err => return err,
-        .prime, .name, .any, .array, .slice, .fun, .int, .loc_name => {
-            fail.fail(location, "cannot dereference type `{f}`", .{info.typ});
-            return err;
-        },
-        .lazy => unreachable,
-    }
-}
-
-fn checkElem(self: *@This(), elem: *Expr.Elem, location: Location) !Expr.Info {
-    const info = try self.checkExpr(&elem.expr, .{});
-    const index = try self.checkExpr(&elem.index, .{});
-    _ = unify(elem.index.location, .{ .prime = .u64 }, index.typ);
-    return getElemExprInfo(info, location) orelse .{
-        .typ = .err,
-        .mutable = true,
-    };
-}
-
-fn getElemExprInfo(info: Expr.Info, location: Location) ?Expr.Info {
-    switch (info.typ.normalise()) {
-        .array => |array| return .{
-            .typ = array.typ.*,
-            .mutable = info.mutable,
-        },
-        .slice => |slice| return .{
-            .typ = slice.typ.*,
-            .mutable = slice.mutable,
-        },
-        .err => return null,
-        .prime, .name, .loc_name, .ptr, .any, .fun, .int => {
-            fail.fail(location, "type `{f}` does not support indexing", .{info.typ});
-            return null;
-        },
-        .lazy => unreachable,
-    }
-}
-
-pub fn unify(location: Location, a: Typ, b: Typ) Typ {
-    if (a.unify(b, .active)) |typ| {
-        if (Typ.debug_unify) {
-            std.log.debug("==> {f}", .{typ});
-        }
-        return typ;
-    }
-    fail.wrongTyp(location, a, b);
-    if (a == .ptr and
-        a.ptr.typ.* == .prime and
-        a.ptr.typ.prime == .u8 and
-        b == .slice and
-        b.slice.typ.* == .prime and
-        b.slice.typ.prime == .u8)
-    {
-        std.log.info("append `.ptr` to get C-style string\n", .{});
-    }
-    return .err;
-}
-
-fn checkDeclare(
-    self: *@This(),
-    name: []const u8,
-    declare: *Item.Declare,
-    location: Location,
-) !Stmt.ControlFlow {
-    const typ_decl = if (declare.typ) |typ| typ else .any;
-    const info = try self.checkExpr(&declare.expr, .{ .typ = typ_decl });
-    const typ = unify(declare.expr.location, typ_decl, info.typ);
-    try self.declareVar(name, .{
-        .typ = typ,
-        .mutable = declare.mutable,
-        .can_be_mutable = true,
-    }, location);
-    return .cont;
-}
-
-fn declareVar(self: *@This(), name: []const u8, vari: Item.Declare.Info, location: Location) !void {
-    if (self.module.items.get(name)) |prev| {
-        fail.alreadyDeclared(location, name, prev.location);
-        return;
-    }
-    try self.vars_stack.append(self.gpa, name);
-    try self.module.items.put(name, .{
-        .location = location,
-        .kind = .{ .vari = vari },
-    });
-}
-
-pub fn checkExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) error{OutOfMemory}!Expr.Info {
-    switch (expr.kind) {
-        .method => unreachable,
-        .subslice => |subslice| return self.checkSubslice(subslice, expr.location),
-        .sizeof => |typ| return checkSizeof(typ),
-        .array => |*array| return self.checkArray(array, hint.typ),
-        .unary => |unary| return self.checkUnary(unary, expr.location, hint.typ),
-        .struc => |*struc| return self.checkStructExpr(struc, expr.location, hint.typ),
-        .int => |*int| return int.check(),
-        .str => return checkStr(),
-        .vari => |*vari| return vari.check(self.gpa, expr.location, hint.mutable, self.module.items),
-        .char => return .{
-            .typ = .{ .prime = .u8 },
-            .mutable = false,
-        },
-        .bool => return .{
-            .typ = .{ .prime = .bool },
-            .mutable = false,
-        },
-        .undef => |*undef| return undef.check(hint.typ),
-        .call => |call| return call.check(hint.typ, self),
-        .binary => |binary| return binary.check(self),
-        .field => |field| return field.check(expr.location, hint.mutable, .{
-            .gpa = self.gpa,
-            .items = self.module.items,
-        }, self),
-        .named_struc => |*struc| return struc.check(expr.location, .{
-            .gpa = self.gpa,
-            .items = self.module.items,
-        }, self),
-        .elem => |elem| return self.checkElem(elem, expr.location),
-    }
-}
-
-fn checkSubslice(self: *@This(), subslice: *Expr.Subslice, location: Location) !Expr.Info {
-    const info = try self.checkExpr(&subslice.expr, .{});
-    const start = try self.checkExpr(&subslice.start, .{});
-    _ = unify(subslice.start.location, .{ .prime = .u64 }, start.typ);
-    const end = try self.checkExpr(&subslice.end, .{});
-    _ = unify(subslice.end.location, .{ .prime = .u64 }, end.typ);
-    switch (info.typ.normalise()) {
-        .array => |array| return .{
-            .typ = .{ .slice = .{
-                .typ = array.typ,
-                .mutable = info.mutable,
-            } },
-            .mutable = false,
-        },
-        .slice => return .{
-            .typ = info.typ,
-            .mutable = info.mutable,
-        },
-        else => |typ| {
-            fail.fail(location, "cannot take slice of `{f}`", .{typ});
-            return .{
-                .typ = .{ .slice = .{
-                    .typ = try Typ.memo.box(.err),
-                    .mutable = true,
-                } },
-                .mutable = false,
-            };
-        },
-    }
-}
-
-fn checkSizeof(typ: Typ) !Expr.Info {
-    _ = typ;
-    return .{
-        .typ = .{ .prime = .u64 },
-        .mutable = false,
-    };
-}
-
-fn checkArray(self: *@This(), array: *Expr.Array, hint: Typ) !Expr.Info {
-    var inner_typ: Typ = .any;
-    var inner_hint: Typ = .any;
-    if (array.mtyp) |typ| {
-        inner_typ = typ;
-        inner_hint = typ;
-    } else if (hint == .array) {
-        inner_hint = hint.array.typ.*;
-    }
-    if (array.exprs.len == 0) {
-        const typ = Typ{ .array = .{
-            .typ = try Typ.memo.box(inner_hint),
-            .len = 0,
-        } };
-        return .{
-            .typ = typ,
-            .mutable = false,
-        };
-    }
-    for (array.exprs) |*expr| {
-        const info = try self.checkExpr(expr, .{ .typ = inner_hint });
-        inner_typ = unify(expr.location, inner_typ, info.typ);
-    }
-    array.typ = Typ{ .array = .{
-        .typ = try Typ.memo.box(inner_typ),
-        .len = array.exprs.len,
-    } };
-    return .{
-        .typ = array.typ,
-        .mutable = false,
-    };
-}
-
-fn checkStr() !Expr.Info {
-    const ptr = try Typ.memo.box(.{ .prime = .u8 });
-    return .{
-        .typ = .{ .slice = .{
-            .typ = ptr,
-            .mutable = false,
-        } },
-        .mutable = false,
-    };
-}
-
-fn checkNotb(self: *@This(), expr: *Expr) !Expr.Info {
-    var info = try self.checkExpr(expr, .{});
-    if (!info.typ.isNumber()) {
-        fail.wrongTyp(expr.location, .int, info.typ);
-        info.typ = .err;
-    }
-    return .{
-        .typ = info.typ,
-        .mutable = false,
-    };
-}
-
-fn checkPtr(self: *@This(), expr: *Expr, hint: Typ) !Expr.Info {
-    const mutable = if (hint == .ptr) hint.ptr.mutable else false;
-    const info = try self.checkExpr(expr, .{ .mutable = mutable });
-    const ptr = try Typ.memo.box(info.typ);
-    return .{
-        .typ = .{ .ptr = .{
-            .typ = ptr,
-            .mutable = info.mutable,
-        } },
-        .mutable = false,
-    };
-}
-
-fn checkStructExpr(
-    self: *@This(),
-    struc: *Expr.Struct,
-    location: Location,
-    hint: Typ,
-) error{OutOfMemory}!Expr.Info {
-    const err = Expr.Info{
-        .typ = .err,
-        .mutable = false,
-    };
-    const name = switch (hint) {
-        .loc_name => |located| located.bare,
-        .name => |name| name,
-        .slice => |slice| return self.checkSliceStruc(
-            slice,
-            struc.fields,
-            &struc.typ,
-            location,
-        ),
-        .err => return err,
-        .lazy => unreachable,
-        .prime, .ptr, .any, .array, .fun, .int => {
-            fail.cannotInfer(.any, location);
-            for (struc.fields) |*field| {
-                _ = try self.checkExpr(&field.expr, .{});
-            }
-            return err;
-        },
-    };
-    return struc.checkTyped(name, location, .{
-        .gpa = self.gpa,
-        .items = self.module.items,
-    }, self);
-}
-
-fn checkSliceStruc(
-    self: *@This(),
-    slice: Typ.Slice,
-    fields: []Expr.Struct.Field,
-    typ_target: *Typ,
-    location: Location,
-) !Expr.Info {
-    var was_ptr: ?*const Typ = null;
-    var was_len = false;
-    for (fields) |*field| {
-        if (std.mem.eql(u8, field.name, "ptr")) {
-            if (was_ptr) |_| {
-                fail.newFieldSecond(field.location, field.name);
-            }
-            const expected = Typ{ .ptr = .{
-                .typ = slice.typ,
-                .mutable = slice.mutable,
-            } };
-            const info = try self.checkExpr(&field.expr, .{ .typ = expected });
-            const typ = unify(field.expr.location, expected, info.typ);
-            was_ptr = if (typ == .ptr) typ.ptr.typ else try Typ.memo.box(.err);
-        } else if (std.mem.eql(u8, field.name, "len")) {
-            if (was_len) {
-                fail.newFieldSecond(field.location, field.name);
-            }
-            const info = try self.checkExpr(&field.expr, .{ .typ = .{ .prime = .u64 } });
-            _ = unify(field.expr.location, .{ .prime = .u64 }, info.typ);
-            was_len = true;
-        }
-    }
-    if (!was_len) {
-        fail.notInit(location, "len");
-    }
-    if (was_ptr == null) {
-        fail.notInit(location, "ptr");
-    }
-    typ_target.* = Typ{ .slice = .{
-        .typ = was_ptr.?,
-        .mutable = slice.mutable,
-    } };
-    return .{
-        .typ = typ_target.*,
-        .mutable = false,
-    };
-}
-
-pub fn checkFieldsInitialised(
-    decl_fields: std.StringHashMap(Item.Struct.Field.Info),
-    fields: []const Expr.Struct.Field,
-    location: Location,
-) void {
-    var iter = decl_fields.iterator();
-    while (iter.next()) |entry| {
-        if (entry.value_ptr.defaulted) {
-            continue;
-        }
-        var not_init = true;
-        for (fields) |field| {
-            if (std.mem.eql(u8, entry.key_ptr.*, field.name)) {
-                not_init = false;
-                break;
-            }
-        }
-        if (not_init) {
-            fail.notInit(location, entry.key_ptr.*);
-        }
-    }
-}
-
-pub fn checkNewField(
-    self: *@This(),
-    field: *Expr.Struct.Field,
-    struc_typ: Typ,
-    decl_fields: std.StringHashMap(Item.Struct.Field.Info),
-    resolve_map: std.StringHashMap(Typ),
-) !void {
-    const f_decl = decl_fields.get(field.name) orelse {
-        fail.noField(field.location, field.name, struc_typ);
-        return;
-    };
-    const decl_typ = try f_decl.typ.resolve(resolve_map);
-    const info = try self.checkExpr(&field.expr, .{ .typ = try decl_typ.solve() });
-    _ = unify(field.expr.location, decl_typ, info.typ);
 }
 
 fn deinit(self: *@This()) void {

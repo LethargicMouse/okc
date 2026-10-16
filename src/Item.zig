@@ -139,7 +139,20 @@ pub const Declare = struct {
 
     pub const Named = struct {
         name: []const u8,
-        declare: Declare,
+        bare: Declare,
+
+        pub fn check(self: *@This(), location: Location, ctx: Stmt.Check) !Stmt.ControlFlow {
+            const typ_decl = if (self.bare.typ) |typ| typ else .any;
+            const info = try self.bare.expr.check(.{ .typ = typ_decl }, ctx.exprCheck());
+            const typ = typ_decl.unify(info.typ, self.bare.expr.location);
+            const vari: Declare.Info = .{
+                .typ = typ,
+                .mutable = self.bare.mutable,
+                .can_be_mutable = true,
+            };
+            try vari.declare(self.name, location, ctx);
+            return .cont;
+        }
     };
 
     pub const Info = struct {
@@ -147,10 +160,22 @@ pub const Declare = struct {
         can_be_mutable: bool,
         mutable: bool,
         mutated: bool = false,
-    };
-};
 
-pub const ResolveCtx = struct {
-    gpa: std.mem.Allocator,
-    items: std.StringHashMap(Info),
+        pub fn declare(
+            self: @This(),
+            name: []const u8,
+            location: Location,
+            ctx: Stmt.Check,
+        ) !void {
+            if (ctx.items.get(name)) |prev| {
+                fail.alreadyDeclared(location, name, prev.location);
+                return;
+            }
+            try ctx.vars_stack.append(ctx.gpa, name);
+            try ctx.items.put(name, .{
+                .location = location,
+                .kind = .{ .vari = self },
+            });
+        }
+    };
 };

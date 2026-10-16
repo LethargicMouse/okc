@@ -1,4 +1,5 @@
-const Checker = @import("Checker.zig");
+const std = @import("std");
+
 const Expr = @import("Expr/Expr.zig");
 const fail = @import("fail.zig");
 const Item = @import("Item.zig");
@@ -51,11 +52,11 @@ pub const Return = struct {
         ret: *@This(),
         location: Location,
         ret_typ: Typ,
-        checker: *Checker,
+        ctx: Expr.Check,
     ) !ControlFlow {
         if (ret.expr) |*expr| {
-            const info = try checker.checkExpr(expr, .{ .typ = ret_typ });
-            _ = Checker.unify(expr.location, ret_typ, info.typ);
+            const info = try expr.check(.{ .typ = ret_typ }, ctx);
+            _ = ret_typ.unify(info.typ, expr.location);
         } else if (!ret_typ.isVoid()) {
             fail.fail(location, "should return a value", .{});
         }
@@ -99,4 +100,17 @@ pub const ControlFlow = enum(u2) {
     cont = 0,
     brek = 1,
     ret = 2,
+};
+
+pub const Check = struct {
+    gpa: std.mem.Allocator,
+    items: *std.StringHashMap(Item.Info),
+    vars_stack: *std.ArrayList([]const u8),
+
+    pub fn exprCheck(self: @This()) Expr.Check {
+        return .{
+            .gpa = self.gpa,
+            .items = self.items.*,
+        };
+    }
 };

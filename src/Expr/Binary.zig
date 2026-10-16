@@ -1,4 +1,3 @@
-const Checker = @import("../Checker.zig");
 const Expr = @import("Expr.zig");
 const fail = @import("../fail.zig");
 const Lexeme = @import("../Lexer.zig").Lexeme;
@@ -8,14 +7,14 @@ left: Expr,
 kind: Kind,
 right: Expr,
 
-pub fn check(self: *@This(), checker: *Checker) !Expr.Info {
-    var left = try checker.checkExpr(&self.left, .{});
+pub fn check(self: *@This(), ctx: Expr.Check) !Expr.Info {
+    var left = try self.left.check(.{}, ctx);
     if (!left.typ.isNumber()) {
         fail.wrongTyp(self.left.location, .int, left.typ);
         left.typ = .err;
     }
-    const right = try checker.checkExpr(&self.right, .{});
-    const unityp = Checker.unify(self.right.location, left.typ, right.typ);
+    const right = try self.right.check(.{}, ctx);
+    const unityp = left.typ.unify(right.typ, self.right.location);
     const typ = switch (self.kind.getClass()) {
         .arith => unityp,
         .bool => Typ{ .prime = .bool },

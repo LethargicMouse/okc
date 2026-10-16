@@ -182,7 +182,27 @@ pub const Typ = union(enum) {
 
     pub const debug_unify = false;
 
-    pub fn unify(a: @This(), b: @This(), mode: UnifyMode) ?@This() {
+    pub fn unify(a: Typ, b: Typ, location: Location) Typ {
+        if (a.unifyOrNull(b, .active)) |typ| {
+            if (Typ.debug_unify) {
+                std.log.debug("==> {f}", .{typ});
+            }
+            return typ;
+        }
+        fail.wrongTyp(location, a, b);
+        if (a == .ptr and
+            a.ptr.typ.* == .prime and
+            a.ptr.typ.prime == .u8 and
+            b == .slice and
+            b.slice.typ.* == .prime and
+            b.slice.typ.prime == .u8)
+        {
+            std.log.info("append `.ptr` to get C-style string\n", .{});
+        }
+        return .err;
+    }
+
+    pub fn unifyOrNull(a: @This(), b: @This(), mode: UnifyMode) ?@This() {
         std.log.debug("unify {f} vs {f}", .{ a, b });
         if (a.eql(b)) {
             return a;
@@ -200,21 +220,21 @@ pub const Typ = union(enum) {
             const aroot = a.lazy.shorten();
             const broot = b.lazy.shorten();
             if (aroot.typ != broot.typ) {
-                const typ = aroot.typ.unify(broot.typ.*, mode) orelse return null;
+                const typ = aroot.typ.unifyOrNull(broot.typ.*, mode) orelse return null;
                 aroot.set(typ);
                 broot.set(.{ .lazy = aroot });
             }
             return .{ .lazy = aroot };
         }
         if (a == .lazy) {
-            const res = a.lazy.typ.unify(b, mode) orelse return null;
+            const res = a.lazy.typ.unifyOrNull(b, mode) orelse return null;
             if (mode == .active) {
                 a.lazy.set(res);
             }
             return a;
         }
         if (b == .lazy) {
-            const res = a.unify(b.lazy.typ.*, mode) orelse return null;
+            const res = a.unifyOrNull(b.lazy.typ.*, mode) orelse return null;
             if (mode == .active) {
                 b.lazy.set(res);
             }
@@ -224,7 +244,7 @@ pub const Typ = union(enum) {
             a.slice.mutable == b.ptr.mutable)
         {
             if (a.slice.typ != b.ptr.typ.array.typ and
-                a.slice.typ.unify(b.ptr.typ.array.typ.*, mode) == null)
+                a.slice.typ.unifyOrNull(b.ptr.typ.array.typ.*, mode) == null)
             {
                 return null;
             }
@@ -242,7 +262,7 @@ pub const Typ = union(enum) {
                 return null;
             }
             for (aname.generics, bname.generics) |ag, bg| {
-                _ = ag.unify(bg, mode) orelse return null;
+                _ = ag.unifyOrNull(bg, mode) orelse return null;
             }
             return b;
         }
@@ -257,10 +277,10 @@ pub const Typ = union(enum) {
             },
             .fun => |fun| {
                 if (fun.ret_typ != b.fun.ret_typ) {
-                    _ = fun.ret_typ.unify(b.fun.ret_typ.*, mode) orelse return null;
+                    _ = fun.ret_typ.unifyOrNull(b.fun.ret_typ.*, mode) orelse return null;
                 }
                 for (fun.params, b.fun.params) |ap, bp| {
-                    _ = ap.unify(bp, mode) orelse return null;
+                    _ = ap.unifyOrNull(bp, mode) orelse return null;
                 }
                 return a;
             },
@@ -269,7 +289,7 @@ pub const Typ = union(enum) {
                     return null;
                 }
                 if (aslice.typ != b.slice.typ) {
-                    _ = aslice.typ.unify(b.slice.typ.*, mode) orelse return null;
+                    _ = aslice.typ.unifyOrNull(b.slice.typ.*, mode) orelse return null;
                 }
                 return a;
             },
@@ -277,14 +297,14 @@ pub const Typ = union(enum) {
                 if (aptr.mutable and !b.ptr.mutable) {
                     return null;
                 }
-                if (aptr.typ != b.ptr.typ and aptr.typ.unify(b.ptr.typ.*, mode) == null) {
+                if (aptr.typ != b.ptr.typ and aptr.typ.unifyOrNull(b.ptr.typ.*, mode) == null) {
                     return null;
                 }
                 return a;
             },
             .array => |arr| {
                 if (arr.len != b.array.len or
-                    (arr.typ != b.array.typ and arr.typ.unify(b.array.typ.*, mode) == null))
+                    (arr.typ != b.array.typ and arr.typ.unifyOrNull(b.array.typ.*, mode) == null))
                 {
                     return null;
                 }

@@ -299,7 +299,7 @@ fn genStmt(self: *@This(), stmt: Stmt) Error!void {
         .unre => try self.genUnreachable(),
         .ret => |ret| try self.genRet(ret),
         .expr => |expr| _ = try self.genExpr(expr),
-        .declare => |named| try self.genDeclare(named.name, named.declare),
+        .declare => |named| try self.genDeclare(named.name, named.bare),
         .assign => |assign| try self.genAssign(assign),
         .iff => |iff| try self.genIf(iff),
         .whi => |whi| try self.genWhile(whi),
