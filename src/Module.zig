@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Failer = @import("Failer.zig");
 const Item = @import("Item.zig");
 const Location = @import("Location.zig");
 
@@ -8,6 +9,13 @@ location: Location,
 
 pub const Info = struct {
     items: std.StringHashMap(Item.Info),
+
+    pub fn checkUsage(self: @This(), failer: *Failer) void {
+        var iter = self.items.iterator();
+        while (iter.next()) |entry| {
+            entry.value_ptr.checkUsage(entry.key_ptr.*, failer);
+        }
+    }
 
     pub fn init(gpa: std.mem.Allocator) @This() {
         return .{

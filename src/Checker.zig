@@ -43,14 +43,7 @@ fn checkModule(self: *@This(), module: Module) !void {
         try item.check(item_check);
     }
     item_check.checkMain(module.location);
-    self.checkItemsUsage();
-}
-
-fn checkItemsUsage(self: *@This()) void {
-    var iter = self.module.items.iterator();
-    while (iter.next()) |entry| {
-        entry.value_ptr.checkUsage(entry.key_ptr.*, &self.failer);
-    }
+    self.module.checkUsage(&self.failer);
 }
 
 fn deinit(self: *@This()) void {
