@@ -7,6 +7,24 @@ const Location = @import("Location.zig");
 items: []Item,
 location: Location,
 
+pub fn check(self: @This(), gpa: std.mem.Allocator, failer: *Failer) !void {
+    var info: Info = .init(gpa);
+    defer info.deinit();
+    const item_check: Item.Check = .{
+        .gpa = gpa,
+        .failer = failer,
+        .items = &info.items,
+    };
+    for (self.items) |*item| {
+        try item.reg(item_check);
+    }
+    for (self.items) |item| {
+        try item.check(item_check);
+    }
+    item_check.checkMain(self.location);
+    info.checkUsage(failer);
+}
+
 pub const Info = struct {
     items: std.StringHashMap(Item.Info),
 

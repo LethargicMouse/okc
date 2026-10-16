@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const Checker = @import("Checker.zig");
 const Codegen = @import("Codegen.zig");
+const Failer = @import("Failer.zig");
 const Lexer = @import("Lexer.zig");
 const Module = @import("Module.zig");
 const Parser = @import("Parser.zig");
@@ -71,8 +71,9 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var parser = Parser.init(gpa, tokens);
     const module = try parser.run();
 
-    var checker = try Checker.init(gpa);
-    try checker.run(module);
+    var failer: Failer = .init();
+    try module.check(gpa, &failer);
+    try failer.ensureNoErrors();
 
     std.Io.Dir.cwd().createDirPath(io, build_dir_path) catch {
         std.log.err("failed to create `" ++ build_dir_path ++ "`", .{});
