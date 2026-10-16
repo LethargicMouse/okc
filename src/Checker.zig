@@ -888,12 +888,7 @@ fn checkField(
         norm = norm.ptr.typ.normalise();
     }
     if (norm == .slice) {
-        return checkSliceField(
-            norm.slice,
-            info.mutable,
-            field.name,
-            location,
-        );
+        return norm.slice.checkField(info.mutable, field.name, location);
     }
     const name = norm.getStructName(field.expr.location) orelse return err;
     const item = self.module.items.get(name.name) orelse {
@@ -917,34 +912,6 @@ fn checkField(
     return .{
         .typ = try fiel.typ.resolve(resolve_map),
         .mutable = info.mutable,
-    };
-}
-
-fn checkSliceField(
-    slice: Typ.Slice,
-    mutable: bool,
-    name: []const u8,
-    location: Location,
-) !Expr.Info {
-    if (std.mem.eql(u8, name, "ptr")) {
-        return .{
-            .typ = .{ .ptr = .{
-                .typ = slice.typ,
-                .mutable = slice.mutable,
-            } },
-            .mutable = mutable,
-        };
-    }
-    if (std.mem.eql(u8, name, "len")) {
-        return .{
-            .typ = .{ .prime = .u64 },
-            .mutable = mutable,
-        };
-    }
-    fail.noField(location, name, .{ .slice = slice });
-    return .{
-        .typ = .err,
-        .mutable = true,
     };
 }
 
