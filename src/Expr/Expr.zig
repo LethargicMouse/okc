@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub const Binary = @import("Binary.zig");
-const fail = @import("../fail.zig");
+const Failer = @import("../Failer.zig");
 const Item = @import("../Item.zig");
 const Location = @import("../Location.zig");
 const Module = @import("../Module.zig");
@@ -45,7 +45,7 @@ pub const Neg = struct {
     pub fn check(expr: *Expr, ctx: Expr.Check) !Expr.Info {
         var info = try expr.check(.{}, ctx);
         if (!info.typ.isNumber()) {
-            fail.wrongTyp(expr.location, .int, info.typ);
+            ctx.failer.wrongTyp(expr.location, .int, info.typ);
             info.typ = .err;
         }
         return .{
@@ -74,7 +74,7 @@ pub const Deref = struct {
             },
             .err => return err,
             .prime, .name, .any, .array, .slice, .fun, .int, .loc_name => {
-                fail.fail(location, "cannot dereference type `{f}`", .{info.typ});
+                ctx.failer.fail(location, "cannot dereference type `{f}`", .{info.typ});
                 return err;
             },
             .lazy => unreachable,
@@ -88,7 +88,7 @@ pub const Notb = struct {
     pub fn check(expr: *Expr, ctx: Expr.Check) !Expr.Info {
         var info = try expr.check(.{}, ctx);
         if (!info.typ.isNumber()) {
-            fail.wrongTyp(expr.location, .int, info.typ);
+            ctx.failer.wrongTyp(expr.location, .int, info.typ);
             info.typ = .err;
         }
         return .{
@@ -177,7 +177,7 @@ pub const Var = struct {
             .mutable = true,
         };
         const item = ctx.items.getPtr(self.name) orelse {
-            fail.notDeclared(location, self.name);
+            ctx.failer.notDeclared(location, self.name);
             return err;
         };
         switch (item.kind) {
@@ -187,7 +187,7 @@ pub const Var = struct {
                 return self.fun_meta.?.fillFromHeader(ctx.gpa, header.*);
             },
             .struc, .typ => {
-                fail.fail(location, "it is a type", .{});
+                ctx.failer.fail(location, "it is a type", .{});
                 return err;
             },
             .vari => |*vari_decl| {
@@ -261,9 +261,9 @@ pub const Subslice = struct {
         const info = try self.expr.check(.{}, ctx);
         const start = try self.start.check(.{}, ctx);
         const expected: Typ = .{ .prime = .u64 };
-        _ = expected.unify(start.typ, self.start.location);
+        _ = expected.unify(start.typ, self.start.location, ctx.failer);
         const end = try self.end.check(.{}, ctx);
-        _ = expected.unify(end.typ, self.end.location);
+        _ = expected.unify(end.typ, self.end.location, ctx.failer);
         switch (info.typ.normalise()) {
             .array => |array| return .{
                 .typ = .{ .slice = .{
@@ -277,7 +277,7 @@ pub const Subslice = struct {
                 .mutable = info.mutable,
             },
             else => |typ| {
-                fail.fail(location, "cannot take slice of `{f}`", .{typ});
+                ctx.failer.fail(location, "cannot take slice of `{f}`", .{typ});
                 return .{
                     .typ = .{ .slice = .{
                         .typ = try Typ.memo.box(.err),
@@ -316,7 +316,7 @@ pub const Array = struct {
         }
         for (self.exprs) |*expr| {
             const info = try expr.check(.{ .typ = inner_hint }, ctx);
-            inner_typ = inner_typ.unify(info.typ, expr.location);
+            inner_typ = inner_typ.unify(info.typ, expr.location, ctx.failer);
         }
         self.typ = Typ{ .array = .{
             .typ = try Typ.memo.box(inner_typ),
@@ -350,7 +350,7 @@ pub const Struct = struct {
             .err => return err,
             .lazy => unreachable,
             .prime, .ptr, .any, .array, .fun, .int => {
-                fail.cannotInfer(.any, location);
+                ctx.failer.cannotInfer(.any, location);
                 for (self.fields) |*field| {
                     _ = try field.expr.check(.{}, ctx);
                 }
@@ -371,30 +371,30 @@ pub const Struct = struct {
         for (self.fields) |*field| {
             if (std.mem.eql(u8, field.name, "ptr")) {
                 if (was_ptr) |_| {
-                    fail.newFieldSecond(field.location, field.name);
+                    ctx.failer.newFieldSecond(field.location, field.name);
                 }
                 const expected = Typ{ .ptr = .{
                     .typ = slice.typ,
                     .mutable = slice.mutable,
                 } };
                 const info = try field.expr.check(.{ .typ = expected }, ctx);
-                const typ = expected.unify(info.typ, field.expr.location);
+                const typ = expected.unify(info.typ, field.expr.location, ctx.failer);
                 was_ptr = if (typ == .ptr) typ.ptr.typ else try Typ.memo.box(.err);
             } else if (std.mem.eql(u8, field.name, "len")) {
                 if (was_len) {
-                    fail.newFieldSecond(field.location, field.name);
+                    ctx.failer.newFieldSecond(field.location, field.name);
                 }
                 const info = try field.expr.check(.{ .typ = .{ .prime = .u64 } }, ctx);
                 const expected: Typ = .{ .prime = .u64 };
-                _ = expected.unify(info.typ, field.expr.location);
+                _ = expected.unify(info.typ, field.expr.location, ctx.failer);
                 was_len = true;
             }
         }
         if (!was_len) {
-            fail.notInit(location, "len");
+            ctx.failer.notInit(location, "len");
         }
         if (was_ptr == null) {
-            fail.notInit(location, "ptr");
+            ctx.failer.notInit(location, "ptr");
         }
         self.typ = Typ{ .slice = .{
             .typ = was_ptr.?,
@@ -417,12 +417,12 @@ pub const Struct = struct {
             .mutable = false,
         };
         const item = ctx.items.getPtr(name.name) orelse {
-            fail.notDeclared(location, name.name);
+            ctx.failer.notDeclared(location, name.name);
             return err;
         };
         item.used = true;
         const decl = if (item.kind == .struc) item.kind.struc else {
-            fail.notStruct(location, .{ .name = name });
+            ctx.failer.notStruct(location, .{ .name = name });
             return err;
         };
         const generics = try ctx.gpa.alloc(Typ, decl.generics.len);
@@ -453,7 +453,7 @@ pub const Struct = struct {
                 }
             }
             if (not_init) {
-                fail.notInit(location, entry.key_ptr.*);
+                ctx.failer.notInit(location, entry.key_ptr.*);
             }
         }
         self.typ = Typ{ .name = .{
@@ -479,12 +479,12 @@ pub const Struct = struct {
             ctx: Check,
         ) !void {
             const f_decl = decl_fields.get(self.name) orelse {
-                fail.noField(self.location, self.name, struc_typ);
+                ctx.failer.noField(self.location, self.name, struc_typ);
                 return;
             };
             const decl_typ = try f_decl.typ.resolve(resolve_map);
             const info = try self.expr.check(.{ .typ = try decl_typ.solve() }, ctx);
-            _ = decl_typ.unify(info.typ, self.expr.location);
+            _ = decl_typ.unify(info.typ, self.expr.location, ctx.failer);
         }
     };
 
@@ -530,13 +530,13 @@ pub const Call = struct {
 
     pub fn check(self: *@This(), hint: Typ, ctx: Check) !Expr.Info {
         const callee_info = try self.expr.check(.{}, ctx);
-        const fun = callee_info.typ.getFun(self.expr.location) orelse
+        const fun = callee_info.typ.getFun(self.expr.location, ctx.failer) orelse
             return self.checkBad(ctx);
         // to propagate hint to generics
         _ = fun.ret_typ.unifyOrNull(hint, .active);
         for (self.args, fun.params) |*arg, param| {
             const info = try arg.check(.{ .typ = param.normalise() }, ctx);
-            _ = param.unify(info.typ, arg.location);
+            _ = param.unify(info.typ, arg.location, ctx.failer);
         }
         return .{
             .typ = fun.ret_typ.*,
@@ -576,19 +576,19 @@ pub const Field = struct {
             norm = norm.ptr.typ.normalise();
         }
         if (norm == .slice) {
-            return norm.slice.checkField(info.mutable, self.name, location);
+            return norm.slice.checkField(info.mutable, self.name, location, ctx.failer);
         }
-        const name = norm.getStructName(self.expr.location) orelse return err;
+        const name = norm.getStructName(self.expr.location, ctx.failer) orelse return err;
         const item = ctx.items.get(name.name) orelse {
-            fail.notStruct(self.expr.location, norm);
+            ctx.failer.notStruct(self.expr.location, norm);
             return err;
         };
         const struc = if (item.kind == .struc) item.kind.struc else {
-            fail.notStruct(self.expr.location, norm);
+            ctx.failer.notStruct(self.expr.location, norm);
             return err;
         };
         const fiel = struc.fields.getPtr(self.name) orelse {
-            fail.noField(location, self.name, .{ .name = name });
+            ctx.failer.noField(location, self.name, .{ .name = name });
             return err;
         };
         fiel.used = true;
@@ -612,8 +612,8 @@ pub const Elem = struct {
         const info = try self.expr.check(.{}, ctx);
         const index = try self.index.check(.{}, ctx);
         const expected: Typ = .{ .prime = .u64 };
-        _ = expected.unify(index.typ, self.index.location);
-        return info.getElem(location) orelse .{
+        _ = expected.unify(index.typ, self.index.location, ctx.failer);
+        return info.getElem(location, ctx.failer) orelse .{
             .typ = .err,
             .mutable = true,
         };
@@ -624,7 +624,7 @@ pub const Info = struct {
     typ: Typ,
     mutable: bool,
 
-    pub fn getElem(self: @This(), location: Location) ?@This() {
+    pub fn getElem(self: @This(), location: Location, failer: *Failer) ?@This() {
         switch (self.typ.normalise()) {
             .array => |array| return .{
                 .typ = array.typ.*,
@@ -636,7 +636,7 @@ pub const Info = struct {
             },
             .err => return null,
             .prime, .name, .loc_name, .ptr, .any, .fun, .int => {
-                fail.fail(location, "type `{f}` does not support indexing", .{self.typ});
+                failer.fail(location, "type `{f}` does not support indexing", .{self.typ});
                 return null;
             },
             .lazy => unreachable,
@@ -652,4 +652,5 @@ pub const Hint = struct {
 pub const Check = struct {
     gpa: std.mem.Allocator,
     items: std.StringHashMap(Item.Info),
+    failer: *Failer,
 };

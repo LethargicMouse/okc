@@ -433,7 +433,7 @@ fn uncond(self: *@This(), to: u32, next: u32) !void {
     , .{ to, next });
 }
 
-fn genIf(self: *@This(), iff: Stmt.If) !void {
+fn genIf(self: *@This(), iff: Stmt.IfStmt) !void {
     const end_label = self.newTmp();
     try self.genBranch(iff.branch, end_label, .simple);
     for (iff.else_ifs) |branch| {

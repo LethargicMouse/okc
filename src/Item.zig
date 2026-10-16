@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Expr = @import("Expr/Expr.zig");
-const fail = @import("fail.zig");
+const Failer = @import("Failer.zig");
 const Location = @import("Location.zig");
 const Stmt = @import("Stmt.zig");
 const Typ = @import("typ/typ.zig").Typ;
@@ -41,11 +41,11 @@ pub const Struct = struct {
         generics: []const Generic,
         fields: std.StringHashMap(Field.Info),
 
-        fn checkUsage(self: @This()) void {
+        fn checkUsage(self: @This(), failer: *Failer) void {
             var iter = self.fields.iterator();
             while (iter.next()) |entry| {
                 if (!entry.value_ptr.used) {
-                    fail.unused(entry.value_ptr.location, entry.key_ptr.*);
+                    failer.unused(entry.value_ptr.location, entry.key_ptr.*);
                 }
             }
         }
@@ -112,10 +112,10 @@ pub const Generic = struct {
             return false;
         }
 
-        pub fn checkUsage(self: *@This()) void {
+        pub fn checkUsage(self: *@This(), failer: *Failer) void {
             for (self.generics, 0..) |generic, i| {
                 if (!self.usage.isSet(i)) {
-                    fail.unused(generic.location, generic.name);
+                    failer.unused(generic.location, generic.name);
                 }
             }
         }
@@ -127,15 +127,15 @@ pub const Info = struct {
     location: Location,
     used: bool = false,
 
-    pub fn checkUsage(self: @This(), name: []const u8) void {
+    pub fn checkUsage(self: @This(), name: []const u8, failer: *Failer) void {
         if (self.used) {
             switch (self.kind) {
                 .fun, .typ => {},
-                .vari => |vari| vari.checkUsage(self.location),
-                .struc => |struc| struc.checkUsage(),
+                .vari => |vari| vari.checkUsage(self.location, failer),
+                .struc => |struc| struc.checkUsage(failer),
             }
         } else {
-            fail.unused(self.location, name);
+            failer.unused(self.location, name);
         }
     }
 
@@ -158,4 +158,5 @@ pub const Info = struct {
 pub const Check = struct {
     gpa: std.mem.Allocator,
     items: *std.StringHashMap(Info),
+    failer: *Failer,
 };

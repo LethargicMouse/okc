@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Expr = @import("Expr/Expr.zig");
-const fail = @import("fail.zig");
+const Failer = @import("Failer.zig");
 const Location = @import("Location.zig");
 const Module = @import("Module.zig");
 const Stmt = @import("Stmt.zig");
@@ -14,6 +14,7 @@ vars_stack: std.ArrayList([]const u8) = .empty,
 module: Module.Info,
 ret_typ: Typ = .any,
 loops_nested: u16 = 0,
+failer: Failer = .init(),
 
 pub fn init(
     gpa: std.mem.Allocator,
@@ -28,7 +29,7 @@ pub fn init(
 pub fn run(self: *@This(), module: Module) error{ OutOfMemory, Handled }!void {
     defer self.deinit();
     try self.checkModule(module);
-    try fail.ensureNoErrors();
+    try self.failer.ensureNoErrors();
     return;
 }
 
@@ -40,6 +41,7 @@ fn checkModule(self: *@This(), module: Module) !void {
         try checkItem(item, .{
             .gpa = self.gpa,
             .items = &self.module.items,
+            .failer = &self.failer,
         });
     }
     self.checkMain(module.location);
@@ -49,7 +51,7 @@ fn checkModule(self: *@This(), module: Module) !void {
 fn checkItemsUsage(self: *@This()) void {
     var iter = self.module.items.iterator();
     while (iter.next()) |entry| {
-        entry.value_ptr.checkUsage(entry.key_ptr.*);
+        entry.value_ptr.checkUsage(entry.key_ptr.*, &self.failer);
     }
 }
 
@@ -66,7 +68,7 @@ fn regItem(self: *@This(), item: *Item) !void {
         try self.checkHeader(kind.fun);
     }
     if (self.module.items.get(item.name)) |prev| {
-        fail.alreadyDeclared(item.location, item.name, prev.location);
+        self.failer.alreadyDeclared(item.location, item.name, prev.location);
         return;
     }
     try self.module.items.put(item.name, .{
@@ -80,9 +82,10 @@ fn regConst(self: *@This(), declare: *Stmt.Declare) !Item.Info.Kind {
     const typ = try self.checkConstExpr(&declare.expr, .{ .typ = hint_typ }, .{
         .gpa = self.gpa,
         .items = self.module.items,
+        .failer = &self.failer,
     });
     if (declare.typ) |typ_decl| {
-        _ = typ_decl.unify(typ, declare.expr.location);
+        _ = typ_decl.unify(typ, declare.expr.location, &self.failer);
     }
     return .{ .vari = .{
         .mutable = false,
@@ -100,7 +103,7 @@ fn checkConstExpr(self: *@This(), expr: *Expr, hint: Expr.Hint, ctx: Expr.Check)
 fn checkExprComptime(self: *@This(), expr: Expr) void {
     switch (expr.kind) {
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
-        .call, .method => fail.fail(expr.location, "cannot evaluate at compile time", .{}),
+        .call, .method => self.failer.fail(expr.location, "cannot evaluate at compile time", .{}),
         .field => |field| self.checkExprComptime(field.expr),
         .unary => |unary| self.checkExprComptime(unary.expr),
         .elem => |elem| self.checkElemComptime(elem.*),
@@ -154,21 +157,22 @@ fn checkHeader(self: *@This(), header: *Item.Fun.Header) !void {
     const typ_check = Typ.Check{
         .generics_checker = &generics_checker,
         .items = self.module.items,
+        .failer = &self.failer,
     };
     for (header.params) |*param| {
         param.typ = try param.typ.check(typ_check);
     }
     header.ret_typ = try header.ret_typ.check(typ_check);
-    generics_checker.checkUsage();
+    generics_checker.checkUsage(&self.failer);
 }
 
 fn checkMain(self: *@This(), location: Location) void {
     const item = self.module.items.getPtr("main") orelse {
-        fail.fail(location, "`main` function not found", .{});
+        self.failer.fail(location, "`main` function not found", .{});
         return;
     };
     if (item.kind != .fun) {
-        fail.fail(item.location, "item `main` is not a function", .{});
+        self.failer.fail(item.location, "item `main` is not a function", .{});
     }
     item.used = true;
 }
@@ -185,12 +189,13 @@ fn regStruct(self: *@This(), struc: Item.Struct) !Item.Info.Kind {
             const expr_typ = try self.checkConstExpr(expr, .{ .typ = field.typ }, .{
                 .gpa = self.gpa,
                 .items = self.module.items,
+                .failer = &self.failer,
             });
-            _ = field.typ.unify(expr_typ, expr.location);
+            _ = field.typ.unify(expr_typ, expr.location, &self.failer);
             defaulted = true;
         }
         if (res.fields.get(field.name)) |prev| {
-            fail.alreadyDeclared(field.location, field.name, prev.location);
+            self.failer.alreadyDeclared(field.location, field.name, prev.location);
             continue;
         }
         try res.fields.put(field.name, .{
@@ -208,11 +213,11 @@ fn checkGenericsRedeclare(self: *@This(), generics: []const Item.Generic) !void 
     defer map.deinit();
     for (generics) |generic| {
         if (self.module.items.get(generic.name)) |prev| {
-            fail.alreadyDeclared(generic.location, generic.name, prev.location);
+            self.failer.alreadyDeclared(generic.location, generic.name, prev.location);
         }
         const entry = try map.getOrPut(generic.name);
         if (entry.found_existing) {
-            fail.alreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
+            self.failer.alreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
         } else {
             entry.value_ptr.* = generic.location;
         }
@@ -224,6 +229,7 @@ fn checkFun(fun: Item.Fun, location: Location, ctx: Item.Check) !void {
         .gpa = ctx.gpa,
         .items = ctx.items,
         .ret_typ = fun.header.ret_typ,
+        .failer = ctx.failer,
     };
     defer stmt_check.deinit();
     for (fun.header.params) |param| {
@@ -231,12 +237,13 @@ fn checkFun(fun: Item.Fun, location: Location, ctx: Item.Check) !void {
             .typ = param.typ,
             .mutable = false,
             .can_be_mutable = false,
-        });
+        }, ctx.failer);
     }
     const control_flow = try fun.body.check(&stmt_check);
     if (control_flow != .ret and !fun.header.ret_typ.isVoid()) {
-        fail.fail(location, "function may not return", .{});
+        ctx.failer.fail(location, "function may not return", .{});
     }
+    stmt_check.freeVars(0);
 }
 
 fn deinit(self: *@This()) void {

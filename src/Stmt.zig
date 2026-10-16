@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Expr = @import("Expr/Expr.zig");
-const fail = @import("fail.zig");
+const Failer = @import("Failer.zig");
 const Item = @import("Item.zig");
 const Location = @import("Location.zig");
 const Typ = @import("typ/typ.zig").Typ;
@@ -29,7 +29,7 @@ fn check(self: *@This(), ctx: *Stmt.Check) error{OutOfMemory}!Stmt.ControlFlow {
 const brek = struct {
     fn check(location: Location, ctx: Stmt.Check) error{OutOfMemory}!Stmt.ControlFlow {
         if (ctx.loops_nested == 0) {
-            fail.fail(location, "`break` outside of loop", .{});
+            ctx.failer.fail(location, "`break` outside of loop", .{});
             return .cont;
         }
         return .brek;
@@ -43,7 +43,7 @@ const ExprStmt = struct {
         // no type hints to disallow `undefined;`
         const info = try expr.check(.{}, ctx);
         const expected: Typ = .{ .prime = .void };
-        _ = expected.unify(info.typ, expr.location);
+        _ = expected.unify(info.typ, expr.location, ctx.failer);
         return .cont;
     }
 };
@@ -55,7 +55,7 @@ pub const Kind = union(enum) {
     expr: Expr,
     for_range: ForRange,
     forr: For,
-    iff: If,
+    iff: IfStmt,
     ignore: Ignore,
     op_assign: OpAssign,
     ret: Return,
@@ -73,7 +73,7 @@ pub const For = struct {
 
     fn check(self: *@This(), ctx: *Stmt.Check) !Stmt.ControlFlow {
         const info = try self.expr.check(.{}, ctx.exprCheck());
-        const elem_info = info.getElem(self.expr.location) orelse Expr.Info{
+        const elem_info = info.getElem(self.expr.location, ctx.failer) orelse Expr.Info{
             .typ = .err,
             .mutable = true,
         };
@@ -81,7 +81,7 @@ pub const For = struct {
             .typ = elem_info.typ,
             .mutable = false,
             .can_be_mutable = false,
-        });
+        }, ctx.failer);
         defer {
             _ = ctx.vars_stack.pop();
             ctx.freeVar(self.vari);
@@ -100,16 +100,16 @@ pub const ForRange = struct {
     fn check(self: *@This(), ctx: *Stmt.Check) !Stmt.ControlFlow {
         var start = try self.start.check(.{}, ctx.exprCheck());
         if (!start.typ.isNumber()) {
-            fail.wrongTyp(self.start.location, .int, start.typ);
+            ctx.failer.wrongTyp(self.start.location, .int, start.typ);
             start.typ = .err;
         }
         const end = try self.end.check(.{}, ctx.exprCheck());
-        const typ = start.typ.unify(end.typ, self.end.location);
+        const typ = start.typ.unify(end.typ, self.end.location, ctx.failer);
         try ctx.declare(self.vari, self.vari_location, .{
             .typ = typ,
             .mutable = false,
             .can_be_mutable = false,
-        });
+        }, ctx.failer);
         defer {
             _ = ctx.vars_stack.pop();
             ctx.freeVar(self.vari);
@@ -124,7 +124,7 @@ pub const Ignore = struct {
     fn check(self: *@This(), location: Location, ctx: Expr.Check) !ControlFlow {
         const info = try self.expr.check(.{}, ctx);
         if (info.typ.isVoid()) {
-            fail.fail(location, "redundant ignore", .{});
+            ctx.failer.fail(location, "redundant ignore", .{});
             std.log.info("remove `_ =` before expr\n", .{});
         }
         return .cont;
@@ -142,9 +142,9 @@ pub const Return = struct {
     ) !ControlFlow {
         if (ret.expr) |*expr| {
             const info = try expr.check(.{ .typ = ret_typ }, ctx);
-            _ = ret_typ.unify(info.typ, expr.location);
+            _ = ret_typ.unify(info.typ, expr.location, ctx.failer);
         } else if (!ret_typ.isVoid()) {
-            fail.fail(location, "should return a value", .{});
+            ctx.failer.fail(location, "should return a value", .{});
         }
         return .ret;
     }
@@ -162,7 +162,7 @@ pub const While = struct {
     }
 };
 
-pub const If = struct {
+pub const IfStmt = struct {
     branch: Branch,
     else_ifs: []Branch,
     else_block: Block,
@@ -208,7 +208,7 @@ pub const Block = struct {
                     res = control_flow;
                 }
                 if (i + 1 != self.stmts.len) {
-                    fail.fail(self.stmts[i + 1].location, "Stmt is unreachable", .{});
+                    ctx.failer.fail(self.stmts[i + 1].location, "Stmt is unreachable", .{});
                 }
             }
         }
@@ -228,7 +228,7 @@ pub const Branch = struct {
     ) !ControlFlow {
         const info = try self.condition.check(.{}, ctx.exprCheck());
         const expected: Typ = .{ .prime = .bool };
-        _ = expected.unify(info.typ, self.condition.location);
+        _ = expected.unify(info.typ, self.condition.location, ctx.failer);
         if (kind == .loop) {
             return self.body.checkLoop(ctx);
         } else {
@@ -249,10 +249,10 @@ pub const Assign = struct {
     pub fn check(self: *@This(), ctx: Expr.Check) !ControlFlow {
         const left = try self.left.check(.{ .mutable = true }, ctx);
         if (!left.mutable) {
-            fail.notMut(self.left.location);
+            ctx.failer.notMut(self.left.location);
         }
         const info = try self.expr.check(.{ .typ = left.typ }, ctx);
-        _ = left.typ.unify(info.typ, self.expr.location);
+        _ = left.typ.unify(info.typ, self.expr.location, ctx.failer);
         return .cont;
     }
 };
@@ -265,15 +265,15 @@ pub const OpAssign = struct {
     pub fn check(self: *@This(), ctx: Expr.Check) !ControlFlow {
         var left = try self.left.check(.{ .mutable = true }, ctx);
         if (!left.mutable) {
-            fail.notMut(self.left.location);
+            ctx.failer.notMut(self.left.location);
         }
         std.debug.assert(self.kind.getClass() == .arith);
         if (!left.typ.isNumber()) {
-            fail.wrongTyp(self.left.location, .int, left.typ);
+            ctx.failer.wrongTyp(self.left.location, .int, left.typ);
             left.typ = .err;
         }
         const right = try self.right.check(.{}, ctx);
-        _ = left.typ.unify(right.typ, self.right.location);
+        _ = left.typ.unify(right.typ, self.right.location, ctx.failer);
         return .cont;
     }
 };
@@ -297,12 +297,12 @@ pub const Declare = struct {
         pub fn check(self: *@This(), location: Location, ctx: *Stmt.Check) !Stmt.ControlFlow {
             const typ_decl = if (self.bare.typ) |typ| typ else .any;
             const info = try self.bare.expr.check(.{ .typ = typ_decl }, ctx.exprCheck());
-            const typ = typ_decl.unify(info.typ, self.bare.expr.location);
+            const typ = typ_decl.unify(info.typ, self.bare.expr.location, ctx.failer);
             try ctx.declare(self.name, location, .{
                 .typ = typ,
                 .mutable = self.bare.mutable,
                 .can_be_mutable = true,
-            });
+            }, ctx.failer);
             return .cont;
         }
     };
@@ -313,9 +313,9 @@ pub const Declare = struct {
         mutable: bool,
         mutated: bool = false,
 
-        pub fn checkUsage(self: @This(), location: Location) void {
+        pub fn checkUsage(self: @This(), location: Location, failer: *Failer) void {
             if (self.mutable and !self.mutated) {
-                fail.fail(location, "variable is never mutated", .{});
+                failer.fail(location, "variable is never mutated", .{});
                 std.log.info("remove `mut` before name\n", .{});
             }
         }
@@ -328,6 +328,7 @@ pub const Check = struct {
     vars_stack: std.ArrayList([]const u8) = .empty,
     loops_nested: u16 = 0,
     ret_typ: Typ,
+    failer: *Failer,
 
     pub fn deinit(self: *@This()) void {
         self.vars_stack.deinit(self.gpa);
@@ -339,9 +340,10 @@ pub const Check = struct {
         name: []const u8,
         location: Location,
         vari: Stmt.Declare.Info,
+        failer: *Failer,
     ) !void {
         if (self.items.get(name)) |prev| {
-            fail.alreadyDeclared(location, name, prev.location);
+            failer.alreadyDeclared(location, name, prev.location);
             return;
         }
         try self.vars_stack.append(self.gpa, name);
@@ -355,6 +357,7 @@ pub const Check = struct {
         return .{
             .gpa = self.gpa,
             .items = self.items.*,
+            .failer = self.failer,
         };
     }
 
@@ -367,6 +370,6 @@ pub const Check = struct {
 
     fn freeVar(self: @This(), name: []const u8) void {
         const item = self.items.fetchRemove(name).?.value;
-        item.checkUsage(name);
+        item.checkUsage(name, self.failer);
     }
 };

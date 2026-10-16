@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const fail = @import("../fail.zig");
+const Failer = @import("../Failer.zig");
 const Item = @import("../Item.zig");
 const Location = @import("../Location.zig");
 const Memo = @import("../memo.zig").Memo;
@@ -28,7 +28,7 @@ pub const Typ = union(enum) {
 
     pub var memo: Memo(@This()) = undefined;
 
-    pub fn getStructName(norm: Typ, location: Location) ?Typ.Name {
+    pub fn getStructName(norm: Typ, location: Location, failer: *Failer) ?Typ.Name {
         switch (norm) {
             .err => return null,
             .name => |name| return name,
@@ -38,7 +38,7 @@ pub const Typ = union(enum) {
                 unreachable;
             },
             .fun, .prime, .ptr => {
-                fail.notStruct(location, norm);
+                failer.notStruct(location, norm);
                 return null;
             },
         }
@@ -51,12 +51,12 @@ pub const Typ = union(enum) {
         return self.updateRec(solve, .{});
     }
 
-    pub fn getFun(self: @This(), location: Location) ?Typ.Fun {
+    pub fn getFun(self: @This(), location: Location, failer: *Failer) ?Typ.Fun {
         switch (self.normalise()) {
             .fun => |fun| return fun,
             .err => return null,
             else => {
-                fail.fail(location, "value of type `{f}` is not a function", .{self});
+                failer.fail(location, "value of type `{f}` is not a function", .{self});
                 return null;
             },
         }
@@ -74,7 +74,7 @@ pub const Typ = union(enum) {
             if (ctx.generics_checker.mark(res.loc_name.bare.name)) {
                 return res;
             }
-            const maybe_resolved = res.loc_name.checkDecl(ctx.items) catch |err| switch (err) {
+            const maybe_resolved = res.loc_name.checkDecl(ctx.items, ctx.failer) catch |err| switch (err) {
                 error.BadType => return .err,
             };
             if (maybe_resolved) |resolved| {
@@ -182,14 +182,14 @@ pub const Typ = union(enum) {
 
     pub const debug_unify = false;
 
-    pub fn unify(a: Typ, b: Typ, location: Location) Typ {
+    pub fn unify(a: Typ, b: Typ, location: Location, failer: *Failer) Typ {
         if (a.unifyOrNull(b, .active)) |typ| {
             if (Typ.debug_unify) {
                 std.log.debug("==> {f}", .{typ});
             }
             return typ;
         }
-        fail.wrongTyp(location, a, b);
+        failer.wrongTyp(location, a, b);
         if (a == .ptr and
             a.ptr.typ.* == .prime and
             a.ptr.typ.prime == .u8 and
@@ -394,5 +394,6 @@ pub const Typ = union(enum) {
     pub const Check = struct {
         items: std.StringHashMap(Item.Info),
         generics_checker: *Item.Generic.Checker,
+        failer: *Failer,
     };
 };

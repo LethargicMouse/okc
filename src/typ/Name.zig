@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const fail = @import("../fail.zig");
+const Failer = @import("../Failer.zig");
 const Item = @import("../Item.zig");
 const Location = @import("../Location.zig");
 const Module = @import("../Module.zig");
@@ -58,15 +58,15 @@ pub const Located = struct {
     bare: Name,
     location: Location,
 
-    pub fn checkDecl(self: @This(), items: std.StringHashMap(Item.Info)) error{BadType}!?Typ {
+    pub fn checkDecl(self: @This(), items: std.StringHashMap(Item.Info), failer: *Failer) error{BadType}!?Typ {
         std.log.debug("checkTypDecl {f}", .{self.bare});
         const item = items.getPtr(self.bare.name) orelse {
-            fail.fail(self.location, "item `{s}` is not declared", .{self.bare.name});
+            failer.fail(self.location, "item `{s}` is not declared", .{self.bare.name});
             return error.BadType;
         };
         switch (item.kind) {
             .fun, .vari => {
-                fail.fail(self.location, "item `{s}` is not a type", .{self.bare.name});
+                failer.fail(self.location, "item `{s}` is not a type", .{self.bare.name});
                 return error.BadType;
             },
             .typ => |typ| {
@@ -77,7 +77,7 @@ pub const Located = struct {
                 item.used = true;
                 std.log.debug("item {s} used", .{self.bare.name});
                 if (struc.generics.len != self.bare.generics.len) {
-                    fail.fail(
+                    failer.fail(
                         self.location,
                         "expected {} generics\n        found {}",
                         .{ struc.generics.len, self.bare.generics.len },

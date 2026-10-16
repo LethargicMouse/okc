@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Expr = @import("../Expr/Expr.zig");
-const fail = @import("../fail.zig");
+const Failer = @import("../Failer.zig");
 const Location = @import("../Location.zig");
 const Typ = @import("typ.zig").Typ;
 
@@ -30,6 +30,7 @@ pub fn checkField(
     mutable: bool,
     name: []const u8,
     location: Location,
+    failer: *Failer,
 ) !Expr.Info {
     if (std.mem.eql(u8, name, "ptr")) {
         return .{
@@ -46,7 +47,7 @@ pub fn checkField(
             .mutable = mutable,
         };
     }
-    fail.noField(location, name, .{ .slice = self });
+    failer.noField(location, name, .{ .slice = self });
     return .{
         .typ = .err,
         .mutable = true,

@@ -1,5 +1,4 @@
 const Expr = @import("Expr.zig");
-const fail = @import("../fail.zig");
 const Lexeme = @import("../Lexer.zig").Lexeme;
 const Typ = @import("../typ/typ.zig").Typ;
 
@@ -10,11 +9,11 @@ right: Expr,
 pub fn check(self: *@This(), ctx: Expr.Check) !Expr.Info {
     var left = try self.left.check(.{}, ctx);
     if (!left.typ.isNumber()) {
-        fail.wrongTyp(self.left.location, .int, left.typ);
+        ctx.failer.wrongTyp(self.left.location, .int, left.typ);
         left.typ = .err;
     }
     const right = try self.right.check(.{}, ctx);
-    const unityp = left.typ.unify(right.typ, self.right.location);
+    const unityp = left.typ.unify(right.typ, self.right.location, ctx.failer);
     const typ = switch (self.kind.getClass()) {
         .arith => unityp,
         .bool => Typ{ .prime = .bool },
