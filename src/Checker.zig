@@ -579,7 +579,10 @@ pub fn checkExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) error{OutOfMemory
             .gpa = self.gpa,
             .items = self.module.items,
         }, self),
-        .named_struc => |*struc| return self.checkNamedStructExpr(struc, expr.location),
+        .named_struc => |*struc| return struc.check(expr.location, .{
+            .gpa = self.gpa,
+            .items = self.module.items,
+        }, self),
         .elem => |elem| return self.checkElem(elem, expr.location),
     }
 }
@@ -810,13 +813,6 @@ pub fn checkNewField(
     const decl_typ = try f_decl.typ.resolve(resolve_map);
     const info = try self.checkExpr(&field.expr, .{ .typ = try decl_typ.solve() });
     _ = unify(field.expr.location, decl_typ, info.typ);
-}
-
-fn checkNamedStructExpr(self: *@This(), named: *Expr.Struct.Named, location: Location) !Expr.Info {
-    return named.struc.checkTyped(.{ .name = named.name }, location, .{
-        .gpa = self.gpa,
-        .items = self.module.items,
-    }, self);
 }
 
 fn deinit(self: *@This()) void {

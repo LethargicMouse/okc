@@ -149,3 +149,8 @@ pub const Declare = struct {
         mutated: bool = false,
     };
 };
+
+pub const ResolveCtx = struct {
+    gpa: std.mem.Allocator,
+    items: std.StringHashMap(Info),
+};

@@ -143,10 +143,7 @@ pub const Struct = struct {
         self: *@This(),
         name: Typ.Name,
         location: Location,
-        ctx: struct {
-            gpa: std.mem.Allocator,
-            items: std.StringHashMap(Item.Info),
-        },
+        ctx: Item.ResolveCtx,
         checker: *Checker,
     ) !Expr.Info {
         const err = Expr.Info{
@@ -197,6 +194,15 @@ pub const Struct = struct {
     pub const Named = struct {
         name: []const u8,
         struc: Struct,
+
+        pub fn check(
+            self: *@This(),
+            location: Location,
+            ctx: Item.ResolveCtx,
+            checker: *Checker,
+        ) !Expr.Info {
+            return self.struc.checkTyped(.{ .name = self.name }, location, ctx, checker);
+        }
     };
 };
 
