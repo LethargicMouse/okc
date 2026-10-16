@@ -35,7 +35,11 @@ pub fn run(self: *@This(), module: Module) error{ OutOfMemory, Handled }!void {
 
 fn checkModule(self: *@This(), module: Module) !void {
     for (module.items) |*item| {
-        try self.regItem(item);
+        try self.regItem(item, .{
+            .gpa = self.gpa,
+            .failer = &self.failer,
+            .items = &self.module.items,
+        });
     }
     for (module.items) |item| {
         try checkItem(item, .{
@@ -55,11 +59,11 @@ fn checkItemsUsage(self: *@This()) void {
     }
 }
 
-fn regItem(self: *@This(), item: *Item) !void {
+fn regItem(self: *@This(), item: *Item, ctx: Item.Check) !void {
     const kind: Item.Info.Kind = switch (item.kind) {
         .typ_alias => |alias| .{ .typ = alias.typ },
         .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
-        .struc => |struc| try self.regStruct(struc),
+        .struc => |struc| try self.regStruct(struc, ctx),
         .fun => |*fun| .{ .fun = &fun.header },
         .constant => |*declare| try self.regConst(declare),
         .use => unreachable,
@@ -177,8 +181,8 @@ fn checkMain(self: *@This(), location: Location) void {
     item.used = true;
 }
 
-fn regStruct(self: *@This(), struc: Item.Struct) !Item.Info.Kind {
-    try self.checkGenericsRedeclare(struc.generics);
+fn regStruct(self: *@This(), struc: Item.Struct, ctx: Item.Check) !Item.Info.Kind {
+    try ctx.checkGenericsRedeclare(struc.generics);
     var res = Item.Struct.Info{
         .generics = struc.generics,
         .fields = .init(self.gpa),
@@ -206,22 +210,6 @@ fn regStruct(self: *@This(), struc: Item.Struct) !Item.Info.Kind {
         });
     }
     return .{ .struc = res };
-}
-
-fn checkGenericsRedeclare(self: *@This(), generics: []const Item.Generic) !void {
-    var map = std.StringHashMap(Location).init(self.gpa);
-    defer map.deinit();
-    for (generics) |generic| {
-        if (self.module.items.get(generic.name)) |prev| {
-            self.failer.alreadyDeclared(generic.location, generic.name, prev.location);
-        }
-        const entry = try map.getOrPut(generic.name);
-        if (entry.found_existing) {
-            self.failer.alreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
-        } else {
-            entry.value_ptr.* = generic.location;
-        }
-    }
 }
 
 fn deinit(self: *@This()) void {

@@ -181,4 +181,20 @@ pub const Check = struct {
     gpa: std.mem.Allocator,
     items: *std.StringHashMap(Info),
     failer: *Failer,
+
+    pub fn checkGenericsRedeclare(self: @This(), generics: []const Generic) !void {
+        var map = std.StringHashMap(Location).init(self.gpa);
+        defer map.deinit();
+        for (generics) |generic| {
+            if (self.items.get(generic.name)) |prev| {
+                self.failer.alreadyDeclared(generic.location, generic.name, prev.location);
+            }
+            const entry = try map.getOrPut(generic.name);
+            if (entry.found_existing) {
+                self.failer.alreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
+            } else {
+                entry.value_ptr.* = generic.location;
+            }
+        }
+    }
 };
