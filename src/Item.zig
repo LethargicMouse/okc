@@ -119,6 +119,21 @@ pub const Fun = struct {
         params: []Param,
         ret_typ: Typ,
 
+        pub fn check(self: *@This(), ctx: Check) !void {
+            var generics_checker: Generic.Checker = try .init(ctx.gpa, self.generics);
+            defer generics_checker.deinit(ctx.gpa);
+            const typ_check = Typ.Check{
+                .generics_checker = &generics_checker,
+                .items = ctx.items.*,
+                .failer = ctx.failer,
+            };
+            for (self.params) |*param| {
+                param.typ = try param.typ.check(typ_check);
+            }
+            self.ret_typ = try self.ret_typ.check(typ_check);
+            generics_checker.checkUsage(ctx.failer);
+        }
+
         pub const Param = struct {
             name: []const u8,
             typ: Typ,

@@ -64,7 +64,7 @@ fn regItem(self: *@This(), item: *Item, ctx: Item.Check) !void {
         .use => unreachable,
     };
     if (kind == .fun) {
-        try self.checkHeader(kind.fun);
+        try kind.fun.check(ctx);
     }
     if (self.module.items.get(item.name)) |prev| {
         self.failer.alreadyDeclared(item.location, item.name, prev.location);
@@ -99,21 +99,6 @@ fn checkItem(item: Item, ctx: Item.Check) error{OutOfMemory}!void {
         .fun => |fun| try fun.check(item.location, ctx),
         .use => unreachable,
     }
-}
-
-fn checkHeader(self: *@This(), header: *Item.Fun.Header) !void {
-    var generics_checker: Item.Generic.Checker = try .init(self.gpa, header.generics);
-    defer generics_checker.deinit(self.gpa);
-    const typ_check = Typ.Check{
-        .generics_checker = &generics_checker,
-        .items = self.module.items,
-        .failer = &self.failer,
-    };
-    for (header.params) |*param| {
-        param.typ = try param.typ.check(typ_check);
-    }
-    header.ret_typ = try header.ret_typ.check(typ_check);
-    generics_checker.checkUsage(&self.failer);
 }
 
 fn deinit(self: *@This()) void {
