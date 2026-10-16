@@ -574,7 +574,7 @@ pub fn checkExpr(self: *@This(), expr: *Expr, hint: Expr.Hint) error{OutOfMemory
         },
         .undef => |*undef| return checkUndef(undef, hint.typ),
         .call => |call| return call.check(hint.typ, self),
-        .binary => |binary| return self.checkBinary(binary),
+        .binary => |binary| return binary.check(self),
         .field => |field| return self.checkField(field, expr.location, hint.mutable),
         .named_struc => |*struc| return self.checkNamedStructExpr(struc, expr.location),
         .elem => |elem| return self.checkElem(elem, expr.location),
@@ -962,24 +962,6 @@ fn getTypName(norm: Typ, location: Location) ?Typ.Name {
             return null;
         },
     }
-}
-
-fn checkBinary(self: *@This(), binary: *Expr.Binary) !Expr.Info {
-    var left = try self.checkExpr(&binary.left, .{});
-    if (!left.typ.isNumber()) {
-        fail.wrongTyp(binary.left.location, .int, left.typ);
-        left.typ = .err;
-    }
-    const right = try self.checkExpr(&binary.right, .{});
-    const unityp = unify(binary.right.location, left.typ, right.typ);
-    const typ = switch (binary.kind.getClass()) {
-        .arith => unityp,
-        .bool => Typ{ .prime = .bool },
-    };
-    return .{
-        .typ = typ,
-        .mutable = false,
-    };
 }
 
 fn deinit(self: *@This()) void {
