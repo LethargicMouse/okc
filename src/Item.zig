@@ -61,6 +61,28 @@ pub const Fun = struct {
     header: Header,
     body: Stmt.Block,
 
+    pub fn check(self: @This(), location: Location, ctx: Check) !void {
+        var stmt_check: Stmt.Check = .{
+            .gpa = ctx.gpa,
+            .items = ctx.items,
+            .ret_typ = self.header.ret_typ,
+            .failer = ctx.failer,
+        };
+        defer stmt_check.deinit();
+        for (self.header.params) |param| {
+            try stmt_check.declare(param.name, param.location, .{
+                .typ = param.typ,
+                .mutable = false,
+                .can_be_mutable = false,
+            }, ctx.failer);
+        }
+        const control_flow = try self.body.check(&stmt_check);
+        if (control_flow != .ret and !self.header.ret_typ.isVoid()) {
+            ctx.failer.fail(location, "function may not return", .{});
+        }
+        stmt_check.freeVars(0);
+    }
+
     pub const Extern = struct {
         header: Header,
     };

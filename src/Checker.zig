@@ -146,7 +146,7 @@ fn checkArrayComptime(self: *@This(), array: Expr.Array) void {
 fn checkItem(item: Item, ctx: Item.Check) error{OutOfMemory}!void {
     switch (item.kind) {
         .typ_alias, .constant, .struc, .ext_fun => {},
-        .fun => |fun| try checkFun(fun, item.location, ctx),
+        .fun => |fun| try fun.check(item.location, ctx),
         .use => unreachable,
     }
 }
@@ -222,28 +222,6 @@ fn checkGenericsRedeclare(self: *@This(), generics: []const Item.Generic) !void 
             entry.value_ptr.* = generic.location;
         }
     }
-}
-
-fn checkFun(fun: Item.Fun, location: Location, ctx: Item.Check) !void {
-    var stmt_check: Stmt.Check = .{
-        .gpa = ctx.gpa,
-        .items = ctx.items,
-        .ret_typ = fun.header.ret_typ,
-        .failer = ctx.failer,
-    };
-    defer stmt_check.deinit();
-    for (fun.header.params) |param| {
-        try stmt_check.declare(param.name, param.location, .{
-            .typ = param.typ,
-            .mutable = false,
-            .can_be_mutable = false,
-        }, ctx.failer);
-    }
-    const control_flow = try fun.body.check(&stmt_check);
-    if (control_flow != .ret and !fun.header.ret_typ.isVoid()) {
-        ctx.failer.fail(location, "function may not return", .{});
-    }
-    stmt_check.freeVars(0);
 }
 
 fn deinit(self: *@This()) void {
