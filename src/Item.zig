@@ -11,7 +11,7 @@ kind: Kind,
 location: Location,
 
 pub const Kind = union(enum) {
-    constant: Declare,
+    constant: Stmt.Declare,
     ext_fun: Fun.Extern,
     fun: Fun,
     struc: Struct,
@@ -41,6 +41,15 @@ pub const Struct = struct {
         generics: []const Generic,
         fields: std.StringHashMap(Field.Info),
 
+        fn checkUsage(self: @This()) void {
+            var iter = self.fields.iterator();
+            while (iter.next()) |entry| {
+                if (!entry.value_ptr.used) {
+                    fail.unused(entry.value_ptr.location, entry.key_ptr.*);
+                }
+            }
+        }
+
         pub fn deinit(self: *@This()) void {
             self.fields.deinit();
             self.* = undefined;
@@ -50,7 +59,7 @@ pub const Struct = struct {
 
 pub const Fun = struct {
     header: Header,
-    body: []Stmt,
+    body: Stmt.Block,
 
     pub const Extern = struct {
         header: Header,
@@ -114,68 +123,39 @@ pub const Generic = struct {
 };
 
 pub const Info = struct {
-    pub const Kind = union(enum) {
-        fun: *Fun.Header,
-        struc: Struct.Info,
-        typ: Typ,
-        vari: Declare.Info,
-    };
     kind: Info.Kind,
     location: Location,
     used: bool = false,
 
-    pub fn deinit(self: *@This()) void {
-        switch (self.kind) {
-            .struc => |*struc| struc.deinit(),
-            .fun, .vari, .typ => {},
+    pub fn checkUsage(self: @This(), name: []const u8) void {
+        if (self.used) {
+            switch (self.kind) {
+                .fun, .typ => {},
+                .vari => |vari| vari.checkUsage(self.location),
+                .struc => |struc| struc.checkUsage(),
+            }
+        } else {
+            fail.unused(self.location, name);
         }
     }
+
+    pub const Kind = union(enum) {
+        fun: *Fun.Header,
+        struc: Struct.Info,
+        typ: Typ,
+        vari: Stmt.Declare.Info,
+
+        pub fn deinit(self: *@This()) void {
+            switch (self.*) {
+                .struc => |*struc| struc.deinit(),
+                .fun, .vari, .typ => {},
+            }
+            self.* = undefined;
+        }
+    };
 };
 
-pub const Declare = struct {
-    typ: ?Typ,
-    expr: Expr,
-    mutable: bool,
-
-    pub const Named = struct {
-        name: []const u8,
-        bare: Declare,
-
-        pub fn check(self: *@This(), location: Location, ctx: Stmt.Check) !Stmt.ControlFlow {
-            const typ_decl = if (self.bare.typ) |typ| typ else .any;
-            const info = try self.bare.expr.check(.{ .typ = typ_decl }, ctx.exprCheck());
-            const typ = typ_decl.unify(info.typ, self.bare.expr.location);
-            const vari: Declare.Info = .{
-                .typ = typ,
-                .mutable = self.bare.mutable,
-                .can_be_mutable = true,
-            };
-            try vari.declare(self.name, location, ctx);
-            return .cont;
-        }
-    };
-
-    pub const Info = struct {
-        typ: Typ,
-        can_be_mutable: bool,
-        mutable: bool,
-        mutated: bool = false,
-
-        pub fn declare(
-            self: @This(),
-            name: []const u8,
-            location: Location,
-            ctx: Stmt.Check,
-        ) !void {
-            if (ctx.items.get(name)) |prev| {
-                fail.alreadyDeclared(location, name, prev.location);
-                return;
-            }
-            try ctx.vars_stack.append(ctx.gpa, name);
-            try ctx.items.put(name, .{
-                .location = location,
-                .kind = .{ .vari = self },
-            });
-        }
-    };
+pub const Check = struct {
+    gpa: std.mem.Allocator,
+    items: *std.StringHashMap(Info),
 };

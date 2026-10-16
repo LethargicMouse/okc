@@ -37,10 +37,9 @@ fn checkModule(self: *@This(), module: Module) !void {
         try self.regItem(item);
     }
     for (module.items) |item| {
-        try self.checkItem(item, .{
+        try checkItem(item, .{
             .gpa = self.gpa,
             .items = &self.module.items,
-            .vars_stack = &self.vars_stack,
         });
     }
     self.checkMain(module.location);
@@ -50,28 +49,7 @@ fn checkModule(self: *@This(), module: Module) !void {
 fn checkItemsUsage(self: *@This()) void {
     var iter = self.module.items.iterator();
     while (iter.next()) |entry| {
-        checkItemUsage(entry.key_ptr.*, entry.value_ptr.*);
-    }
-}
-
-fn checkItemUsage(name: []const u8, info: Item.Info) void {
-    if (info.used) {
-        switch (info.kind) {
-            .fun, .typ => {},
-            .vari => |vari| checkVarUsage(vari, info.location),
-            .struc => |struc| checkStructUsage(struc),
-        }
-    } else {
-        fail.unused(info.location, name);
-    }
-}
-
-fn checkStructUsage(struc: Item.Struct.Info) void {
-    var iter = struc.fields.iterator();
-    while (iter.next()) |entry| {
-        if (!entry.value_ptr.used) {
-            fail.unused(entry.value_ptr.location, entry.key_ptr.*);
-        }
+        entry.value_ptr.checkUsage(entry.key_ptr.*);
     }
 }
 
@@ -97,7 +75,7 @@ fn regItem(self: *@This(), item: *Item) !void {
     });
 }
 
-fn regConst(self: *@This(), declare: *Item.Declare) !Item.Info.Kind {
+fn regConst(self: *@This(), declare: *Stmt.Declare) !Item.Info.Kind {
     const hint_typ = if (declare.typ) |typ| typ else .any;
     const typ = try self.checkConstExpr(&declare.expr, .{ .typ = hint_typ }, .{
         .gpa = self.gpa,
@@ -162,10 +140,10 @@ fn checkArrayComptime(self: *@This(), array: Expr.Array) void {
     }
 }
 
-fn checkItem(self: *@This(), item: Item, ctx: Stmt.Check) error{OutOfMemory}!void {
+fn checkItem(item: Item, ctx: Item.Check) error{OutOfMemory}!void {
     switch (item.kind) {
         .typ_alias, .constant, .struc, .ext_fun => {},
-        .fun => |fun| try self.checkFun(fun, item.location, ctx),
+        .fun => |fun| try checkFun(fun, item.location, ctx),
         .use => unreachable,
     }
 }
@@ -182,13 +160,6 @@ fn checkHeader(self: *@This(), header: *Item.Fun.Header) !void {
     }
     header.ret_typ = try header.ret_typ.check(typ_check);
     generics_checker.checkUsage();
-}
-
-fn checkVarUsage(vari: Item.Declare.Info, location: Location) void {
-    if (vari.mutable and !vari.mutated) {
-        fail.fail(location, "variable is never mutated", .{});
-        std.log.info("remove `mut` before name\n", .{});
-    }
 }
 
 fn checkMain(self: *@This(), location: Location) void {
@@ -248,207 +219,24 @@ fn checkGenericsRedeclare(self: *@This(), generics: []const Item.Generic) !void 
     }
 }
 
-fn checkFun(self: *@This(), fun: Item.Fun, location: Location, ctx: Stmt.Check) !void {
-    self.ret_typ = fun.header.ret_typ;
-    const rbp = self.vars_stack.items.len;
+fn checkFun(fun: Item.Fun, location: Location, ctx: Item.Check) !void {
+    var stmt_check: Stmt.Check = .{
+        .gpa = ctx.gpa,
+        .items = ctx.items,
+        .ret_typ = fun.header.ret_typ,
+    };
+    defer stmt_check.deinit();
     for (fun.header.params) |param| {
-        const vari: Item.Declare.Info = .{
+        try stmt_check.declare(param.name, param.location, .{
             .typ = param.typ,
             .mutable = false,
             .can_be_mutable = false,
-        };
-        try vari.declare(param.name, param.location, ctx);
+        });
     }
-    const control_flow = try self.checkBlock(fun.body, ctx);
+    const control_flow = try fun.body.check(&stmt_check);
     if (control_flow != .ret and !fun.header.ret_typ.isVoid()) {
         fail.fail(location, "function may not return", .{});
     }
-    self.freeVars(rbp);
-}
-
-fn checkLoopBlock(self: *@This(), block: []Stmt, ctx: Stmt.Check) !Stmt.ControlFlow {
-    self.loops_nested += 1;
-    const res = try self.checkBlock(block, ctx);
-    self.loops_nested -= 1;
-    switch (res) {
-        .ret => return .ret,
-        .brek, .cont => return .cont,
-    }
-}
-
-fn checkBlock(self: *@This(), block: []Stmt, ctx: Stmt.Check) !Stmt.ControlFlow {
-    var res = Stmt.ControlFlow.cont;
-    const rbp = self.vars_stack.items.len;
-    for (block, 0..) |*stmt, i| {
-        const control_flow = try self.checkStmt(stmt, ctx);
-        if (control_flow != .cont) {
-            if (res == .cont) {
-                res = control_flow;
-            }
-            if (i + 1 != block.len) {
-                fail.fail(block[i + 1].location, "Stmt is unreachable", .{});
-            }
-        }
-    }
-    self.freeVars(rbp);
-    return res;
-}
-
-fn freeVars(self: *@This(), rbp: usize) void {
-    for (self.vars_stack.items[rbp..]) |name| {
-        self.freeVar(name);
-    }
-    self.vars_stack.shrinkRetainingCapacity(rbp);
-}
-
-fn checkStmt(self: *@This(), stmt: *Stmt, ctx: Stmt.Check) error{OutOfMemory}!Stmt.ControlFlow {
-    switch (stmt.kind) {
-        .for_range => |*forr| return self.checkForRange(forr, ctx),
-        .forr => |*forr| return self.checkFor(forr, ctx),
-        .unre => return .ret,
-        .brek => return self.checkBreak(stmt.location),
-        .ret => |*ret| return ret.check(stmt.location, self.ret_typ, ctx.exprCheck()),
-        .expr => |*expr| return checkExprStmt(expr, ctx.exprCheck()),
-        .declare => |*named| return named.check(stmt.location, ctx),
-        .op_assign => |*op_assign| return checkOpAssign(op_assign, ctx.exprCheck()),
-        .assign => |*assign| return checkAssign(assign, ctx.exprCheck()),
-        .iff => |*iff| return self.checkIf(iff, ctx),
-        .whi => |*whi| return self.checkWhile(whi, ctx),
-        .ignore => |*ignore| return checkIgnore(ignore, stmt.location, ctx.exprCheck()),
-    }
-}
-
-fn checkForRange(self: *@This(), forr: *Stmt.ForRange, ctx: Stmt.Check) !Stmt.ControlFlow {
-    var start = try forr.start.check(.{}, ctx.exprCheck());
-    if (!start.typ.isNumber()) {
-        fail.wrongTyp(forr.start.location, .int, start.typ);
-        start.typ = .err;
-    }
-    const end = try forr.end.check(.{}, ctx.exprCheck());
-    const typ = start.typ.unify(end.typ, forr.end.location);
-    const vari: Item.Declare.Info = .{
-        .typ = typ,
-        .mutable = false,
-        .can_be_mutable = false,
-    };
-    try vari.declare(forr.vari, forr.vari_location, ctx);
-    defer {
-        _ = self.vars_stack.pop();
-        self.freeVar(forr.vari);
-    }
-    return self.checkLoopBlock(forr.body, ctx);
-}
-
-fn checkFor(self: *@This(), forr: *Stmt.For, ctx: Stmt.Check) !Stmt.ControlFlow {
-    const info = try forr.expr.check(.{}, ctx.exprCheck());
-    const elem_info = info.getElem(forr.expr.location) orelse Expr.Info{
-        .typ = .err,
-        .mutable = true,
-    };
-    const vari: Item.Declare.Info = .{
-        .typ = elem_info.typ,
-        .mutable = false,
-        .can_be_mutable = false,
-    };
-    try vari.declare(forr.vari, forr.vari_location, ctx);
-    defer {
-        _ = self.vars_stack.pop();
-        self.freeVar(forr.vari);
-    }
-    return self.checkLoopBlock(forr.body, ctx);
-}
-
-fn freeVar(self: *@This(), name: []const u8) void {
-    const item = self.module.items.fetchRemove(name).?.value;
-    checkItemUsage(name, item);
-}
-
-fn checkIgnore(ignore: *Stmt.Ignore, location: Location, ctx: Expr.Check) !Stmt.ControlFlow {
-    const info = try ignore.expr.check(.{}, ctx);
-    if (info.typ.isVoid()) {
-        fail.fail(location, "redundant ignore", .{});
-        std.log.info("remove `_ =` before expr\n", .{});
-    }
-    return .cont;
-}
-
-fn checkBreak(self: *@This(), location: Location) error{OutOfMemory}!Stmt.ControlFlow {
-    if (self.loops_nested == 0) {
-        fail.fail(location, "`break` outside of loop", .{});
-        return .cont;
-    }
-    return .brek;
-}
-
-fn checkExprStmt(expr: *Expr, ctx: Expr.Check) !Stmt.ControlFlow {
-    // no type hints to disallow `undefined;`
-    const info = try expr.check(.{}, ctx);
-    const expected: Typ = .{ .prime = .void };
-    _ = expected.unify(info.typ, expr.location);
-    return .cont;
-}
-
-fn checkWhile(self: *@This(), whi: *Stmt.While, ctx: Stmt.Check) !Stmt.ControlFlow {
-    const control_flow = try self.checkBranch(&whi.branch, .loop, ctx);
-    switch (control_flow) {
-        .cont, .brek => return .cont,
-        .ret => return .ret,
-    }
-}
-
-fn checkIf(self: *@This(), iff: *Stmt.IfStmt, ctx: Stmt.Check) !Stmt.ControlFlow {
-    var res = try self.checkBranch(&iff.branch, .simple, ctx);
-    for (iff.else_ifs) |*branch| {
-        const control_flow = try self.checkBranch(branch, .simple, ctx);
-        if (@backingInt(control_flow) < @backingInt(res)) {
-            res = control_flow;
-        }
-    }
-    const control_flow = try self.checkBlock(iff.else_branch, ctx);
-    if (@backingInt(control_flow) < @backingInt(res)) {
-        res = control_flow;
-    }
-    return res;
-}
-
-fn checkBranch(
-    self: *@This(),
-    branch: *Stmt.Branch,
-    kind: Stmt.Branch.Kind,
-    ctx: Stmt.Check,
-) !Stmt.ControlFlow {
-    const info = try branch.condition.check(.{}, ctx.exprCheck());
-    const expected: Typ = .{ .prime = .bool };
-    _ = expected.unify(info.typ, branch.condition.location);
-    if (kind == .loop) {
-        return self.checkLoopBlock(branch.body, ctx);
-    }
-    return self.checkBlock(branch.body, ctx);
-}
-
-fn checkOpAssign(op_assign: *Stmt.OpAssign, ctx: Expr.Check) !Stmt.ControlFlow {
-    var left = try op_assign.left.check(.{ .mutable = true }, ctx);
-    if (!left.mutable) {
-        fail.notMut(op_assign.left.location);
-    }
-    std.debug.assert(op_assign.kind.getClass() == .arith);
-    if (!left.typ.isNumber()) {
-        fail.wrongTyp(op_assign.left.location, .int, left.typ);
-        left.typ = .err;
-    }
-    const right = try op_assign.right.check(.{}, ctx);
-    _ = left.typ.unify(right.typ, op_assign.right.location);
-    return .cont;
-}
-
-fn checkAssign(assign: *Stmt.Assign, ctx: Expr.Check) !Stmt.ControlFlow {
-    const left = try assign.left.check(.{ .mutable = true }, ctx);
-    if (!left.mutable) {
-        fail.notMut(assign.left.location);
-    }
-    const info = try assign.expr.check(.{ .typ = left.typ }, ctx);
-    _ = left.typ.unify(info.typ, assign.expr.location);
-    return .cont;
 }
 
 fn deinit(self: *@This()) void {

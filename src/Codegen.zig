@@ -207,7 +207,7 @@ fn genFun(
         const vari = try self.toStack(typ_val);
         try self.vars.put(param.name, vari);
     }
-    for (fun.body) |stmt| {
+    for (fun.body.stmts) |stmt| {
         try self.genStmt(stmt);
     }
     if (fun.header.ret_typ.isVoid()) {
@@ -356,7 +356,7 @@ fn genForRange(self: *@This(), forr: Stmt.ForRange) !void {
     const end_label = self.newTmp();
     try self.cond(.{ .tmp = at_end }, body_label, end_label);
     // <body>
-    for (forr.body) |stmt| {
+    for (forr.body.stmts) |stmt| {
         try self.genStmt(stmt);
     }
     // goto start
@@ -399,7 +399,7 @@ fn genFor(self: *@This(), forr: Stmt.For) !void {
     const elem = try self.genElemRef(slice, ival_);
     try self.vars.put(forr.vari, elem);
     // <body>
-    for (forr.body) |stmt| {
+    for (forr.body.stmts) |stmt| {
         try self.genStmt(stmt);
     }
     // goto start
@@ -433,13 +433,13 @@ fn uncond(self: *@This(), to: u32, next: u32) !void {
     , .{ to, next });
 }
 
-fn genIf(self: *@This(), iff: Stmt.IfStmt) !void {
+fn genIf(self: *@This(), iff: Stmt.If) !void {
     const end_label = self.newTmp();
     try self.genBranch(iff.branch, end_label, .simple);
     for (iff.else_ifs) |branch| {
         try self.genBranch(branch, end_label, .simple);
     }
-    for (iff.else_branch) |stmt| {
+    for (iff.else_block.stmts) |stmt| {
         try self.genStmt(stmt);
     }
     try self.uncond(end_label, end_label);
@@ -453,7 +453,7 @@ fn genBranch(self: *@This(), branch: Stmt.Branch, end_label: u32, kind: Stmt.Bra
         try self.loop_ends.append(self.gpa, else_label);
     }
     try self.cond(condition.val, then_label, else_label);
-    for (branch.body) |stmt| {
+    for (branch.body.stmts) |stmt| {
         try self.genStmt(stmt);
     }
     try self.uncond(end_label, else_label);
@@ -478,7 +478,7 @@ fn genAssign(self: *@This(), assign: Stmt.Assign) !void {
     try self.storeInto(vari.val, typ_val);
 }
 
-fn genDeclare(self: *@This(), name: []const u8, declare: Item.Declare) !void {
+fn genDeclare(self: *@This(), name: []const u8, declare: Stmt.Declare) !void {
     const typ_val = try self.genExpr(declare.expr);
     const vari = try self.toStack(typ_val);
     try self.vars.put(name, vari);

@@ -22,3 +22,5 @@ x 2026-10-16 2026-10-15 typ/mod -> typ/typ +refactor
 2026-10-16 big audit +refactor
 x 2026-10-16 2026-10-16 Typ.Lazy all inputs visible +refactor
 2026-10-16 invert unify +refactor
+2026-10-16 no unary +refactor
+2026-10-16 free Declare +refactor

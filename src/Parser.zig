@@ -372,20 +372,20 @@ fn parseFun(self: *@This()) !Item.Fun {
     const header = try self.parseHeader(.quiet);
     const location = self.tmp_location;
     const name = self.tmp_name;
-    const block = try self.parseBlock();
+    const body = try self.parseBlock();
     self.tmp_location = location;
     self.tmp_name = name;
     return .{
         .header = header,
-        .body = block,
+        .body = body,
     };
 }
 
-fn parseBlock(self: *@This()) Error![]Stmt {
+fn parseBlock(self: *@This()) Error!Stmt.Block {
     try self.expect(.curl, .loud);
     const stmts = try self.many(parseStmt, .{});
     try self.expect(.curr, .quiet);
-    return stmts;
+    return .{ .stmts = stmts };
 }
 
 fn parseStmt(self: *@This()) !Stmt {
@@ -512,13 +512,13 @@ fn parseIfStmt(self: *@This()) !Stmt {
     try self.expect(.iff, .quiet);
     const branch = try self.parseBranch();
     const else_ifs = try self.many(parseElseIf, .{});
-    const else_branch = try self.maybe(parseElse, .{}) orelse @constCast(&.{});
+    const else_branch = try self.maybe(parseElse, .{}) orelse Stmt.Block.empty;
     return .{
         .location = location,
         .kind = .{ .iff = .{
             .branch = branch,
             .else_ifs = else_ifs,
-            .else_branch = else_branch,
+            .else_block = else_branch,
         } },
     };
 }
@@ -541,7 +541,7 @@ fn parseBranch(self: *@This()) !Stmt.Branch {
     };
 }
 
-fn parseElse(self: *@This()) ![]Stmt {
+fn parseElse(self: *@This()) !Stmt.Block {
     try self.expect(.els, .loud);
     const body = try self.parseBlock();
     return body;
@@ -565,7 +565,7 @@ fn parseDeclareStmt(self: *@This()) !Stmt {
     };
 }
 
-fn parseDeclare(self: *@This()) !Item.Declare.Named {
+fn parseDeclare(self: *@This()) !Stmt.Declare.Named {
     try self.expect(.let, .quiet);
     const mutable = try self.maybe(parseMutable, .{}) orelse false;
     const location = self.getLocation();
