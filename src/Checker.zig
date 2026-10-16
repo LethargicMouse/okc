@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const Failer = @import("Failer.zig");
-const Location = @import("Location.zig");
 const Module = @import("Module.zig");
 const Stmt = @import("Stmt.zig");
 const Typ = @import("typ/typ.zig").Typ;
@@ -33,21 +32,18 @@ pub fn run(self: *@This(), module: Module) error{ OutOfMemory, Handled }!void {
 }
 
 fn checkModule(self: *@This(), module: Module) !void {
+    const item_check: Item.Check = .{
+        .gpa = self.gpa,
+        .failer = &self.failer,
+        .items = &self.module.items,
+    };
     for (module.items) |*item| {
-        try self.regItem(item, .{
-            .gpa = self.gpa,
-            .failer = &self.failer,
-            .items = &self.module.items,
-        });
+        try self.regItem(item, item_check);
     }
     for (module.items) |item| {
-        try checkItem(item, .{
-            .gpa = self.gpa,
-            .items = &self.module.items,
-            .failer = &self.failer,
-        });
+        try checkItem(item, item_check);
     }
-    self.checkMain(module.location);
+    item_check.checkMain(module.location);
     self.checkItemsUsage();
 }
 
@@ -118,17 +114,6 @@ fn checkHeader(self: *@This(), header: *Item.Fun.Header) !void {
     }
     header.ret_typ = try header.ret_typ.check(typ_check);
     generics_checker.checkUsage(&self.failer);
-}
-
-fn checkMain(self: *@This(), location: Location) void {
-    const item = self.module.items.getPtr("main") orelse {
-        self.failer.fail(location, "`main` function not found", .{});
-        return;
-    };
-    if (item.kind != .fun) {
-        self.failer.fail(item.location, "item `main` is not a function", .{});
-    }
-    item.used = true;
 }
 
 fn deinit(self: *@This()) void {

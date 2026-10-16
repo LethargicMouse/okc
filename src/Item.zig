@@ -209,6 +209,17 @@ pub const Check = struct {
     items: *std.StringHashMap(Info),
     failer: *Failer,
 
+    pub fn checkMain(self: @This(), location: Location) void {
+        const item = self.items.getPtr("main") orelse {
+            self.failer.fail(location, "`main` function not found", .{});
+            return;
+        };
+        if (item.kind != .fun) {
+            self.failer.fail(item.location, "item `main` is not a function", .{});
+        }
+        item.used = true;
+    }
+
     pub fn checkExpr(self: @This()) Expr.Check {
         return .{
             .gpa = self.gpa,
