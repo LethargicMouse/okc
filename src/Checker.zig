@@ -870,7 +870,7 @@ fn checkUndef(undef: *Expr.Undef, typ: Typ) !Expr.Info {
 fn checkInt(int: *Expr.Int) !Expr.Info {
     std.debug.assert(int.typ == .int);
     return .{
-        .typ = .{ .lazy = .{ .typ = &int.typ } },
+        .typ = .{ .lazy = .from(&int.typ) },
         .mutable = false,
     };
 }
