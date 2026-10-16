@@ -23,6 +23,33 @@ pub const Struct = struct {
     generics: []const Generic,
     fields: []Field,
 
+    pub fn reg(self: @This(), ctx: Check) !@This().Info {
+        try ctx.checkGenericsRedeclare(self.generics);
+        var res = @This().Info{
+            .generics = self.generics,
+            .fields = .init(ctx.gpa),
+        };
+        for (self.fields) |*field| {
+            var defaulted = false;
+            if (field.default) |*expr| {
+                const expr_typ = try expr.checkConst(.{ .typ = field.typ }, ctx.checkExpr());
+                _ = field.typ.unify(expr_typ, expr.location, ctx.failer);
+                defaulted = true;
+            }
+            if (res.fields.get(field.name)) |prev| {
+                ctx.failer.alreadyDeclared(field.location, field.name, prev.location);
+                continue;
+            }
+            try res.fields.put(field.name, .{
+                .location = field.location,
+                .typ = field.typ,
+                .defaulted = defaulted,
+                .used = field.name[0] == '_',
+            });
+        }
+        return res;
+    }
+
     pub const Field = struct {
         name: []const u8,
         typ: Typ,
@@ -181,6 +208,14 @@ pub const Check = struct {
     gpa: std.mem.Allocator,
     items: *std.StringHashMap(Info),
     failer: *Failer,
+
+    pub fn checkExpr(self: @This()) Expr.Check {
+        return .{
+            .gpa = self.gpa,
+            .items = self.items.*,
+            .failer = self.failer,
+        };
+    }
 
     pub fn checkGenericsRedeclare(self: @This(), generics: []const Generic) !void {
         var map = std.StringHashMap(Location).init(self.gpa);

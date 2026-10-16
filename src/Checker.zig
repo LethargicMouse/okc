@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const Expr = @import("Expr/Expr.zig");
 const Failer = @import("Failer.zig");
 const Location = @import("Location.zig");
 const Module = @import("Module.zig");
@@ -63,7 +62,7 @@ fn regItem(self: *@This(), item: *Item, ctx: Item.Check) !void {
     const kind: Item.Info.Kind = switch (item.kind) {
         .typ_alias => |alias| .{ .typ = alias.typ },
         .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
-        .struc => |struc| try self.regStruct(struc, ctx),
+        .struc => |struc| .{ .struc = try struc.reg(ctx) },
         .fun => |*fun| .{ .fun = &fun.header },
         .constant => |*declare| try self.regConst(declare),
         .use => unreachable,
@@ -83,7 +82,7 @@ fn regItem(self: *@This(), item: *Item, ctx: Item.Check) !void {
 
 fn regConst(self: *@This(), declare: *Stmt.Declare) !Item.Info.Kind {
     const hint_typ = if (declare.typ) |typ| typ else .any;
-    const typ = try self.checkConstExpr(&declare.expr, .{ .typ = hint_typ }, .{
+    const typ = try declare.expr.checkConst(.{ .typ = hint_typ }, .{
         .gpa = self.gpa,
         .items = self.module.items,
         .failer = &self.failer,
@@ -96,55 +95,6 @@ fn regConst(self: *@This(), declare: *Stmt.Declare) !Item.Info.Kind {
         .typ = typ,
         .can_be_mutable = true,
     } };
-}
-
-fn checkConstExpr(self: *@This(), expr: *Expr, hint: Expr.Hint, ctx: Expr.Check) !Typ {
-    const info = try expr.check(hint, ctx);
-    self.checkExprComptime(expr.*);
-    return info.typ;
-}
-
-fn checkExprComptime(self: *@This(), expr: Expr) void {
-    switch (expr.kind) {
-        .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
-        .call, .method => self.failer.fail(expr.location, "cannot evaluate at compile time", .{}),
-        .field => |field| self.checkExprComptime(field.expr),
-        .unary => |unary| self.checkExprComptime(unary.expr),
-        .elem => |elem| self.checkElemComptime(elem.*),
-        .binary => |binary| self.checkBinaryComptime(binary.*),
-        .subslice => |subslice| self.checkSubsliceComptime(subslice.*),
-        .array => |array| self.checkArrayComptime(array),
-        .named_struc => |named| self.checkStructExprComptime(named.struc),
-        .struc => |struc| self.checkStructExprComptime(struc),
-    }
-}
-
-fn checkElemComptime(self: *@This(), elem: Expr.Elem) void {
-    self.checkExprComptime(elem.expr);
-    self.checkExprComptime(elem.index);
-}
-
-fn checkBinaryComptime(self: *@This(), binary: Expr.Binary) void {
-    self.checkExprComptime(binary.left);
-    self.checkExprComptime(binary.right);
-}
-
-fn checkSubsliceComptime(self: *@This(), subslice: Expr.Subslice) void {
-    self.checkExprComptime(subslice.expr);
-    self.checkExprComptime(subslice.start);
-    self.checkExprComptime(subslice.end);
-}
-
-fn checkStructExprComptime(self: *@This(), struc: Expr.Struct) void {
-    for (struc.fields) |field| {
-        self.checkExprComptime(field.expr);
-    }
-}
-
-fn checkArrayComptime(self: *@This(), array: Expr.Array) void {
-    for (array.exprs) |elem| {
-        self.checkExprComptime(elem);
-    }
 }
 
 fn checkItem(item: Item, ctx: Item.Check) error{OutOfMemory}!void {
@@ -179,37 +129,6 @@ fn checkMain(self: *@This(), location: Location) void {
         self.failer.fail(item.location, "item `main` is not a function", .{});
     }
     item.used = true;
-}
-
-fn regStruct(self: *@This(), struc: Item.Struct, ctx: Item.Check) !Item.Info.Kind {
-    try ctx.checkGenericsRedeclare(struc.generics);
-    var res = Item.Struct.Info{
-        .generics = struc.generics,
-        .fields = .init(self.gpa),
-    };
-    for (struc.fields) |*field| {
-        var defaulted = false;
-        if (field.default) |*expr| {
-            const expr_typ = try self.checkConstExpr(expr, .{ .typ = field.typ }, .{
-                .gpa = self.gpa,
-                .items = self.module.items,
-                .failer = &self.failer,
-            });
-            _ = field.typ.unify(expr_typ, expr.location, &self.failer);
-            defaulted = true;
-        }
-        if (res.fields.get(field.name)) |prev| {
-            self.failer.alreadyDeclared(field.location, field.name, prev.location);
-            continue;
-        }
-        try res.fields.put(field.name, .{
-            .location = field.location,
-            .typ = field.typ,
-            .defaulted = defaulted,
-            .used = field.name[0] == '_',
-        });
-    }
-    return .{ .struc = res };
 }
 
 fn deinit(self: *@This()) void {

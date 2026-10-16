@@ -11,6 +11,43 @@ pub const Unary = @import("Unary.zig");
 location: Location,
 kind: Kind,
 
+fn checkComptime(self: @This(), failer: *Failer) void {
+    switch (self.kind) {
+        .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
+        .call, .method => failer.fail(self.location, "cannot evaluate at compile time", .{}),
+        .field => |field| field.expr.checkComptime(failer),
+        .unary => |unary| unary.expr.checkComptime(failer),
+        .elem => |elem| {
+            elem.expr.checkComptime(failer);
+            elem.index.checkComptime(failer);
+        },
+        .binary => |binary| {
+            binary.left.checkComptime(failer);
+            binary.right.checkComptime(failer);
+        },
+        .subslice => |subslice| {
+            subslice.expr.checkComptime(failer);
+            subslice.start.checkComptime(failer);
+            subslice.end.checkComptime(failer);
+        },
+        .array => |array| for (array.exprs) |expr| {
+            expr.checkComptime(failer);
+        },
+        .named_struc => |named| for (named.struc.fields) |field| {
+            field.expr.checkComptime(failer);
+        },
+        .struc => |struc| for (struc.fields) |field| {
+            field.expr.checkComptime(failer);
+        },
+    }
+}
+
+pub fn checkConst(self: *@This(), hint: Expr.Hint, ctx: Check) !Typ {
+    const info = try self.check(hint, ctx);
+    self.checkComptime(ctx.failer);
+    return info.typ;
+}
+
 pub fn check(self: *@This(), hint: Expr.Hint, ctx: Check) error{OutOfMemory}!Expr.Info {
     switch (self.kind) {
         .method => unreachable,
