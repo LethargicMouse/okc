@@ -139,6 +139,55 @@ pub const Struct = struct {
     fields: []Struct.Field,
     typ: Typ = .any,
 
+    pub fn checkTyped(
+        self: *@This(),
+        name: Typ.Name,
+        location: Location,
+        ctx: struct {
+            gpa: std.mem.Allocator,
+            items: std.StringHashMap(Item.Info),
+        },
+        checker: *Checker,
+    ) !Expr.Info {
+        const err = Expr.Info{
+            .typ = .err,
+            .mutable = false,
+        };
+        const item = ctx.items.getPtr(name.name) orelse {
+            fail.notDeclared(location, name.name);
+            return err;
+        };
+        item.used = true;
+        const decl = if (item.kind == .struc) item.kind.struc else {
+            fail.notStruct(location, .{ .name = name });
+            return err;
+        };
+        const generics = try ctx.gpa.alloc(Typ, decl.generics.len);
+        defer ctx.gpa.free(generics);
+        if (name.generics.len == 0) {
+            @memset(generics, .any);
+        } else {
+            @memcpy(generics, name.generics);
+        }
+        var resolve_map: std.StringHashMap(Typ) = .init(ctx.gpa);
+        defer resolve_map.deinit();
+        for (decl.generics, generics) |generic, *typ| {
+            try resolve_map.put(generic.name, .{ .lazy = .from(typ) });
+        }
+        for (self.fields) |*field| {
+            try checker.checkNewField(field, .{ .name = name }, decl.fields, resolve_map);
+        }
+        Checker.checkFieldsInitialised(decl.fields, self.fields, location);
+        self.typ = Typ{ .name = .{
+            .generics = try Typ.memo.save(generics),
+            .name = name.name,
+        } };
+        return .{
+            .typ = self.typ,
+            .mutable = false,
+        };
+    }
+
     pub const Field = struct {
         name: []const u8,
         expr: Expr,

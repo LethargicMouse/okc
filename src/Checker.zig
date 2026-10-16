@@ -721,7 +721,10 @@ fn checkStructExpr(
             return err;
         },
     };
-    return self.checkTypedStruc(name, struc, location);
+    return struc.checkTyped(name, location, .{
+        .gpa = self.gpa,
+        .items = self.module.items,
+    }, self);
 }
 
 fn checkSliceStruc(
@@ -770,52 +773,7 @@ fn checkSliceStruc(
     };
 }
 
-fn checkTypedStruc(
-    self: *@This(),
-    name: Typ.Name,
-    struc: *Expr.Struct,
-    location: Location,
-) !Expr.Info {
-    const err = Expr.Info{
-        .typ = .err,
-        .mutable = false,
-    };
-    const item = self.module.items.getPtr(name.name) orelse {
-        fail.notDeclared(location, name.name);
-        return err;
-    };
-    item.used = true;
-    const decl = if (item.kind == .struc) item.kind.struc else {
-        fail.notStruct(location, .{ .name = name });
-        return err;
-    };
-    const generics = try self.gpa.alloc(Typ, decl.generics.len);
-    defer self.gpa.free(generics);
-    if (name.generics.len == 0) {
-        @memset(generics, .any);
-    } else {
-        @memcpy(generics, name.generics);
-    }
-    var resolve_map: std.StringHashMap(Typ) = .init(self.gpa);
-    defer resolve_map.deinit();
-    for (decl.generics, generics) |generic, *typ| {
-        try resolve_map.put(generic.name, .{ .lazy = .from(typ) });
-    }
-    for (struc.fields) |*field| {
-        try self.checkNewField(field, .{ .name = name }, decl.fields, resolve_map);
-    }
-    checkFieldsInitialised(decl.fields, struc.fields, location);
-    struc.typ = Typ{ .name = .{
-        .generics = try Typ.memo.save(generics),
-        .name = name.name,
-    } };
-    return .{
-        .typ = struc.typ,
-        .mutable = false,
-    };
-}
-
-fn checkFieldsInitialised(
+pub fn checkFieldsInitialised(
     decl_fields: std.StringHashMap(Item.Struct.Field.Info),
     fields: []const Expr.Struct.Field,
     location: Location,
@@ -838,7 +796,7 @@ fn checkFieldsInitialised(
     }
 }
 
-fn checkNewField(
+pub fn checkNewField(
     self: *@This(),
     field: *Expr.Struct.Field,
     struc_typ: Typ,
@@ -855,7 +813,10 @@ fn checkNewField(
 }
 
 fn checkNamedStructExpr(self: *@This(), named: *Expr.Struct.Named, location: Location) !Expr.Info {
-    return self.checkTypedStruc(.{ .name = named.name }, &named.struc, location);
+    return named.struc.checkTyped(.{ .name = named.name }, location, .{
+        .gpa = self.gpa,
+        .items = self.module.items,
+    }, self);
 }
 
 fn deinit(self: *@This()) void {
