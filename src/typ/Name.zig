@@ -66,6 +66,7 @@ pub const Located = struct {
             return error.BadType;
         };
         switch (item.kind) {
+            .module => unreachable,
             .fun, .vari => {
                 failer.fail(self.location, "item `{s}` is not a type", .{self.bare.name});
                 return error.BadType;

@@ -41,6 +41,7 @@ pub fn check(
         return err;
     };
     switch (item.kind) {
+        .module => unreachable,
         .fun => |header| {
             item.used = true;
             self.fun_meta = @as(okc.Expr.FunMeta, undefined);

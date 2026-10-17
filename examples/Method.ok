@@ -4,7 +4,7 @@ use Cat;
 
 fn main() i32 {
     let cat = Cat {
-        name = "kitkat",
+        name = "katze",
     };
     cat.say("six");
     Cat.say(cat, "seven");
