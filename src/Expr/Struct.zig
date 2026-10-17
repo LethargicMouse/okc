@@ -27,10 +27,10 @@ pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
             fields[info.index] = field.expr;
         }
         try ctx.buffer.?.print(ctx.gpa, "\n  ", .{});
-        _ = try ctx.genConstExpr(fields[0]);
+        _ = try fields[0].genConst(ctx);
         for (fields[1..]) |expr| {
             try ctx.buffer.?.print(ctx.gpa, ",\n  ", .{});
-            _ = try ctx.genConstExpr(expr);
+            _ = try expr.genConst(ctx);
         }
     }
     try ctx.buffer.?.print(ctx.gpa, "\n}}", .{});

@@ -8,10 +8,10 @@ pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
     try ctx.buffer.?.print(ctx.gpa, "{f} [", .{okc.Typ.LLPrinter{ .typ = self.typ }});
     if (self.exprs.len != 0) {
         try ctx.buffer.?.print(ctx.gpa, "\n  ", .{});
-        _ = try ctx.genConstExpr(self.exprs[0]);
+        _ = try self.exprs[0].genConst(ctx);
         for (self.exprs[1..]) |expr| {
             try ctx.buffer.?.print(ctx.gpa, ",\n  ", .{});
-            _ = try ctx.genConstExpr(expr);
+            _ = try expr.genConst(ctx);
         }
     }
     try ctx.buffer.?.print(ctx.gpa, "\n]", .{});

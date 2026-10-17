@@ -26,6 +26,16 @@ pub const Var = @import("Expr/Var.zig");
 location: okc.Location,
 kind: Kind,
 
+pub fn genConst(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!okc.Typ {
+    switch (self.kind) {
+        .str => |str| return str.genConst(ctx),
+        .named_struc => |struc| return struc.bare.genConst(ctx),
+        .struc => |struc| return struc.genConst(ctx),
+        .array => |array| return array.genConst(ctx),
+        else => unreachable,
+    }
+}
+
 fn checkComptime(self: @This(), failer: *okc.Failer) void {
     switch (self.kind) {
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},

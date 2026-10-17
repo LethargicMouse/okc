@@ -989,22 +989,12 @@ pub fn genConst(self: *@This(), name: []const u8) !void {
     }
 
     try self.print("\n@{s} = private unnamed_addr constant ", .{name});
-    const typ = try self.genConstExpr(expr);
+    const typ = try expr.genConst(self);
     try self.consts.put(name, typ);
     var written = self.buffer.?;
     self.buffer = null;
     defer written.deinit(self.gpa);
     try self.print("{s}", .{written.items});
-}
-
-pub fn genConstExpr(self: *@This(), expr: okc.Expr) Error!okc.Typ {
-    switch (expr.kind) {
-        .str => |str| return str.genConst(self),
-        .named_struc => |struc| return struc.bare.genConst(self),
-        .struc => |struc| return struc.genConst(self),
-        .array => |array| return array.genConst(self),
-        else => unreachable,
-    }
 }
 
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
