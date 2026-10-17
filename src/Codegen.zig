@@ -251,7 +251,7 @@ fn genStruct(self: *@This(), name: okc.Typ.Name) Error!void {
     for (field_typs, struc.fields, 0..) |*typ, field, i| {
         typ.* = try field.typ.resolve(resolve_map, self.arena);
         const layout = try self.getLayout(typ.*);
-        appendLayout(&struct_layout, layout);
+        struct_layout.add(layout);
         try fields.put(field.name, .{
             .typ = typ.*,
             .index = i,
@@ -1142,13 +1142,4 @@ fn deinitStructs(self: *@This()) void {
         self.gpa.free(info.default_fields);
     }
     self.structs.deinit();
-}
-
-fn appendLayout(res: *okc.Layout, layout: okc.Layout) void {
-    res.alig = @max(res.alig, layout.alig);
-    // padding
-    if (layout.size % layout.alig != 0) {
-        res.size += layout.alig - (res.size % layout.alig);
-    }
-    res.size += layout.size;
 }
