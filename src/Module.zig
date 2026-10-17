@@ -1,16 +1,17 @@
 const std = @import("std");
 
-const Failer = @import("Failer.zig");
-const Item = @import("Item.zig");
-const Location = @import("Location.zig");
+const okc = @import("okc");
 
-items: []Item,
-location: Location,
+pub const GenInfo = @import("Module/GenInfo.zig");
+pub const Info = @import("Module/Info.zig");
 
-pub fn check(self: @This(), gpa: std.mem.Allocator, arena: std.mem.Allocator, failer: *Failer) !void {
+items: []okc.Item,
+location: okc.Location,
+
+pub fn check(self: @This(), gpa: std.mem.Allocator, arena: std.mem.Allocator, failer: *okc.Failer) !void {
     var info: Info = .init(gpa);
     defer info.deinit();
-    const item_check: Item.Check = .{
+    const item_check: okc.Item.Check = .{
         .gpa = gpa,
         .arena = arena,
         .failer = failer,
@@ -25,29 +26,3 @@ pub fn check(self: @This(), gpa: std.mem.Allocator, arena: std.mem.Allocator, fa
     item_check.checkMain(self.location);
     info.checkUsage(failer);
 }
-
-pub const Info = struct {
-    items: std.StringHashMap(Item.Info),
-
-    pub fn checkUsage(self: @This(), failer: *Failer) void {
-        var iter = self.items.iterator();
-        while (iter.next()) |entry| {
-            entry.value_ptr.checkUsage(entry.key_ptr.*, failer);
-        }
-    }
-
-    pub fn init(gpa: std.mem.Allocator) @This() {
-        return .{
-            .items = .init(gpa),
-        };
-    }
-
-    pub fn deinit(self: *@This()) void {
-        var iter = self.items.valueIterator();
-        while (iter.next()) |item| {
-            item.kind.deinit();
-        }
-        self.items.deinit();
-        self.* = undefined;
-    }
-};

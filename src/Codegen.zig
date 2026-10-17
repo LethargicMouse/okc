@@ -10,7 +10,7 @@ writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 extra_buffer: std.ArrayList(u8) = .empty,
 items: std.StringHashMap(okc.Item),
-structs: okc.HashMap(okc.Typ.Name, okc.Item.Struct.GenInfo),
+module: okc.Module.GenInfo,
 consts: std.StringHashMap(okc.Typ),
 vars: std.StringHashMap(okc.Val.Ref),
 loop_ends: std.ArrayList(u32) = .empty,
@@ -44,7 +44,7 @@ pub fn init(
         .resolve_map = .init(gpa),
         .writer = file.writer(io, write_buf),
         .vars = .init(gpa),
-        .structs = .init(gpa),
+        .module = .init(gpa),
         .consts = .init(gpa),
         .generated = .init(gpa),
     };
@@ -274,7 +274,7 @@ fn genStruct(self: *@This(), name: okc.Typ.Name) Error!void {
     self.buffer = null;
     defer written.deinit(self.gpa);
     try self.print("{s}", .{written.items});
-    try self.structs.put(name, .{
+    try self.module.structs.put(name, .{
         .fields = fields,
         .default_fields = try default_fields_vec.toOwnedSlice(self.gpa),
         .layout = struct_layout,
@@ -628,11 +628,11 @@ fn getLayout(self: *@This(), typ: okc.Typ) !okc.Layout {
         .slice => return .new(16, 8),
         .name => |name| {
             try self.genStruct(name);
-            return self.structs.get(name).?.layout;
+            return self.module.structs.get(name).?.layout;
         },
         .loc_name => |located| {
             try self.genStruct(located.bare);
-            return self.structs.get(located.bare).?.layout;
+            return self.module.structs.get(located.bare).?.layout;
         },
         .any, .err, .int, .lazy => unreachable,
     }
@@ -903,7 +903,7 @@ fn genStructExpr(self: *@This(), struc: okc.Expr.Struct) !okc.Val.Typed {
         .bare = .undef,
     };
     if (struc.typ.getName()) |typ_name| {
-        for (self.structs.get(typ_name).?.default_fields) |field| {
+        for (self.module.structs.get(typ_name).?.default_fields) |field| {
             const typ_val = try self.genExpr(field.expr);
             try self.genIV(&res, typ_val, field.index);
         }
@@ -1060,7 +1060,7 @@ fn genConstStruc(self: *@This(), struc: okc.Expr.Struct) !okc.Typ {
         const fields = try self.gpa.alloc(okc.Expr, struc.fields.len);
         defer self.gpa.free(fields);
         if (struc.typ.getName()) |typ_name| {
-            for (self.structs.get(typ_name).?.default_fields) |field| {
+            for (self.module.structs.get(typ_name).?.default_fields) |field| {
                 fields[field.index] = field.expr;
             }
         }
@@ -1081,7 +1081,7 @@ fn genConstStruc(self: *@This(), struc: okc.Expr.Struct) !okc.Typ {
 
 fn getFieldInfo(self: *@This(), typ: okc.Typ, name: []const u8) okc.Item.Struct.Field.GenInfo {
     return if (typ.getName()) |typ_name|
-        self.structs.get(typ_name).?.fields.get(name).?
+        self.module.structs.get(typ_name).?.fields.get(name).?
     else if (std.mem.eql(u8, name, "ptr")) .{
         .typ = .{ .ptr = .{
             .typ = typ.slice.typ,
@@ -1130,16 +1130,7 @@ fn deinit(self: *@This()) void {
     self.generated.deinit();
     self.resolve_map.deinit();
     self.consts.deinit();
-    self.deinitStructs();
+    self.module.deinit(self.gpa);
     self.extra_buffer.deinit(self.gpa);
     self.* = undefined;
-}
-
-fn deinitStructs(self: *@This()) void {
-    var iter = self.structs.valueIterator();
-    while (iter.next()) |info| {
-        info.fields.deinit();
-        self.gpa.free(info.default_fields);
-    }
-    self.structs.deinit();
 }
