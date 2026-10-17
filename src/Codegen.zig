@@ -616,7 +616,7 @@ fn genSizeof(self: *@This(), typ: okc.Typ) !okc.Val.Typed {
 
 fn getLayout(self: *@This(), typ: okc.Typ) !okc.Layout {
     switch (typ) {
-        .prime => |prime| return primeLayout(prime),
+        .prime => |prime| return prime.getLayout(),
         .array => |array| {
             const inner = try self.getLayout(array.typ.*);
             return .{
@@ -1151,13 +1151,4 @@ fn appendLayout(res: *okc.Layout, layout: okc.Layout) void {
         res.size += layout.alig - (res.size % layout.alig);
     }
     res.size += layout.size;
-}
-
-fn primeLayout(prime: okc.Typ.Prime) !okc.Layout {
-    return switch (prime) {
-        .u8, .bool => .new(1, 1),
-        .i32, .u32 => .new(4, 4),
-        .u64 => .new(8, 8),
-        .void => .new(0, 1),
-    };
 }

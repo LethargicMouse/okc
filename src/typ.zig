@@ -20,6 +20,7 @@ pub const Typ = union(enum) {
     pub const Lazy = @import("typ/Lazy.zig");
     pub const LLPrinter = @import("typ/LLPrinter.zig");
     pub const Name = @import("typ/Name.zig");
+    pub const Prime = @import("typ/prime.zig").Prime;
     pub const Ptr = @import("typ/Ptr.zig");
     pub const Slice = @import("typ/Slice.zig");
 
@@ -363,30 +364,6 @@ pub const Typ = union(enum) {
     pub fn isVoid(self: @This()) bool {
         return self == .prime and self.prime == .void;
     }
-
-    pub const Prime = enum {
-        bool,
-        i32,
-        u32,
-        u64,
-        u8, // zlinter-disable-current-line field_naming
-        void,
-
-        pub fn format(prime: Prime, writer: *std.Io.Writer) !void {
-            try writer.writeAll(@tagName(prime));
-        }
-
-        pub fn isNumber(prime: Prime) bool {
-            switch (prime) {
-                .i32, .u8, .u32, .u64 => return true,
-                .bool, .void => return false,
-            }
-        }
-
-        pub fn hashIn(prime: Prime, hasher: *std.hash.Wyhash) void {
-            hasher.update(&.{@backingInt(prime)});
-        }
-    };
 
     pub const Check = struct {
         arena: std.mem.Allocator,
