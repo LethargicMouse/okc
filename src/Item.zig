@@ -17,7 +17,7 @@ pub fn reg(self: *@This(), ctx: Check) !void {
         .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
         .struc => |struc| .{ .struc = try struc.reg(ctx) },
         .fun => |*fun| .{ .fun = &fun.header },
-        .constant => |*constt| try constt.reg(ctx),
+        .constant => |*constt| .{ .vari = try constt.reg(ctx) },
         .use => unreachable,
     };
     if (kind == .fun) {

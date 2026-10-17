@@ -5,7 +5,7 @@ const okc = @import("okc");
 generics: []const okc.Item.Generic,
 fields: []Field,
 
-pub fn reg(self: @This(), ctx: okc.Item.Check) !@This().Info {
+pub fn reg(self: @This(), ctx: okc.Item.Check) !Info {
     try ctx.checkGenericsRedeclare(self.generics);
     var res = @This().Info{
         .generics = self.generics,
@@ -14,7 +14,7 @@ pub fn reg(self: @This(), ctx: okc.Item.Check) !@This().Info {
     for (self.fields) |*field| {
         var defaulted = false;
         if (field.default) |*expr| {
-            const expr_typ = try expr.checkConst(.{ .typ = field.typ }, ctx.checkExpr());
+            const expr_typ = try expr.checkConst(.{ .typ = field.typ }, ctx.checkExprCtx());
             _ = field.typ.unify(expr_typ, expr.location, ctx.failer);
             defaulted = true;
         }

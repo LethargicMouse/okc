@@ -37,7 +37,7 @@ pub fn checkMain(self: @This(), location: okc.Location) void {
     item.used = true;
 }
 
-pub fn checkExpr(self: @This()) okc.Expr.Check {
+pub fn checkExprCtx(self: @This()) okc.Expr.Check {
     return .{
         .gpa = self.gpa,
         .arena = self.arena,
