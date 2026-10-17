@@ -17,7 +17,7 @@ loop_ends: std.ArrayList(u32) = .empty,
 fun_queue: std.ArrayList(FunReq) = .empty,
 generated: okc.HashMap(okc.Typ.Name, void),
 resolve_map: std.StringHashMap(okc.Typ),
-next_tmp: u32 = 0,
+counter: okc.Counter = .init(),
 
 const FunReq = struct {
     name: okc.Typ.Name,
@@ -337,7 +337,7 @@ fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     const cond_label = self.newTmp();
     try self.uncond(cond_label, start_label);
     // i++
-    const ival = try self.genVar(.{ .name = forr.vari });
+    const ival = try self.vars.get(forr.vari).?.loadTypVal(self.loadCtx());
     const inew = try self.genBinary(.add, ival.typ, ival.bare, .{ .int = 1 });
     try self.storeInto(
         self.vars.get(forr.vari).?.val,
@@ -347,7 +347,7 @@ fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     // cond:
     try self.uncond(cond_label, cond_label);
     // cond = i != end
-    const ival_ = try self.loadTypVal(self.vars.get(forr.vari).?);
+    const ival_ = try self.vars.get(forr.vari).?.loadTypVal(self.loadCtx());
     const at_end = try self.genBinary(.neq, ival.typ, ival_.bare, end.bare);
     // if cond, body, end
     // body:
@@ -376,14 +376,14 @@ fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     const cond_label = self.newTmp();
     try self.uncond(cond_label, start_label);
     // i++
-    const ival = try self.loadTypVal(iref);
+    const ival = try iref.loadTypVal(self.loadCtx());
     const inew = try self.genBinary(.add, ival.typ, ival.bare, .{ .int = 1 });
     try self.storeInto(iref.val, .{ .typ = ival.typ, .bare = .{ .tmp = inew } });
     // goto cond
     // cond:
     try self.uncond(cond_label, cond_label);
     // cond = i < .len
-    const ival_ = try self.loadTypVal(iref);
+    const ival_ = try iref.loadTypVal(self.loadCtx());
     const len = try self.genField(.{
         .expr = forr.expr,
         .name = "len",
@@ -483,7 +483,7 @@ fn genDeclare(self: *@This(), name: []const u8, declare: okc.Stmt.Declare) !void
     try self.vars.put(name, vari);
 }
 
-fn toStack(self: *@This(), typ_val: okc.Val.Typed) !okc.Val.Ref {
+pub fn toStack(self: *@This(), typ_val: okc.Val.Typed) !okc.Val.Ref {
     if (typ_val.typ.getName()) |typ_name| {
         try self.genStruct(typ_name);
     }
@@ -567,8 +567,7 @@ fn genArrayToSlice(self: *@This(), array: okc.Typ.Array, val: okc.Val) !okc.Val.
 }
 
 fn newTmp(self: *@This()) u32 {
-    self.next_tmp += 1;
-    return self.next_tmp - 1;
+    return self.counter.next();
 }
 
 fn genRet(self: *@This(), ret: okc.Stmt.Return) !void {
@@ -593,7 +592,7 @@ fn genExpr(self: *@This(), expr: okc.Expr) Error!okc.Val.Typed {
         .struc => |struc| return self.genStructExpr(struc),
         .int => |int| return genInt(int),
         .str => |str| return self.genStr(str),
-        .vari => |vari| return self.genVar(vari),
+        .vari => |vari| return vari.gen(self),
         .char => |char| return genChar(char),
         .bool => |boo| return genBool(boo),
         .undef => |undef| return genUndef(undef),
@@ -673,15 +672,7 @@ fn genDerefRef(self: *@This(), expr: okc.Expr) !okc.Val.Ref {
 
 fn genDeref(self: *@This(), deref: okc.Expr) !okc.Val.Typed {
     const ref = try self.genDerefRef(deref);
-    return self.loadTypVal(ref);
-}
-
-fn loadTypVal(self: *@This(), ref: okc.Val.Ref) !okc.Val.Typed {
-    const tmp = try self.load(ref);
-    return .{
-        .typ = ref.inner_typ,
-        .bare = .{ .tmp = tmp },
-    };
+    return ref.loadTypVal(self.loadCtx());
 }
 
 fn genNotb(self: *@This(), expr: okc.Expr) !okc.Val.Typed {
@@ -706,7 +697,7 @@ fn genUndef(undef: okc.Expr.Undef) !okc.Val.Typed {
 fn genFieldRef(self: *@This(), field: okc.Expr.Field) !okc.Val.Ref {
     var vari = try self.genExprRef(field.expr);
     if (vari.inner_typ == .ptr) {
-        const tmp = try self.load(vari);
+        const tmp = try vari.load(self.loadCtx());
         vari = .{
             .inner_typ = vari.inner_typ.ptr.typ.*,
             .val = .{ .tmp = tmp },
@@ -729,7 +720,7 @@ fn genFieldRef(self: *@This(), field: okc.Expr.Field) !okc.Val.Ref {
 
 fn genField(self: *@This(), field: okc.Expr.Field) !okc.Val.Typed {
     const ref = try self.genFieldRef(field);
-    return self.loadTypVal(ref);
+    return ref.loadTypVal(self.loadCtx());
 }
 
 fn genElemExprRef(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Ref {
@@ -749,13 +740,14 @@ fn genElemRef(self: *@This(), from: okc.Val.Ref, index: okc.Val.Typed) !okc.Val.
         },
         .slice => |slice| {
             const ptrptr = try self.genGEPIB(from, .int(0));
-            const ptr = try self.load(.{
+            const ptrref: okc.Val.Ref = .{
                 .inner_typ = .{ .ptr = .{
                     .typ = slice.typ,
                     .mutable = false,
                 } },
                 .val = .{ .tmp = ptrptr },
-            });
+            };
+            const ptr = try ptrref.load(self.loadCtx());
             const tmp = try self.genGEP(slice.typ.*, ptr, index);
             return .{
                 .inner_typ = slice.typ.*,
@@ -786,7 +778,7 @@ fn genGEPIB(self: *@This(), ref: okc.Val.Ref, index: okc.Val.Typed) !u32 {
 
 fn genElem(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Typed {
     const ref = try self.genElemExprRef(elem);
-    return self.loadTypVal(ref);
+    return ref.loadTypVal(self.loadCtx());
 }
 
 fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !okc.Val.Typed {
@@ -813,7 +805,7 @@ fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !okc.Val.Typed {
 
 fn genExprRef(self: *@This(), expr: okc.Expr) Error!okc.Val.Ref {
     switch (expr.kind) {
-        .vari => |name| return self.genVarRef(name),
+        .vari => |vari| return vari.genRef(self),
         .field => |field| return self.genFieldRef(field.*),
         .elem => |elem| return self.genElemExprRef(elem.*),
         .deref => |deref| return self.genDerefRef(deref.expr),
@@ -838,15 +830,6 @@ fn genExprRef(self: *@This(), expr: okc.Expr) Error!okc.Val.Ref {
             return self.toStack(typ_val);
         },
     }
-}
-
-fn load(self: *@This(), vari: okc.Val.Ref) !u32 {
-    const res = self.newTmp();
-    try self.print(
-        "\n  %t{} = load {f}, ptr {f}",
-        .{ res, okc.Typ.LLPrinter{ .typ = vari.inner_typ }, vari.val },
-    );
-    return res;
 }
 
 fn genInt(int: okc.Expr.Int) okc.Val.Typed {
@@ -970,7 +953,7 @@ fn genBinOp(self: *@This(), kind: okc.Expr.Binary.Kind) !void {
     }
 }
 
-fn genFunPtr(self: *@This(), fun_name: []const u8, fun_meta: okc.Expr.FunMeta) !okc.Val.Typed {
+pub fn genFunPtr(self: *@This(), fun_name: []const u8, fun_meta: okc.Expr.FunMeta) !okc.Val.Typed {
     var name = okc.Typ.Name{
         .name = fun_name,
         .generics = fun_meta.generics,
@@ -990,20 +973,7 @@ fn genFunPtr(self: *@This(), fun_name: []const u8, fun_meta: okc.Expr.FunMeta) !
     };
 }
 
-fn genVarRef(self: *@This(), vari: okc.Expr.Var) !okc.Val.Ref {
-    if (vari.fun_meta) |fun_meta| {
-        return self.toStack(try self.genFunPtr(vari.name, fun_meta));
-    }
-    return self.vars.get(vari.name) orelse {
-        try self.genConst(vari.name);
-        return .{
-            .inner_typ = self.consts.get(vari.name).?,
-            .val = .{ .global = .{ .name = vari.name } },
-        };
-    };
-}
-
-fn genConst(self: *@This(), name: []const u8) !void {
+pub fn genConst(self: *@This(), name: []const u8) !void {
     const was = try self.generated.getOrPut(.{ .name = name });
     if (was.found_existing) {
         return;
@@ -1103,20 +1073,20 @@ fn genConstStr(self: *@This(), str: []const u8) !okc.Typ {
     } };
 }
 
-fn genVar(self: *@This(), vari: okc.Expr.Var) !okc.Val.Typed {
-    if (vari.fun_meta) |fun_meta| {
-        return self.genFunPtr(vari.name, fun_meta);
-    }
-    const ref = try self.genVarRef(vari);
-    return self.loadTypVal(ref);
-}
-
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
     if (self.buffer) |*buffer| {
         try buffer.print(self.gpa, fmt, args);
     } else {
         try self.writer.interface.print(fmt, args);
     }
+}
+
+pub fn loadCtx(self: *@This()) okc.Val.Ref.Load {
+    return .{
+        .gpa = self.gpa,
+        .buffer = &self.buffer.?,
+        .counter = &self.counter,
+    };
 }
 
 const Error = error{ WriteFailed, OutOfMemory };

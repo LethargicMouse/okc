@@ -5,6 +5,27 @@ const okc = @import("okc");
 name: []const u8,
 fun_meta: ?okc.Expr.FunMeta = null,
 
+pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
+    if (self.fun_meta) |fun_meta| {
+        return ctx.toStack(try ctx.genFunPtr(self.name, fun_meta));
+    }
+    return ctx.vars.get(self.name) orelse {
+        try ctx.genConst(self.name);
+        return .{
+            .inner_typ = ctx.consts.get(self.name).?,
+            .val = .{ .global = .{ .name = self.name } },
+        };
+    };
+}
+
+pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+    if (self.fun_meta) |fun_meta| {
+        return ctx.genFunPtr(self.name, fun_meta);
+    }
+    const ref = try self.genRef(ctx);
+    return ref.loadTypVal(ctx.loadCtx());
+}
+
 pub fn check(
     self: *@This(),
     location: okc.Location,

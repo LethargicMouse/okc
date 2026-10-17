@@ -2,6 +2,7 @@ const std = @import("std");
 
 pub const Codegen = @import("Codegen.zig");
 pub const ConcatStr = @import("ConcatStr.zig");
+pub const Counter = @import("Counter.zig");
 pub const Expr = @import("Expr.zig");
 pub const Failer = @import("Failer.zig");
 pub const HashMap = @import("hash_map.zig").HashMap;
