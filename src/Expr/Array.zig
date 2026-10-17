@@ -4,6 +4,20 @@ mtyp: ?okc.Typ,
 exprs: []okc.Expr,
 typ: okc.Typ = .any,
 
+pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
+    try ctx.buffer.?.print(ctx.gpa, "{f} [", .{okc.Typ.LLPrinter{ .typ = self.typ }});
+    if (self.exprs.len != 0) {
+        try ctx.buffer.?.print(ctx.gpa, "\n  ", .{});
+        _ = try ctx.genConstExpr(self.exprs[0]);
+        for (self.exprs[1..]) |expr| {
+            try ctx.buffer.?.print(ctx.gpa, ",\n  ", .{});
+            _ = try ctx.genConstExpr(expr);
+        }
+    }
+    try ctx.buffer.?.print(ctx.gpa, "\n]", .{});
+    return self.typ;
+}
+
 pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
     var inner_typ: okc.Typ = .any;
     var inner_hint: okc.Typ = .any;

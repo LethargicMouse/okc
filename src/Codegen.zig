@@ -1002,23 +1002,9 @@ pub fn genConstExpr(self: *@This(), expr: okc.Expr) Error!okc.Typ {
         .str => |str| return str.genConst(self),
         .named_struc => |struc| return struc.bare.genConst(self),
         .struc => |struc| return struc.genConst(self),
-        .array => |array| return self.genConstArray(array),
+        .array => |array| return array.genConst(self),
         else => unreachable,
     }
-}
-
-fn genConstArray(self: *@This(), array: okc.Expr.Array) !okc.Typ {
-    try self.print("{f} [", .{okc.Typ.LLPrinter{ .typ = array.typ }});
-    if (array.exprs.len != 0) {
-        try self.print("\n  ", .{});
-        _ = try self.genConstExpr(array.exprs[0]);
-        for (array.exprs[1..]) |expr| {
-            try self.print(",\n  ", .{});
-            _ = try self.genConstExpr(expr);
-        }
-    }
-    try self.print("\n]", .{});
-    return array.typ;
 }
 
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
