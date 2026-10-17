@@ -2,8 +2,8 @@ const std = @import("std");
 
 const okc = @import("okc");
 
-io: std.Io,
-gpa: std.mem.Allocator,
+io: std.Io, // expr
+gpa: std.mem.Allocator, // expr
 arena: std.mem.Allocator,
 file: std.Io.File,
 writer: std.Io.File.Writer,
@@ -12,7 +12,7 @@ extra_buffer: std.ArrayList(u8) = .empty,
 items: std.StringHashMap(okc.Item),
 structs: okc.HashMap(okc.Typ.Name, Struct),
 consts: std.StringHashMap(okc.Typ),
-vars: std.StringHashMap(Ref),
+vars: std.StringHashMap(okc.Val.Ref),
 loop_ends: std.ArrayList(u32) = .empty,
 fun_queue: std.ArrayList(FunReq) = .empty,
 generated: okc.HashMap(okc.Typ.Name, void),
@@ -107,13 +107,13 @@ fn genSliceDecl(self: *@This()) !void {
 
 fn genExtFun(self: *@This(), name: []const u8, ext_fun: okc.Item.Fun.Extern) !void {
     try self.print("\ndeclare {f} @{s}(", .{
-        LlvmTyp{ .inner = ext_fun.header.ret_typ },
+        okc.Typ.LLPrinter{ .typ = ext_fun.header.ret_typ },
         name,
     });
     if (ext_fun.header.params.len != 0) {
-        try self.print("{f}", .{LlvmTyp{ .inner = ext_fun.header.params[0].typ }});
+        try self.print("{f}", .{okc.Typ.LLPrinter{ .typ = ext_fun.header.params[0].typ }});
         for (ext_fun.header.params[1..]) |param| {
-            try self.print(", {f}", .{LlvmTyp{ .inner = param.typ }});
+            try self.print(", {f}", .{okc.Typ.LLPrinter{ .typ = param.typ }});
         }
     }
     try self.print(")", .{});
@@ -179,9 +179,9 @@ fn genFun(
     self.buffer = self.extra_buffer;
     try self.print(
         "\ndefine {f} @\"{f}\"(",
-        .{ LlvmTyp{ .inner = fun_typ.ret_typ.* }, name },
+        .{ okc.Typ.LLPrinter{ .typ = fun_typ.ret_typ.* }, name },
     );
-    var param_typ_vals = try self.gpa.alloc(TypVal, fun.header.params.len);
+    var param_typ_vals = try self.gpa.alloc(okc.Val.Typed, fun.header.params.len);
     defer self.gpa.free(param_typ_vals);
     if (fun.header.params.len != 0) {
         param_typ_vals[0] = try self.genParam(fun_typ.params[0]);
@@ -264,9 +264,9 @@ fn genStruct(self: *@This(), name: okc.Typ.Name) Error!void {
         }
     }
     if (field_typs.len != 0) {
-        try self.print("\n  {f}", .{LlvmTyp{ .inner = field_typs[0] }});
+        try self.print("\n  {f}", .{okc.Typ.LLPrinter{ .typ = field_typs[0] }});
         for (field_typs[1..]) |typ| {
-            try self.print(",\n  {f}", .{LlvmTyp{ .inner = typ }});
+            try self.print(",\n  {f}", .{okc.Typ.LLPrinter{ .typ = typ }});
         }
     }
     try self.print("\n}}", .{});
@@ -281,10 +281,10 @@ fn genStruct(self: *@This(), name: okc.Typ.Name) Error!void {
     });
 }
 
-fn genParam(self: *@This(), typ: okc.Typ) !TypVal {
+fn genParam(self: *@This(), typ: okc.Typ) !okc.Val.Typed {
     const tmp = self.newTmp();
-    try self.print("{f} %t{}", .{ LlvmTyp{ .inner = typ }, tmp });
-    return .{ .typ = typ, .val = .{ .tmp = tmp } };
+    try self.print("{f} %t{}", .{ okc.Typ.LLPrinter{ .typ = typ }, tmp });
+    return .{ .typ = typ, .bare = .{ .tmp = tmp } };
 }
 
 fn genStmt(self: *@This(), stmt: okc.Stmt) Error!void {
@@ -338,14 +338,17 @@ fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     try self.uncond(cond_label, start_label);
     // i++
     const ival = try self.genVar(.{ .name = forr.vari });
-    const inew = try self.genBinary(.add, ival.typ, ival.val, .{ .int = 1 });
-    try self.storeInto(self.vars.get(forr.vari).?.val, .{ .typ = ival.typ, .val = .{ .tmp = inew } });
+    const inew = try self.genBinary(.add, ival.typ, ival.bare, .{ .int = 1 });
+    try self.storeInto(
+        self.vars.get(forr.vari).?.val,
+        .{ .typ = ival.typ, .bare = .{ .tmp = inew } },
+    );
     // goto cond
     // cond:
     try self.uncond(cond_label, cond_label);
     // cond = i != end
     const ival_ = try self.loadTypVal(self.vars.get(forr.vari).?);
-    const at_end = try self.genBinary(.neq, ival.typ, ival_.val, end.val);
+    const at_end = try self.genBinary(.neq, ival.typ, ival_.bare, end.bare);
     // if cond, body, end
     // body:
     const body_label = self.newTmp();
@@ -365,7 +368,7 @@ fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     // int i = 0
     const iref = try self.toStack(.{
         .typ = .{ .prime = .u64 },
-        .val = .{ .int = 0 },
+        .bare = .{ .int = 0 },
     });
     // goto cond
     // start:
@@ -374,8 +377,8 @@ fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     try self.uncond(cond_label, start_label);
     // i++
     const ival = try self.loadTypVal(iref);
-    const inew = try self.genBinary(.add, ival.typ, ival.val, .{ .int = 1 });
-    try self.storeInto(iref.val, .{ .typ = ival.typ, .val = .{ .tmp = inew } });
+    const inew = try self.genBinary(.add, ival.typ, ival.bare, .{ .int = 1 });
+    try self.storeInto(iref.val, .{ .typ = ival.typ, .bare = .{ .tmp = inew } });
     // goto cond
     // cond:
     try self.uncond(cond_label, cond_label);
@@ -385,7 +388,7 @@ fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
         .expr = forr.expr,
         .name = "len",
     });
-    const less = try self.genBinary(.les, ival.typ, ival_.val, len.val);
+    const less = try self.genBinary(.les, ival.typ, ival_.bare, len.bare);
     // if cond, body, end
     // body:
     const body_label = self.newTmp();
@@ -405,7 +408,7 @@ fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
 
 fn cond(
     self: *@This(),
-    condition: Val,
+    condition: okc.Val,
     then_label: u32,
     else_label: u32,
 ) !void {
@@ -448,7 +451,7 @@ fn genBranch(self: *@This(), branch: okc.Stmt.Branch, end_label: u32, kind: okc.
     if (kind == .loop) {
         try self.loop_ends.append(self.gpa, else_label);
     }
-    try self.cond(condition.val, then_label, else_label);
+    try self.cond(condition.bare, then_label, else_label);
     for (branch.body.stmts) |stmt| {
         try self.genStmt(stmt);
     }
@@ -480,7 +483,7 @@ fn genDeclare(self: *@This(), name: []const u8, declare: okc.Stmt.Declare) !void
     try self.vars.put(name, vari);
 }
 
-fn toStack(self: *@This(), typ_val: TypVal) !Ref {
+fn toStack(self: *@This(), typ_val: okc.Val.Typed) !okc.Val.Ref {
     if (typ_val.typ.getName()) |typ_name| {
         try self.genStruct(typ_name);
     }
@@ -501,32 +504,32 @@ fn genAlloca(self: *@This(), tmp: u32, typ: okc.Typ) !void {
         self.extra_buffer = self.buffer.?;
         self.buffer = buffer;
     }
-    try self.print("\n  %t{} = alloca {f}", .{ tmp, LlvmTyp{ .inner = typ } });
+    try self.print("\n  %t{} = alloca {f}", .{ tmp, okc.Typ.LLPrinter{ .typ = typ } });
 }
 
-fn storeInto(self: *@This(), val: Val, typ_val: TypVal) !void {
+fn storeInto(self: *@This(), val: okc.Val, typ_val: okc.Val.Typed) !void {
     try self.print("\n  store {f}, ptr {f}", .{ typ_val, val });
 }
 
-fn genCall(self: *@This(), call: okc.Expr.Call) !TypVal {
-    const typ_val = try self.genExpr(call.expr);
-    var arg_typ_vals = try self.gpa.alloc(TypVal, call.args.len);
+fn genCall(self: *@This(), call: okc.Expr.Call) !okc.Val.Typed {
+    const callee = try self.genExpr(call.expr);
+    var arg_typ_vals = try self.gpa.alloc(okc.Val.Typed, call.args.len);
     defer self.gpa.free(arg_typ_vals);
-    for (arg_typ_vals, call.args, typ_val.typ.fun.params) |*target, arg, param| {
+    for (arg_typ_vals, call.args, callee.typ.fun.params) |*target, arg, param| {
         target.* = try self.genExpr(arg);
         if (param == .slice and target.typ == .ptr) {
-            target.* = try self.genArrayToSlice(target.typ.ptr.typ.array, target.val);
+            target.* = try self.genArrayToSlice(target.typ.ptr.typ.array, target.bare);
         }
     }
     const ret_tmp = self.newTmp();
-    if (typ_val.typ.fun.ret_typ.* != .prime or typ_val.typ.fun.ret_typ.prime != .void) {
+    if (callee.typ.fun.ret_typ.* != .prime or callee.typ.fun.ret_typ.prime != .void) {
         try self.print("\n  %t{} = ", .{ret_tmp});
     } else {
         try self.print("\n  ", .{});
     }
     try self.print("call {f} {f} (", .{
-        LlvmTyp{ .inner = typ_val.typ.fun.ret_typ.* },
-        typ_val.val,
+        okc.Typ.LLPrinter{ .typ = callee.typ.fun.ret_typ.* },
+        callee.bare,
     });
     if (call.args.len != 0) {
         try self.print("{f}", .{arg_typ_vals[0]});
@@ -536,29 +539,29 @@ fn genCall(self: *@This(), call: okc.Expr.Call) !TypVal {
     }
     try self.print(")", .{});
     return .{
-        .val = .{ .tmp = ret_tmp },
-        .typ = typ_val.typ.fun.ret_typ.*,
+        .typ = callee.typ.fun.ret_typ.*,
+        .bare = .{ .tmp = ret_tmp },
     };
 }
 
-fn genArrayToSlice(self: *@This(), array: okc.Typ.Array, val: Val) !TypVal {
-    var res = TypVal{
+fn genArrayToSlice(self: *@This(), array: okc.Typ.Array, val: okc.Val) !okc.Val.Typed {
+    var res = okc.Val.Typed{
         .typ = .{ .slice = .{
             .typ = array.typ,
             .mutable = false,
         } },
-        .val = .undef,
+        .bare = .undef,
     };
     try self.genIV(&res, .{
         .typ = .{ .ptr = .{
             .typ = array.typ,
             .mutable = false,
         } },
-        .val = val,
+        .bare = val,
     }, 0);
     try self.genIV(&res, .{
         .typ = .{ .prime = .u64 },
-        .val = .{ .int = array.len },
+        .bare = .{ .int = array.len },
     }, 1);
     return res;
 }
@@ -577,7 +580,7 @@ fn genRet(self: *@This(), ret: okc.Stmt.Return) !void {
     }
 }
 
-fn genExpr(self: *@This(), expr: okc.Expr) Error!TypVal {
+fn genExpr(self: *@This(), expr: okc.Expr) Error!okc.Val.Typed {
     switch (expr.kind) {
         .method => unreachable,
         .deref => |deref| return self.genDeref(deref.expr),
@@ -602,12 +605,12 @@ fn genExpr(self: *@This(), expr: okc.Expr) Error!TypVal {
     }
 }
 
-fn genSizeof(self: *@This(), typ: okc.Typ) !TypVal {
+fn genSizeof(self: *@This(), typ: okc.Typ) !okc.Val.Typed {
     const resolved = try typ.resolve(self.resolve_map, self.arena);
     const layout = try self.getLayout(resolved);
     return .{
         .typ = .{ .prime = .u64 },
-        .val = .{ .int = layout.size },
+        .bare = .{ .int = layout.size },
     };
 }
 
@@ -635,10 +638,10 @@ fn getLayout(self: *@This(), typ: okc.Typ) !Layout {
     }
 }
 
-fn genArray(self: *@This(), array: okc.Expr.Array) !TypVal {
-    var res = TypVal{
+fn genArray(self: *@This(), array: okc.Expr.Array) !okc.Val.Typed {
+    var res = okc.Val.Typed{
         .typ = try array.typ.solve(self.arena),
-        .val = .undef,
+        .bare = .undef,
     };
     for (array.exprs, 0..) |expr, i| {
         const typ_val = try self.genExpr(expr);
@@ -647,60 +650,60 @@ fn genArray(self: *@This(), array: okc.Expr.Array) !TypVal {
     return res;
 }
 
-fn genNeg(self: *@This(), expr: okc.Expr) !TypVal {
-    const typ_val = try self.genExpr(expr);
+fn genNeg(self: *@This(), expr: okc.Expr) !okc.Val.Typed {
+    const val = try self.genExpr(expr);
     const tmp = self.newTmp();
     try self.print(
         "\n  %t{d} = sub {f} 0, {f}",
-        .{ tmp, LlvmTyp{ .inner = typ_val.typ }, typ_val.val },
+        .{ tmp, okc.Typ.LLPrinter{ .typ = val.typ }, val.bare },
     );
     return .{
-        .typ = typ_val.typ,
-        .val = .{ .tmp = tmp },
+        .typ = val.typ,
+        .bare = .{ .tmp = tmp },
     };
 }
 
-fn genDerefRef(self: *@This(), expr: okc.Expr) !Ref {
-    const typ_val = try self.genExpr(expr);
+fn genDerefRef(self: *@This(), expr: okc.Expr) !okc.Val.Ref {
+    const val = try self.genExpr(expr);
     return .{
-        .inner_typ = typ_val.typ.ptr.typ.*,
-        .val = typ_val.val,
+        .inner_typ = val.typ.ptr.typ.*,
+        .val = val.bare,
     };
 }
 
-fn genDeref(self: *@This(), deref: okc.Expr) !TypVal {
+fn genDeref(self: *@This(), deref: okc.Expr) !okc.Val.Typed {
     const ref = try self.genDerefRef(deref);
     return self.loadTypVal(ref);
 }
 
-fn loadTypVal(self: *@This(), ref: Ref) !TypVal {
+fn loadTypVal(self: *@This(), ref: okc.Val.Ref) !okc.Val.Typed {
     const tmp = try self.load(ref);
     return .{
         .typ = ref.inner_typ,
-        .val = .{ .tmp = tmp },
+        .bare = .{ .tmp = tmp },
     };
 }
 
-fn genNotb(self: *@This(), expr: okc.Expr) !TypVal {
+fn genNotb(self: *@This(), expr: okc.Expr) !okc.Val.Typed {
     const typ_val = try self.genExpr(expr);
     const tmp = self.newTmp();
     try self.print("\n  %t{d} = xor {f}, -1", .{ tmp, typ_val });
     return .{
         .typ = typ_val.typ,
-        .val = .{ .tmp = tmp },
+        .bare = .{ .tmp = tmp },
     };
 }
 
-fn genPtr(self: *@This(), expr: okc.Expr) !TypVal {
+fn genPtr(self: *@This(), expr: okc.Expr) !okc.Val.Typed {
     const ref = try self.genExprRef(expr);
     return ref.toPtrTypVal(self.arena);
 }
 
-fn genUndef(undef: okc.Expr.Undef) !TypVal {
-    return .{ .typ = undef.typ, .val = .undef };
+fn genUndef(undef: okc.Expr.Undef) !okc.Val.Typed {
+    return .{ .typ = undef.typ, .bare = .undef };
 }
 
-fn genFieldRef(self: *@This(), field: okc.Expr.Field) !Ref {
+fn genFieldRef(self: *@This(), field: okc.Expr.Field) !okc.Val.Ref {
     var vari = try self.genExprRef(field.expr);
     if (vari.inner_typ == .ptr) {
         const tmp = try self.load(vari);
@@ -713,7 +716,7 @@ fn genFieldRef(self: *@This(), field: okc.Expr.Field) !Ref {
         std.debug.assert(std.mem.eql(u8, field.name, "len"));
         return self.toStack(.{
             .typ = .{ .prime = .u64 },
-            .val = .{ .int = vari.inner_typ.array.len },
+            .bare = .{ .int = vari.inner_typ.array.len },
         });
     }
     const info = self.getFieldInfo(vari.inner_typ, field.name);
@@ -724,18 +727,18 @@ fn genFieldRef(self: *@This(), field: okc.Expr.Field) !Ref {
     };
 }
 
-fn genField(self: *@This(), field: okc.Expr.Field) !TypVal {
+fn genField(self: *@This(), field: okc.Expr.Field) !okc.Val.Typed {
     const ref = try self.genFieldRef(field);
     return self.loadTypVal(ref);
 }
 
-fn genElemExprRef(self: *@This(), elem: okc.Expr.Elem) !Ref {
+fn genElemExprRef(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Ref {
     const ref = try self.genExprRef(elem.expr);
     const index = try self.genExpr(elem.index);
     return self.genElemRef(ref, index);
 }
 
-fn genElemRef(self: *@This(), from: Ref, index: TypVal) !Ref {
+fn genElemRef(self: *@This(), from: okc.Val.Ref, index: okc.Val.Typed) !okc.Val.Ref {
     switch (from.inner_typ) {
         .array => {
             const tmp = try self.genGEPIB(from, index);
@@ -763,49 +766,52 @@ fn genElemRef(self: *@This(), from: Ref, index: TypVal) !Ref {
     }
 }
 
-fn genGEP(self: *@This(), typ: okc.Typ, ptr: u32, index: TypVal) !u32 {
+fn genGEP(self: *@This(), typ: okc.Typ, ptr: u32, index: okc.Val.Typed) !u32 {
     const tmp = self.newTmp();
     try self.print(
         "\n  %t{} = getelementptr {f}, ptr %t{}, {f}",
-        .{ tmp, LlvmTyp{ .inner = typ }, ptr, index },
+        .{ tmp, okc.Typ.LLPrinter{ .typ = typ }, ptr, index },
     );
     return tmp;
 }
 
-fn genGEPIB(self: *@This(), ref: Ref, index: TypVal) !u32 {
+fn genGEPIB(self: *@This(), ref: okc.Val.Ref, index: okc.Val.Typed) !u32 {
     const tmp = self.newTmp();
     try self.print(
         "\n  %t{} = getelementptr inbounds {f}, ptr {f}, i32 0, {f}",
-        .{ tmp, LlvmTyp{ .inner = ref.inner_typ }, ref.val, index },
+        .{ tmp, okc.Typ.LLPrinter{ .typ = ref.inner_typ }, ref.val, index },
     );
     return tmp;
 }
 
-fn genElem(self: *@This(), elem: okc.Expr.Elem) !TypVal {
+fn genElem(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Typed {
     const ref = try self.genElemExprRef(elem);
     return self.loadTypVal(ref);
 }
 
-fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !TypVal {
+fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !okc.Val.Typed {
     const ref = try self.genExprRef(subslice.expr);
     const start = try self.genExpr(subslice.start);
     const end = try self.genExpr(subslice.end);
     const ptr_ref = try self.genElemRef(ref, start);
     const ptr = try ptr_ref.toPtrTypVal(self.arena);
-    const len = try self.genBinary(.sub, start.typ, end.val, start.val);
-    var res = TypVal{ .typ = .{ .slice = .{
-        .typ = try okc.Typ.memo.box(ptr_ref.inner_typ, self.arena),
-        .mutable = false,
-    } }, .val = .undef };
+    const len = try self.genBinary(.sub, start.typ, end.bare, start.bare);
+    var res = okc.Val.Typed{
+        .typ = .{ .slice = .{
+            .typ = try okc.Typ.memo.box(ptr_ref.inner_typ, self.arena),
+            .mutable = false,
+        } },
+        .bare = .undef,
+    };
     try self.genIV(&res, ptr, 0);
     try self.genIV(&res, .{
         .typ = .{ .prime = .u64 },
-        .val = .{ .tmp = len },
+        .bare = .{ .tmp = len },
     }, 1);
     return res;
 }
 
-fn genExprRef(self: *@This(), expr: okc.Expr) Error!Ref {
+fn genExprRef(self: *@This(), expr: okc.Expr) Error!okc.Val.Ref {
     switch (expr.kind) {
         .vari => |name| return self.genVarRef(name),
         .field => |field| return self.genFieldRef(field.*),
@@ -834,67 +840,67 @@ fn genExprRef(self: *@This(), expr: okc.Expr) Error!Ref {
     }
 }
 
-fn load(self: *@This(), vari: Ref) !u32 {
+fn load(self: *@This(), vari: okc.Val.Ref) !u32 {
     const res = self.newTmp();
     try self.print(
         "\n  %t{} = load {f}, ptr {f}",
-        .{ res, LlvmTyp{ .inner = vari.inner_typ }, vari.val },
+        .{ res, okc.Typ.LLPrinter{ .typ = vari.inner_typ }, vari.val },
     );
     return res;
 }
 
-fn genInt(int: okc.Expr.Int) TypVal {
+fn genInt(int: okc.Expr.Int) okc.Val.Typed {
     return .{
         .typ = int.typ.normalise(),
-        .val = .{ .int = int.val },
+        .bare = .{ .int = int.val },
     };
 }
 
-fn genChar(char: u8) TypVal {
+fn genChar(char: u8) okc.Val.Typed {
     return .{
         .typ = .{ .prime = .u8 },
-        .val = .{ .int = char },
+        .bare = .{ .int = char },
     };
 }
 
-fn genBool(boo: bool) TypVal {
+fn genBool(boo: bool) okc.Val.Typed {
     return .{
         .typ = .{ .prime = .bool },
-        .val = .{ .int = @intFromBool(boo) },
+        .bare = .{ .int = @intFromBool(boo) },
     };
 }
 
-fn genStr(self: *@This(), str: []const u8) !TypVal {
+fn genStr(self: *@This(), str: []const u8) !okc.Val.Typed {
     const info = try self.genStrDecl(str);
     const ptr_u8 = try okc.Typ.memo.box(.{ .prime = .u8 }, self.arena);
-    var res = TypVal{
+    var res = okc.Val.Typed{
         .typ = .{ .slice = .{
             .typ = ptr_u8,
             .mutable = false,
         } },
-        .val = .undef,
+        .bare = .undef,
     };
     try self.genIV(&res, .{
         .typ = .{ .ptr = .{
             .typ = ptr_u8,
             .mutable = false,
         } },
-        .val = .{ .str = info.tmp },
+        .bare = .{ .str = info.tmp },
     }, 0);
     try self.genIV(&res, .{
         .typ = .{ .prime = .u64 },
-        .val = .{ .int = info.len },
+        .bare = .{ .int = info.len },
     }, 1);
     return res;
 }
 
-fn genStructExpr(self: *@This(), struc: okc.Expr.Struct) !TypVal {
+fn genStructExpr(self: *@This(), struc: okc.Expr.Struct) !okc.Val.Typed {
     if (struc.typ.getName()) |typ_name| {
         try self.genStruct(typ_name);
     }
-    var res = TypVal{
+    var res = okc.Val.Typed{
         .typ = struc.typ,
-        .val = .undef,
+        .bare = .undef,
     };
     if (struc.typ.getName()) |typ_name| {
         for (self.structs.get(typ_name).?.default_fields) |field| {
@@ -910,34 +916,34 @@ fn genStructExpr(self: *@This(), struc: okc.Expr.Struct) !TypVal {
     return res;
 }
 
-fn genIV(self: *@This(), to: *TypVal, typ_val: TypVal, index: u64) !void {
+fn genIV(self: *@This(), to: *okc.Val.Typed, typ_val: okc.Val.Typed, index: u64) !void {
     const tmp = self.newTmp();
     try self.print(
         "\n  %t{} = insertvalue {f}, {f}, {d}",
         .{ tmp, to, typ_val, index },
     );
-    to.val = .{ .tmp = tmp };
+    to.bare = .{ .tmp = tmp };
 }
 
-fn genNamedStructExpr(self: *@This(), named: okc.Expr.Struct.Named) !TypVal {
+fn genNamedStructExpr(self: *@This(), named: okc.Expr.Struct.Named) !okc.Val.Typed {
     return self.genStructExpr(named.bare);
 }
 
-fn genBinaryExpr(self: *@This(), binary: okc.Expr.Binary) !TypVal {
+fn genBinaryExpr(self: *@This(), binary: okc.Expr.Binary) !okc.Val.Typed {
     const left = try self.genExpr(binary.left);
     const right = try self.genExpr(binary.right);
-    const tmp = try self.genBinary(binary.kind, left.typ, left.val, right.val);
+    const tmp = try self.genBinary(binary.kind, left.typ, left.bare, right.bare);
     return .{
         .typ = binOpRetTyp(binary.kind, left.typ),
-        .val = .{ .tmp = tmp },
+        .bare = .{ .tmp = tmp },
     };
 }
 
-fn genBinary(self: *@This(), kind: okc.Expr.Binary.Kind, typ: okc.Typ, a: Val, b: Val) !u32 {
+fn genBinary(self: *@This(), kind: okc.Expr.Binary.Kind, typ: okc.Typ, a: okc.Val, b: okc.Val) !u32 {
     const tmp = self.newTmp();
     try self.print("\n  %t{} = ", .{tmp});
     try self.genBinOp(kind);
-    try self.print(" {f} {f}, {f}", .{ LlvmTyp{ .inner = typ }, a, b });
+    try self.print(" {f} {f}, {f}", .{ okc.Typ.LLPrinter{ .typ = typ }, a, b });
     return tmp;
 }
 
@@ -964,7 +970,7 @@ fn genBinOp(self: *@This(), kind: okc.Expr.Binary.Kind) !void {
     }
 }
 
-fn genFunPtr(self: *@This(), fun_name: []const u8, fun_meta: okc.Expr.FunMeta) !TypVal {
+fn genFunPtr(self: *@This(), fun_name: []const u8, fun_meta: okc.Expr.FunMeta) !okc.Val.Typed {
     var name = okc.Typ.Name{
         .name = fun_name,
         .generics = fun_meta.generics,
@@ -980,11 +986,11 @@ fn genFunPtr(self: *@This(), fun_name: []const u8, fun_meta: okc.Expr.FunMeta) !
     });
     return .{
         .typ = solved,
-        .val = .{ .global = name },
+        .bare = .{ .global = name },
     };
 }
 
-fn genVarRef(self: *@This(), vari: okc.Expr.Var) !Ref {
+fn genVarRef(self: *@This(), vari: okc.Expr.Var) !okc.Val.Ref {
     if (vari.fun_meta) |fun_meta| {
         return self.toStack(try self.genFunPtr(vari.name, fun_meta));
     }
@@ -1032,7 +1038,7 @@ fn genConstExpr(self: *@This(), expr: okc.Expr) Error!okc.Typ {
 }
 
 fn genConstArray(self: *@This(), array: okc.Expr.Array) !okc.Typ {
-    try self.print("{f} [", .{LlvmTyp{ .inner = array.typ }});
+    try self.print("{f} [", .{okc.Typ.LLPrinter{ .typ = array.typ }});
     if (array.exprs.len != 0) {
         try self.print("\n  ", .{});
         _ = try self.genConstExpr(array.exprs[0]);
@@ -1049,7 +1055,7 @@ fn genConstStruc(self: *@This(), struc: okc.Expr.Struct) !okc.Typ {
     if (struc.typ.getName()) |typ_name| {
         try self.genStruct(typ_name);
     }
-    try self.print("{f} {{", .{LlvmTyp{ .inner = struc.typ }});
+    try self.print("{f} {{", .{okc.Typ.LLPrinter{ .typ = struc.typ }});
     if (struc.fields.len != 0) {
         const fields = try self.gpa.alloc(okc.Expr, struc.fields.len);
         defer self.gpa.free(fields);
@@ -1097,7 +1103,7 @@ fn genConstStr(self: *@This(), str: []const u8) !okc.Typ {
     } };
 }
 
-fn genVar(self: *@This(), vari: okc.Expr.Var) !TypVal {
+fn genVar(self: *@This(), vari: okc.Expr.Var) !okc.Val.Typed {
     if (vari.fun_meta) |fun_meta| {
         return self.genFunPtr(vari.name, fun_meta);
     }
@@ -1189,88 +1195,4 @@ const Str = struct {
     tmp: u32,
 };
 
-const LlvmTyp = struct {
-    inner: okc.Typ,
-
-    pub fn format(typ: LlvmTyp, writer: *std.Io.Writer) !void {
-        std.log.debug("llvm of `{f}`", .{typ.inner});
-        switch (typ.inner) {
-            .prime => |prime| {
-                const sprime = switch (prime) {
-                    .u8 => "i8",
-                    .i32 => "i32",
-                    .u32 => "i32",
-                    .u64 => "i64",
-                    .bool => "i1",
-                    .void => "void",
-                };
-                try writer.writeAll(sprime);
-            },
-            .array => |array| {
-                try writer.print("[{} x {f}]", .{
-                    array.len,
-                    LlvmTyp{ .inner = array.typ.* },
-                });
-            },
-            .slice => try writer.writeAll("%\"[]\""),
-            .ptr, .fun => try writer.writeAll("ptr"),
-            .name => |name| try writer.print("%\"{f}\"", .{name}),
-            .loc_name => |located| try writer.print("%\"{f}\"", .{located.bare}),
-            .lazy, .any, .int, .err => unreachable,
-        }
-    }
-};
-
 const Unescaped = struct { len: usize, repr: []const u8 };
-
-const TypVal = struct {
-    typ: okc.Typ,
-    val: Val,
-
-    pub fn format(
-        typ_val: TypVal,
-        writer: *std.Io.Writer,
-    ) std.Io.Writer.Error!void {
-        try writer.print("{f} {f}", .{ LlvmTyp{ .inner = typ_val.typ }, typ_val.val });
-    }
-
-    pub fn int(n: u64) TypVal {
-        return .{
-            .typ = .{ .prime = .i32 },
-            .val = .{ .int = n },
-        };
-    }
-};
-
-const Val = union(enum) {
-    global: okc.Typ.Name,
-    int: u64,
-    str: usize,
-    tmp: u32,
-    undef,
-
-    pub fn format(val: Val, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        switch (val) {
-            .int => |int| try writer.print("{d}", .{int}),
-            .str => |str| try writer.print("@.s{}", .{str}),
-            .tmp => |tmp| try writer.print("%t{}", .{tmp}),
-            .global => |name| try writer.print("@\"{f}\"", .{name}),
-            .undef => try writer.writeAll("poison"),
-        }
-    }
-};
-
-const Ref = struct {
-    val: Val,
-    inner_typ: okc.Typ,
-
-    fn toPtrTypVal(ref: Ref, arena: std.mem.Allocator) !TypVal {
-        return .{
-            .typ = .{ .ptr = .{
-                .typ = try okc.Typ.memo.box(ref.inner_typ, arena),
-                .mutable = false,
-            } },
-            .val = ref.val,
-        };
-    }
-};

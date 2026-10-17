@@ -18,6 +18,7 @@ pub const Typ = union(enum) {
     pub const Array = @import("typ/Array.zig");
     pub const Fun = @import("typ/Fun.zig");
     pub const Lazy = @import("typ/Lazy.zig");
+    pub const LLPrinter = @import("typ/LLPrinter.zig");
     pub const Name = @import("typ/Name.zig");
     pub const Ptr = @import("typ/Ptr.zig");
     pub const Slice = @import("typ/Slice.zig");

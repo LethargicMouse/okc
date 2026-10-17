@@ -18,6 +18,7 @@ pub const SliceHashMap = @import("slice_hash_map.zig").SliceHashMap;
 pub const Source = @import("Source.zig");
 pub const Stmt = @import("Stmt.zig");
 pub const Typ = @import("typ.zig").Typ;
+pub const Val = @import("val.zig").Val;
 
 pub fn main(init: std.process.Init) u8 {
     const code = run(init) catch |err| {
