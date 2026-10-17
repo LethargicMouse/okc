@@ -18,7 +18,7 @@ pub const Kind = union(enum) {
     notb: *okc.Expr.Notb,
     ptr: *okc.Expr.Ptr,
     sizeof: okc.Typ,
-    str: []const u8,
+    str: okc.Expr.Str,
     struc: okc.Expr.Struct,
     subslice: *okc.Expr.Subslice,
     undef: okc.Expr.Undef,

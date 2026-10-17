@@ -26,6 +26,25 @@ pub const Typ = union(enum) {
 
     pub var memo: okc.Memo(@This()) = undefined;
 
+    pub fn getFieldGenInfo(
+        self: @This(),
+        name: []const u8,
+        structs: okc.HashMap(Name, okc.Item.Struct.GenInfo),
+    ) okc.Item.Struct.Field.GenInfo {
+        return if (self.getName()) |typ_name|
+            structs.get(typ_name).?.fields.get(name).?
+        else if (std.mem.eql(u8, name, "ptr")) .{
+            .typ = .{ .ptr = .{
+                .typ = self.slice.typ,
+                .mutable = self.slice.mutable,
+            } },
+            .index = 0,
+        } else .{
+            .typ = .{ .prime = .u64 },
+            .index = 1,
+        };
+    }
+
     pub fn getStructName(norm: Typ, location: okc.Location, failer: *okc.Failer) ?Typ.Name {
         switch (norm) {
             .err => return null,

@@ -119,7 +119,7 @@ fn genExtFun(self: *@This(), name: []const u8, ext_fun: okc.Item.Fun.Extern) !vo
     try self.print(")", .{});
 }
 
-fn genStrDecl(self: *@This(), str: []const u8) !okc.Expr.Str.GenInfo {
+pub fn genStrDecl(self: *@This(), str: []const u8) !okc.Expr.Str.GenInfo {
     const buffer = self.buffer.?;
     self.buffer = null;
     defer self.buffer = buffer;
@@ -221,7 +221,7 @@ fn genFun(
     self.resolve_map.clearRetainingCapacity();
 }
 
-fn genStruct(self: *@This(), name: okc.Typ.Name) Error!void {
+pub fn genStruct(self: *@This(), name: okc.Typ.Name) Error!void {
     const was = try self.generated.getOrPut(name);
     if (was.found_existing) {
         return;
@@ -591,7 +591,7 @@ fn genExpr(self: *@This(), expr: okc.Expr) Error!okc.Val.Typed {
         .array => |array| return self.genArray(array),
         .struc => |struc| return self.genStructExpr(struc),
         .int => |int| return genInt(int),
-        .str => |str| return self.genStr(str),
+        .str => |str| return self.genStr(str.bare),
         .vari => |vari| return vari.gen(self),
         .char => |char| return genChar(char),
         .bool => |boo| return genBool(boo),
@@ -710,7 +710,7 @@ fn genFieldRef(self: *@This(), field: okc.Expr.Field) !okc.Val.Ref {
             .bare = .{ .int = vari.inner_typ.array.len },
         });
     }
-    const info = self.getFieldInfo(vari.inner_typ, field.name);
+    const info = vari.inner_typ.getFieldGenInfo(field.name, self.module.structs);
     const tmp = try self.genGEPIB(vari, .int(info.index));
     return .{
         .inner_typ = info.typ,
@@ -893,7 +893,7 @@ fn genStructExpr(self: *@This(), struc: okc.Expr.Struct) !okc.Val.Typed {
     }
     for (struc.fields) |field| {
         const typ_val = try self.genExpr(field.expr);
-        const info = self.getFieldInfo(struc.typ, field.name);
+        const info = struc.typ.getFieldGenInfo(field.name, self.module.structs);
         try self.genIV(&res, typ_val, info.index);
     }
     return res;
@@ -997,11 +997,11 @@ pub fn genConst(self: *@This(), name: []const u8) !void {
     try self.print("{s}", .{written.items});
 }
 
-fn genConstExpr(self: *@This(), expr: okc.Expr) Error!okc.Typ {
+pub fn genConstExpr(self: *@This(), expr: okc.Expr) Error!okc.Typ {
     switch (expr.kind) {
-        .str => |str| return self.genConstStr(str),
-        .named_struc => |named| return self.genConstStruc(named.bare),
-        .struc => |struc| return self.genConstStruc(struc),
+        .str => |str| return str.genConst(self),
+        .named_struc => |struc| return struc.bare.genConst(self),
+        .struc => |struc| return struc.genConst(self),
         .array => |array| return self.genConstArray(array),
         else => unreachable,
     }
@@ -1019,58 +1019,6 @@ fn genConstArray(self: *@This(), array: okc.Expr.Array) !okc.Typ {
     }
     try self.print("\n]", .{});
     return array.typ;
-}
-
-fn genConstStruc(self: *@This(), struc: okc.Expr.Struct) !okc.Typ {
-    if (struc.typ.getName()) |typ_name| {
-        try self.genStruct(typ_name);
-    }
-    try self.print("{f} {{", .{okc.Typ.LLPrinter{ .typ = struc.typ }});
-    if (struc.fields.len != 0) {
-        const fields = try self.gpa.alloc(okc.Expr, struc.fields.len);
-        defer self.gpa.free(fields);
-        if (struc.typ.getName()) |typ_name| {
-            for (self.module.structs.get(typ_name).?.default_fields) |field| {
-                fields[field.index] = field.expr;
-            }
-        }
-        for (struc.fields) |field| {
-            const info = self.getFieldInfo(struc.typ, field.name);
-            fields[info.index] = field.expr;
-        }
-        try self.print("\n  ", .{});
-        _ = try self.genConstExpr(fields[0]);
-        for (fields[1..]) |expr| {
-            try self.print(",\n  ", .{});
-            _ = try self.genConstExpr(expr);
-        }
-    }
-    try self.print("\n}}", .{});
-    return struc.typ;
-}
-
-fn getFieldInfo(self: *@This(), typ: okc.Typ, name: []const u8) okc.Item.Struct.Field.GenInfo {
-    return if (typ.getName()) |typ_name|
-        self.module.structs.get(typ_name).?.fields.get(name).?
-    else if (std.mem.eql(u8, name, "ptr")) .{
-        .typ = .{ .ptr = .{
-            .typ = typ.slice.typ,
-            .mutable = typ.slice.mutable,
-        } },
-        .index = 0,
-    } else .{
-        .typ = .{ .prime = .u64 },
-        .index = 1,
-    };
-}
-
-fn genConstStr(self: *@This(), str: []const u8) !okc.Typ {
-    const info = try self.genStrDecl(str);
-    try self.print("%\"[]\" {{ ptr @.s{d}, i64 {d} }}", .{ info.tmp, info.len });
-    return .{ .slice = .{
-        .typ = try okc.Typ.memo.box(.{ .prime = .u8 }, self.arena),
-        .mutable = false,
-    } };
 }
 
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {

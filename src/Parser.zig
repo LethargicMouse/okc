@@ -980,7 +980,7 @@ fn parseStrExpr(self: *@This()) Error!okc.Expr {
     const str = try self.parseStr();
     return .{
         .location = location,
-        .kind = .{ .str = str },
+        .kind = .{ .str = .{ .bare = str } },
     };
 }
 

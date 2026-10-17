@@ -9,6 +9,34 @@ const Typed = @import("Struct/Typed.zig");
 fields: []Field,
 typ: okc.Typ = .any,
 
+pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
+    if (self.typ.getName()) |typ_name| {
+        try ctx.genStruct(typ_name);
+    }
+    try ctx.buffer.?.print(ctx.gpa, "{f} {{", .{okc.Typ.LLPrinter{ .typ = self.typ }});
+    if (self.fields.len != 0) {
+        const fields = try ctx.gpa.alloc(okc.Expr, self.fields.len);
+        defer ctx.gpa.free(fields);
+        if (self.typ.getName()) |typ_name| {
+            for (ctx.module.structs.get(typ_name).?.default_fields) |field| {
+                fields[field.index] = field.expr;
+            }
+        }
+        for (self.fields) |field| {
+            const info = self.typ.getFieldGenInfo(field.name, ctx.module.structs);
+            fields[info.index] = field.expr;
+        }
+        try ctx.buffer.?.print(ctx.gpa, "\n  ", .{});
+        _ = try ctx.genConstExpr(fields[0]);
+        for (fields[1..]) |expr| {
+            try ctx.buffer.?.print(ctx.gpa, ",\n  ", .{});
+            _ = try ctx.genConstExpr(expr);
+        }
+    }
+    try ctx.buffer.?.print(ctx.gpa, "\n}}", .{});
+    return self.typ;
+}
+
 pub fn check(
     self: *@This(),
     location: okc.Location,
