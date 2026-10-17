@@ -6,6 +6,7 @@ pub const Expr = @import("Expr.zig");
 pub const Failer = @import("Failer.zig");
 pub const HashMap = @import("hash_map.zig").HashMap;
 pub const Item = @import("Item.zig");
+pub const Layout = @import("Layout.zig");
 pub const Lexeme = @import("lexeme.zig").Lexeme;
 pub const Lexer = @import("Lexer.zig");
 pub const Location = @import("Location.zig");

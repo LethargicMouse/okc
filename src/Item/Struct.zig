@@ -44,6 +44,16 @@ pub const Field = struct {
         defaulted: bool,
         used: bool = false,
     };
+
+    pub const DefaultedGenInfo = struct {
+        index: usize,
+        expr: okc.Expr,
+    };
+
+    pub const GenInfo = struct {
+        index: usize,
+        typ: okc.Typ,
+    };
 };
 
 pub const Info = struct {
@@ -63,4 +73,10 @@ pub const Info = struct {
         self.fields.deinit();
         self.* = undefined;
     }
+};
+
+pub const GenInfo = struct {
+    fields: std.StringHashMap(Field.GenInfo),
+    default_fields: []const Field.DefaultedGenInfo,
+    layout: okc.Layout,
 };

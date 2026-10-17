@@ -10,7 +10,7 @@ writer: std.Io.File.Writer,
 buffer: ?std.ArrayList(u8) = null,
 extra_buffer: std.ArrayList(u8) = .empty,
 items: std.StringHashMap(okc.Item),
-structs: okc.HashMap(okc.Typ.Name, Struct),
+structs: okc.HashMap(okc.Typ.Name, okc.Item.Struct.GenInfo),
 consts: std.StringHashMap(okc.Typ),
 vars: std.StringHashMap(okc.Val.Ref),
 loop_ends: std.ArrayList(u32) = .empty,
@@ -119,7 +119,7 @@ fn genExtFun(self: *@This(), name: []const u8, ext_fun: okc.Item.Fun.Extern) !vo
     try self.print(")", .{});
 }
 
-fn genStrDecl(self: *@This(), str: []const u8) !Str {
+fn genStrDecl(self: *@This(), str: []const u8) !okc.Expr.Str.GenInfo {
     const buffer = self.buffer.?;
     self.buffer = null;
     defer self.buffer = buffer;
@@ -137,7 +137,7 @@ fn genStrDecl(self: *@This(), str: []const u8) !Str {
     };
 }
 
-fn unescape(gpa: std.mem.Allocator, str: []const u8) !Unescaped {
+fn unescape(gpa: std.mem.Allocator, str: []const u8) !okc.Expr.Str.Unescaped {
     var vec = try std.ArrayList(u8).initCapacity(gpa, str.len);
     var i: usize = 0;
     var len = str.len;
@@ -234,9 +234,9 @@ fn genStruct(self: *@This(), name: okc.Typ.Name) Error!void {
         }
         self.buffer = buffer;
     }
-    var fields = std.StringHashMap(Field).init(self.gpa);
+    var fields: std.StringHashMap(okc.Item.Struct.Field.GenInfo) = .init(self.gpa);
     errdefer fields.deinit();
-    var default_fields_vec = std.ArrayList(DefaultField).empty;
+    var default_fields_vec: std.ArrayList(okc.Item.Struct.Field.DefaultedGenInfo) = .empty;
     errdefer default_fields_vec.deinit(self.gpa);
     try self.print("\n%\"{f}\" = type {{", .{name});
     const struc = self.items.get(name.name).?.kind.struc;
@@ -245,7 +245,7 @@ fn genStruct(self: *@This(), name: okc.Typ.Name) Error!void {
     for (struc.generics, name.generics) |generic, typ| {
         try resolve_map.put(generic.name, typ);
     }
-    var struct_layout = Layout{ .size = 0, .alig = 1 };
+    var struct_layout = okc.Layout{ .size = 0, .alig = 1 };
     const field_typs = try self.gpa.alloc(okc.Typ, struc.fields.len);
     defer self.gpa.free(field_typs);
     for (field_typs, struc.fields, 0..) |*typ, field, i| {
@@ -614,7 +614,7 @@ fn genSizeof(self: *@This(), typ: okc.Typ) !okc.Val.Typed {
     };
 }
 
-fn getLayout(self: *@This(), typ: okc.Typ) !Layout {
+fn getLayout(self: *@This(), typ: okc.Typ) !okc.Layout {
     switch (typ) {
         .prime => |prime| return primeLayout(prime),
         .array => |array| {
@@ -624,8 +624,8 @@ fn getLayout(self: *@This(), typ: okc.Typ) !Layout {
                 .alig = inner.alig,
             };
         },
-        .fun, .ptr => return .make(8, 8),
-        .slice => return .make(16, 8),
+        .fun, .ptr => return .new(8, 8),
+        .slice => return .new(16, 8),
         .name => |name| {
             try self.genStruct(name);
             return self.structs.get(name).?.layout;
@@ -1079,7 +1079,7 @@ fn genConstStruc(self: *@This(), struc: okc.Expr.Struct) !okc.Typ {
     return struc.typ;
 }
 
-fn getFieldInfo(self: *@This(), typ: okc.Typ, name: []const u8) Field {
+fn getFieldInfo(self: *@This(), typ: okc.Typ, name: []const u8) okc.Item.Struct.Field.GenInfo {
     return if (typ.getName()) |typ_name|
         self.structs.get(typ_name).?.fields.get(name).?
     else if (std.mem.eql(u8, name, "ptr")) .{
@@ -1144,7 +1144,7 @@ fn deinitStructs(self: *@This()) void {
     self.structs.deinit();
 }
 
-fn appendLayout(res: *Layout, layout: Layout) void {
+fn appendLayout(res: *okc.Layout, layout: okc.Layout) void {
     res.alig = @max(res.alig, layout.alig);
     // padding
     if (layout.size % layout.alig != 0) {
@@ -1153,46 +1153,11 @@ fn appendLayout(res: *Layout, layout: Layout) void {
     res.size += layout.size;
 }
 
-fn primeLayout(prime: okc.Typ.Prime) !Layout {
+fn primeLayout(prime: okc.Typ.Prime) !okc.Layout {
     return switch (prime) {
-        .u8, .bool => .make(1, 1),
-        .i32, .u32 => .make(4, 4),
-        .u64 => .make(8, 8),
-        .void => .make(0, 1),
+        .u8, .bool => .new(1, 1),
+        .i32, .u32 => .new(4, 4),
+        .u64 => .new(8, 8),
+        .void => .new(0, 1),
     };
 }
-
-const Layout = struct {
-    size: u64,
-    alig: u64,
-
-    fn make(size: u64, alig: u64) Layout {
-        return .{
-            .size = size,
-            .alig = alig,
-        };
-    }
-};
-
-const DefaultField = struct {
-    index: usize,
-    expr: okc.Expr,
-};
-
-const Field = struct {
-    index: usize,
-    typ: okc.Typ,
-};
-
-const Struct = struct {
-    fields: std.StringHashMap(Field),
-    default_fields: []const DefaultField,
-    layout: Layout,
-};
-
-const Str = struct {
-    len: usize,
-    tmp: u32,
-};
-
-const Unescaped = struct { len: usize, repr: []const u8 };

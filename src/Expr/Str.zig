@@ -14,3 +14,13 @@ pub fn check(arena: std.mem.Allocator) !okc.Expr.Info {
         .mutable = false,
     };
 }
+
+pub const GenInfo = struct {
+    len: usize,
+    tmp: u32,
+};
+
+pub const Unescaped = struct {
+    len: usize,
+    repr: []const u8,
+};
