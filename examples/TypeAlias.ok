@@ -3,10 +3,10 @@ extern fn write(fd: i32, ptr: &u8, size: u64) void;
 type Str = []u8;
 
 fn main() i32 {
-    putStr("hello world");
+    put_str("hello world");
     return 0;
 }
 
-fn putStr(str: Str) void {
+fn put_str(str: Str) void {
     write(1, str.ptr, str.len);
 }

@@ -4,28 +4,28 @@ extern fn fflush(filePtrAsU64: u64) void;
 
 fn main() i32 {
     while (i : 1..21) {
-        let mut printNumber = true;
+        let mut print_number = true;
         if (i % 3 == 0) {
-            putStr("fizz");
-            printNumber = false;
+            put_str("fizz");
+            print_number = false;
         }
         if (i % 5 == 0) {
-            putStr("buzz");
-            printNumber = false;
+            put_str("buzz");
+            print_number = false;
         }
-        if (printNumber) {
-            putI32(i);
+        if (print_number) {
+            put_i32(i);
         }
-        putStr("\n");
+        put_str("\n");
     }
     return 0;
 }
 
-fn putStr(s: []u8) void {
+fn put_str(s: []u8) void {
     write(1, s.ptr, s.len);
 }
 
-fn putI32(n: i32) void {
+fn put_i32(n: i32) void {
     printf("%d".ptr, n);
     fflush(0);
 }

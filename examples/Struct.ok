@@ -6,12 +6,12 @@ struct Pair {
 }
 
 fn main() i32 {
-    let pair = makePair();
+    let pair = make_pair();
     printf("%s %s\n".ptr, pair.first, pair.second);
     return 0;
 }
 
-fn makePair() Pair {
+fn make_pair() Pair {
     let pair = Pair {
         first = "six".ptr,
         second = "seven".ptr,

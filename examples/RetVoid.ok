@@ -1,11 +1,11 @@
 extern fn write(fd: i32, s: &u8, len: u64) void;
 
 fn main() i32 {
-    putStr("hello");
+    put_str("hello");
     return 0;
 }
 
-fn putStr(s: []u8) void {
+fn put_str(s: []u8) void {
     if (s.len == 0) {
         return;
     }
