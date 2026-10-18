@@ -15,6 +15,7 @@ pub const Memo = @import("memo.zig").Memo;
 pub const Module = @import("Module.zig");
 pub const Parser = @import("Parser.zig");
 pub const Pos = @import("Pos.zig");
+pub const Program = @import("Program.zig");
 pub const PtrHashMap = @import("ptr_hash_map.zig").PtrHashMap;
 pub const SliceHashMap = @import("slice_hash_map.zig").SliceHashMap;
 pub const Source = @import("Source.zig");
@@ -33,7 +34,7 @@ pub fn main(init: std.process.Init) u8 {
     return code;
 }
 
-const more_stack_trace_frames = false;
+const more_stack_trace_frames = true;
 
 fn run(init: std.process.Init) !u8 {
     if (more_stack_trace_frames) {
@@ -68,23 +69,45 @@ pub fn runFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !u8 {
 }
 
 pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
-    var source = try Source.read(io, gpa, path);
-    defer source.deinit(gpa);
-
-    var lexer = try Lexer.init(gpa, source);
-    const tokens = try lexer.lex(gpa);
-
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
 
     Typ.memo = .init(gpa);
     defer Typ.memo.deinit();
 
-    var parser = Parser.init(gpa, arena.allocator(), tokens);
-    const module = try parser.run();
+    const module: Module = try .read(io, gpa, path, arena.allocator(), null);
 
+    const root = std.Io.Dir.path.dirname(path) orelse ".";
     var failer: Failer = .init();
-    try module.check(gpa, arena.allocator(), &failer);
+    var program: Program = .init(gpa);
+    defer program.deinit();
+    const name = std.Io.Dir.path.stem(path);
+    var check_queue: std.ArrayList([]const u8) = .empty;
+    defer check_queue.deinit(gpa);
+    var checked: std.StringHashMap(void) = .init(gpa);
+    defer checked.deinit();
+    var check_ctx: Module.Check = .{
+        .io = io,
+        .gpa = gpa,
+        .arena = arena.allocator(),
+        .failer = &failer,
+        .program = &program,
+        .checked_mods = &checked,
+        .check_queue = &check_queue,
+        .root = root,
+        .typ = .{ .name = name },
+    };
+    var info = try module.makeInfo(check_ctx);
+    defer info.deinit();
+    try module.check(&info, .main, check_ctx);
+    while (check_queue.pop()) |mod_name| {
+        check_ctx.typ = .{ .name = mod_name };
+        try program.ast_modules.get(mod_name).?.check(
+            program.modules.getPtr(mod_name).?,
+            .simple,
+            check_ctx,
+        );
+    }
     try failer.ensureNoErrors();
 
     std.Io.Dir.cwd().createDirPath(io, build_dir_path) catch {
@@ -93,8 +116,16 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     };
 
     var write_buf: [4096]u8 = undefined;
-    var gen = try Codegen.init(io, gpa, arena.allocator(), &write_buf, out_ll_path);
-    gen.run(module) catch |err| switch (err) {
+    var codegen_ctx = try Codegen.init(.{
+        .io = io,
+        .gpa = gpa,
+        .arena = arena.allocator(),
+        .ast_modules = program.ast_modules,
+        .write_buf = &write_buf,
+        .path = out_ll_path,
+    });
+    defer codegen_ctx.deinit();
+    module.gen(name, &codegen_ctx) catch |err| switch (err) {
         error.WriteFailed => {
             std.log.err("failed to write to `" ++ out_ll_path ++ "`", .{});
             return error.Handled;

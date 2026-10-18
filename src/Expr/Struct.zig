@@ -10,20 +10,20 @@ fields: []Field,
 typ: okc.Typ = .any,
 
 pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
-    if (self.typ.getName()) |typ_name| {
-        try ctx.genStruct(typ_name);
+    if (self.typ.getName()) |name| {
+        try name.genStruct(ctx);
     }
     try ctx.buffer.?.print(ctx.gpa, "{f} {{", .{okc.Typ.LLPrinter{ .typ = self.typ }});
     if (self.fields.len != 0) {
         const fields = try ctx.gpa.alloc(okc.Expr, self.fields.len);
         defer ctx.gpa.free(fields);
         if (self.typ.getName()) |typ_name| {
-            for (ctx.module.structs.get(typ_name).?.default_fields) |field| {
+            for (ctx.structs.get(typ_name).?.default_fields) |field| {
                 fields[field.index] = field.expr;
             }
         }
         for (self.fields) |field| {
-            const info = self.typ.getFieldGenInfo(field.name, ctx.module.structs);
+            const info = self.typ.getFieldGenInfo(field.name, ctx.structs);
             fields[info.index] = field.expr;
         }
         try ctx.buffer.?.print(ctx.gpa, "\n  ", .{});
@@ -53,7 +53,7 @@ pub fn check(
         .slice => |slice| return self.checkSlice(slice, location, ctx),
         .err => return err,
         .lazy => unreachable,
-        .prime, .ptr, .any, .array, .fun, .int => {
+        .prime, .ptr, .any, .array, .fun, .int, .typ => {
             ctx.failer.cannotInfer(.any, location);
             for (self.fields) |*field| {
                 _ = try field.expr.check(.{}, ctx);

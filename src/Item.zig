@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const okc = @import("okc");
 
 pub const Check = @import("Item/Check.zig");
@@ -18,16 +20,20 @@ pub fn reg(self: *@This(), ctx: Check) !void {
         .struc => |struc| .{ .struc = try struc.reg(ctx) },
         .fun => |*fun| .{ .fun = &fun.header },
         .constant => |*constt| .{ .vari = try constt.reg(ctx) },
-        .use => unreachable,
+        .use => .{ .module = try .load(self.name, self.location, ctx.loadCtx()) },
     };
     if (kind == .fun) {
         try kind.fun.check(ctx);
     }
-    if (ctx.items.get(self.name)) |prev| {
+    const name = if (std.mem.eql(u8, self.name, "Self"))
+        ctx.mod_typ.name
+    else
+        self.name;
+    if (ctx.items.get(name)) |prev| {
         ctx.failer.alreadyDeclared(self.location, self.name, prev.location);
         return;
     }
-    try ctx.items.put(self.name, .{
+    try ctx.items.put(name, .{
         .location = self.location,
         .kind = kind,
     });
@@ -35,9 +41,8 @@ pub fn reg(self: *@This(), ctx: Check) !void {
 
 pub fn check(self: @This(), ctx: Check) error{OutOfMemory}!void {
     switch (self.kind) {
-        .typ_alias, .constant, .struc, .ext_fun => {},
+        .typ_alias, .constant, .struc, .ext_fun, .use => {},
         .fun => |fun| try fun.check(self.location, ctx),
-        .use => unreachable,
     }
 }
 
@@ -48,6 +53,17 @@ pub const Kind = union(enum) {
     struc: Struct,
     typ_alias: TypAlias,
     use,
+
+    pub fn getStruct(self: @This(), name: []const u8, ctx: *okc.Codegen) !Struct {
+        switch (self) {
+            .struc => |struc| return struc,
+            .use => {
+                const module = try ctx.getModule(name);
+                return module.items.get("Self").?.struc;
+            },
+            else => unreachable,
+        }
+    }
 };
 
 pub const TypAlias = struct {

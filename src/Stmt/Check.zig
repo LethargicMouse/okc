@@ -9,6 +9,8 @@ vars_stack: std.ArrayList([]const u8) = .empty,
 loops_nested: u16 = 0,
 ret_typ: okc.Typ,
 failer: *okc.Failer,
+modules: std.StringHashMap(okc.Module.Info),
+mod_typ: okc.Typ.Name,
 
 pub fn deinit(self: *@This()) void {
     self.vars_stack.deinit(self.gpa);
@@ -39,6 +41,8 @@ pub fn exprCheck(self: @This()) okc.Expr.Check {
         .arena = self.arena,
         .items = self.items.*,
         .failer = self.failer,
+        .modules = self.modules,
+        .mod_typ = self.mod_typ,
     };
 }
 

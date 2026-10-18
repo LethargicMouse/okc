@@ -14,6 +14,7 @@ pub const Typ = union(enum) {
     prime: Prime,
     ptr: Ptr,
     slice: Slice,
+    typ,
 
     pub const Array = @import("typ/Array.zig");
     pub const Fun = @import("typ/Fun.zig");
@@ -31,6 +32,7 @@ pub const Typ = union(enum) {
         name: []const u8,
         structs: okc.HashMap(Name, okc.Item.Struct.GenInfo),
     ) okc.Item.Struct.Field.GenInfo {
+        std.log.debug("get field `{s}` of `{f}`", .{ name, self });
         return if (self.getName()) |typ_name|
             structs.get(typ_name).?.fields.get(name).?
         else if (std.mem.eql(u8, name, "ptr")) .{
@@ -54,7 +56,7 @@ pub const Typ = union(enum) {
                 std.log.err("getTypName: {f}", .{norm});
                 unreachable;
             },
-            .fun, .prime, .ptr => {
+            .fun, .prime, .ptr, .typ => {
                 failer.notStruct(location, norm);
                 return null;
             },
@@ -91,7 +93,7 @@ pub const Typ = union(enum) {
             if (ctx.generics_checker.mark(res.loc_name.bare.name)) {
                 return res;
             }
-            const maybe_resolved = res.loc_name.checkDecl(ctx.items, ctx.failer) catch |err| switch (err) {
+            const maybe_resolved = res.loc_name.checkDecl(ctx) catch |err| switch (err) {
                 error.BadType => return .err,
             };
             if (maybe_resolved) |resolved| {
@@ -141,7 +143,7 @@ pub const Typ = union(enum) {
             .ptr => |aptr| aptr.eql(b.ptr),
             .array => |arr| arr.eql(b.array),
             .lazy => |alazy| alazy.typ == b.lazy.typ,
-            .any, .err, .int => true,
+            .any, .err, .int, .typ => true,
         };
     }
 
@@ -156,7 +158,7 @@ pub const Typ = union(enum) {
             .array => |array| array.hashIn(hasher),
             .lazy => |inner| hasher.update(std.mem.asBytes(&inner)),
             .slice => |slice| slice.hashIn(hasher),
-            .any, .err, .int => {},
+            .any, .err, .int, .typ => {},
         }
     }
 
@@ -173,6 +175,7 @@ pub const Typ = union(enum) {
             .err => try writer.writeAll("<err>"),
             .any => try writer.writeAll("_"),
             .int => try writer.writeAll("<int>"),
+            .typ => try writer.writeAll("type"),
         }
     }
 
@@ -327,7 +330,7 @@ pub const Typ = union(enum) {
                 }
                 return a;
             },
-            .lazy, .any, .err, .int, .loc_name, .name => unreachable,
+            .lazy, .any, .err, .int, .loc_name, .name, .typ => unreachable,
         }
     }
 
@@ -376,7 +379,7 @@ pub const Typ = union(enum) {
                     .mutable = false,
                 } };
             },
-            .any, .err, .prime, .int, .lazy => return self,
+            .any, .err, .prime, .int, .lazy, .typ => return self,
         }
     }
 
@@ -389,5 +392,6 @@ pub const Typ = union(enum) {
         items: std.StringHashMap(okc.Item.Info),
         generics_checker: *okc.Item.Generic.Checker,
         failer: *okc.Failer,
+        mod_typ: okc.Typ.Name,
     };
 };

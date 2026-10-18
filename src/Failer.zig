@@ -8,6 +8,10 @@ pub fn init() @This() {
     return .{};
 }
 
+pub fn noMethod(self: *@This(), location: okc.Location, name: []const u8, typ: okc.Typ) void {
+    self.fail(location, "no method `{s}` in type `{f}`", .{ name, typ });
+}
+
 pub fn ensureNoErrors(self: @This()) error{Handled}!void {
     if (self.errors_cnt != 0) {
         std.log.err("check failed with {} errors", .{self.errors_cnt});

@@ -2,10 +2,29 @@ const std = @import("std");
 
 const okc = @import("okc");
 
+io: std.Io,
 gpa: std.mem.Allocator,
 arena: std.mem.Allocator,
 items: *std.StringHashMap(okc.Item.Info),
+program: *okc.Program,
 failer: *okc.Failer,
+mod_typ: okc.Typ.Name,
+root: []const u8,
+checked_mods: *std.StringHashMap(void),
+check_queue: *std.ArrayList([]const u8),
+
+pub fn loadCtx(self: @This()) okc.Module.Info.Load {
+    return .{
+        .io = self.io,
+        .gpa = self.gpa,
+        .arena = self.arena,
+        .program = self.program,
+        .failer = self.failer,
+        .root = self.root,
+        .checked_mods = self.checked_mods,
+        .check_queue = self.check_queue,
+    };
+}
 
 pub fn checkTyp(self: @This(), generics_checker: *okc.Item.Generic.Checker) okc.Typ.Check {
     return .{
@@ -13,6 +32,7 @@ pub fn checkTyp(self: @This(), generics_checker: *okc.Item.Generic.Checker) okc.
         .items = self.items.*,
         .failer = self.failer,
         .generics_checker = generics_checker,
+        .mod_typ = self.mod_typ,
     };
 }
 
@@ -22,19 +42,10 @@ pub fn checkStmt(self: @This(), ret_typ: okc.Typ) okc.Stmt.Check {
         .arena = self.arena,
         .items = self.items,
         .failer = self.failer,
+        .modules = self.program.modules,
+        .mod_typ = self.mod_typ,
         .ret_typ = ret_typ,
     };
-}
-
-pub fn checkMain(self: @This(), location: okc.Location) void {
-    const item = self.items.getPtr("main") orelse {
-        self.failer.fail(location, "`main` function not found", .{});
-        return;
-    };
-    if (item.kind != .fun) {
-        self.failer.fail(item.location, "item `main` is not a function", .{});
-    }
-    item.used = true;
 }
 
 pub fn checkExprCtx(self: @This()) okc.Expr.Check {
@@ -43,6 +54,8 @@ pub fn checkExprCtx(self: @This()) okc.Expr.Check {
         .arena = self.arena,
         .items = self.items.*,
         .failer = self.failer,
+        .modules = self.program.modules,
+        .mod_typ = self.mod_typ,
     };
 }
 

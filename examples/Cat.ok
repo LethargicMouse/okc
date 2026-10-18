@@ -1,3 +1,5 @@
+extern fn printf(fmt: &u8, a: &u8, b: &u8) void;
+
 struct Self {
     name: []u8,
 }

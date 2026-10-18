@@ -29,7 +29,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
 pub fn check(
     self: *@This(),
     location: okc.Location,
-    hint_mutable: bool,
+    mutability: enum { constant, mutable },
     ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
     const err = okc.Expr.Info{
@@ -41,19 +41,20 @@ pub fn check(
         return err;
     };
     switch (item.kind) {
-        .module => unreachable,
         .fun => |header| {
             item.used = true;
             self.fun_meta = @as(okc.Expr.FunMeta, undefined);
             return self.fun_meta.?.fillFromHeader(ctx.gpa, ctx.arena, header.*);
         },
-        .struc, .typ => {
-            ctx.failer.fail(location, "it is a type", .{});
-            return err;
+        .struc, .typ, .module => {
+            return .{
+                .typ = .typ,
+                .mutable = false,
+            };
         },
         .vari => |*vari_decl| {
             item.used = true;
-            if (hint_mutable) {
+            if (mutability == .mutable) {
                 if (vari_decl.mutable) {
                     vari_decl.mutated = true;
                 } else {

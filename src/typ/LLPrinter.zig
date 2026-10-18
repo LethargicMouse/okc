@@ -28,6 +28,6 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
         .ptr, .fun => try writer.writeAll("ptr"),
         .name => |name| try writer.print("%\"{f}\"", .{name}),
         .loc_name => |located| try writer.print("%\"{f}\"", .{located.bare}),
-        .lazy, .any, .int, .err => unreachable,
+        .lazy, .any, .int, .err, .typ => unreachable,
     }
 }

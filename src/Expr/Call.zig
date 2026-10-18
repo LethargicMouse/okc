@@ -4,27 +4,45 @@ expr: okc.Expr,
 args: []okc.Expr,
 
 pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
-    const callee_info = try self.expr.check(.{}, ctx);
-    const fun = callee_info.typ.getFun(self.expr.location, ctx.failer) orelse
-        return self.checkBad(ctx);
-    // to propagate hint to generics
-    _ = fun.ret_typ.unifyOrNull(hint, .active);
-    for (self.args, fun.params) |*arg, param| {
-        const info = try arg.check(.{ .typ = param.normalise() }, ctx);
-        _ = param.unify(info.typ, arg.location, ctx.failer);
-    }
-    return .{
-        .typ = fun.ret_typ.*,
-        .mutable = false,
+    const callee = try self.expr.check(.{}, ctx);
+    const info_call: okc.Expr.Info.Call = .{
+        .args = self.args,
+        .location = self.expr.location,
+        .maybe_first = null,
+        .typ = callee.typ,
     };
+    return info_call.check(hint, ctx);
 }
 
-fn checkBad(call: *@This(), ctx: okc.Expr.Check) !okc.Expr.Info {
-    for (call.args) |*arg| {
-        _ = try arg.check(.{}, ctx);
+pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+    const callee = try self.expr.gen(ctx);
+    var arg_typ_vals = try ctx.gpa.alloc(okc.Val.Typed, self.args.len);
+    defer ctx.gpa.free(arg_typ_vals);
+    for (arg_typ_vals, self.args, callee.typ.fun.params) |*target, arg, param| {
+        target.* = try arg.gen(ctx);
+        if (param == .slice and target.typ == .ptr) {
+            target.* = try ctx.genArrayToSlice(target.typ.ptr.typ.array, target.bare);
+        }
     }
+    const ret_tmp = ctx.newTmp();
+    if (callee.typ.fun.ret_typ.* != .prime or callee.typ.fun.ret_typ.prime != .void) {
+        try ctx.buffer.?.print(ctx.gpa, "\n  %t{} = ", .{ret_tmp});
+    } else {
+        try ctx.buffer.?.print(ctx.gpa, "\n  ", .{});
+    }
+    try ctx.buffer.?.print(ctx.gpa, "call {f} {f} (", .{
+        okc.Typ.LLPrinter{ .typ = callee.typ.fun.ret_typ.* },
+        callee.bare,
+    });
+    if (self.args.len != 0) {
+        try ctx.buffer.?.print(ctx.gpa, "{f}", .{arg_typ_vals[0]});
+        for (arg_typ_vals[1..]) |val| {
+            try ctx.buffer.?.print(ctx.gpa, ", {f}", .{val});
+        }
+    }
+    try ctx.buffer.?.print(ctx.gpa, ")", .{});
     return .{
-        .typ = .err,
-        .mutable = false,
+        .typ = callee.typ.fun.ret_typ.*,
+        .bare = .{ .tmp = ret_tmp },
     };
 }

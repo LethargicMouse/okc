@@ -45,6 +45,7 @@ pub fn run(self: *@This()) error{ OutOfMemory, Handled }!okc.Module {
 fn parseModule(self: *@This()) !okc.Module {
     const items = try self.many(parseItem, .{});
     const location = self.getLocation();
+    std.debug.assert(location.start.line == location.end.line);
     try self.expect(.eof, .quiet);
     return .{
         .items = items,
@@ -213,8 +214,7 @@ fn sep(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) {
             } else break;
         }
     }
-    const slice = try self.arena.alloc(ParseRes(parse, args), vec.items.len);
-    @memcpy(slice, vec.items);
+    const slice = try self.arena.dupe(ParseRes(parse, args), vec.items);
     return slice;
 }
 
@@ -235,7 +235,6 @@ fn parseTyp(self: *@This()) Error!okc.Typ {
         parseFunTyp,
         parseGenericTyp,
         parseVerbalTyp,
-        parseMutPtrTyp,
         parsePtrTyp,
         parseArrayTyp,
         parseSliceTyp,
@@ -309,24 +308,17 @@ fn either(self: *@This(), comptime parses: anytype) !ParseRes(parses[0], .{}) {
     return error.ParseFailed;
 }
 
-fn parseMutPtrTyp(self: *@This()) Error!okc.Typ {
-    try self.expect(.amp, .quiet);
-    try self.expect(.mut, .quiet);
-    const typ = try self.parseTyp();
-    const ptr = try okc.Typ.memo.box(typ, self.arena);
-    return .{ .ptr = .{
-        .typ = ptr,
-        .mutable = true,
-    } };
-}
-
 fn parsePtrTyp(self: *@This()) Error!okc.Typ {
     try self.expect(.amp, .quiet);
+    var mutable = false;
+    if (try self.maybe(expect, .{ .mut, .quiet })) |_| {
+        mutable = true;
+    }
     const typ = try self.parseTyp();
     const ptr = try okc.Typ.memo.box(typ, self.arena);
     return .{ .ptr = .{
         .typ = ptr,
-        .mutable = false,
+        .mutable = mutable,
     } };
 }
 
@@ -342,8 +334,7 @@ fn many(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) 
     while (try self.maybe(parse, args)) |item| {
         try vec.append(self.gpa, item);
     }
-    const slice = try self.arena.alloc(ParseRes(parse, args), vec.items.len);
-    @memcpy(slice, vec.items);
+    const slice = try self.arena.dupe(ParseRes(parse, args), vec.items);
     return slice;
 }
 

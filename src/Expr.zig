@@ -12,6 +12,7 @@ pub const FunMeta = @import("Expr/FunMeta.zig");
 pub const Info = @import("Expr/Info.zig");
 pub const Int = @import("Expr/Int.zig");
 pub const Kind = @import("Expr/kind.zig").Kind;
+pub const Method = @import("Expr/Method.zig");
 pub const Neg = @import("Expr/Neg.zig");
 pub const Notb = @import("Expr/Notb.zig");
 pub const Ptr = @import("Expr/Ptr.zig");
@@ -25,6 +26,31 @@ pub const Var = @import("Expr/Var.zig");
 
 location: okc.Location,
 kind: Kind,
+
+pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!okc.Val.Typed {
+    switch (self.kind) {
+        .method => |method| return method.gen(ctx),
+        .deref => |deref| return ctx.genDeref(deref.expr),
+        .neg => |neg| return ctx.genNeg(neg.expr),
+        .notb => |notb| return ctx.genNotb(notb.expr),
+        .ptr => |ptr| return ctx.genPtr(ptr.expr),
+        .subslice => |subslice| return ctx.genSubslice(subslice.*),
+        .sizeof => |typ| return ctx.genSizeof(typ),
+        .array => |array| return ctx.genArray(array),
+        .struc => |struc| return ctx.genStructExpr(struc),
+        .int => |int| return okc.Codegen.genInt(int),
+        .str => |str| return ctx.genStr(str.bare),
+        .vari => |vari| return vari.gen(ctx),
+        .char => |char| return okc.Codegen.genChar(char),
+        .bool => |boo| return okc.Codegen.genBool(boo),
+        .undef => |undef| return okc.Codegen.genUndef(undef),
+        .call => |call| return call.gen(ctx),
+        .binary => |binary| return ctx.genBinaryExpr(binary.*),
+        .field => |field| return ctx.genField(field.*),
+        .named_struc => |struc| return ctx.genNamedStructExpr(struc),
+        .elem => |elem| return ctx.genElem(elem.*),
+    }
+}
 
 pub fn genConst(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!okc.Typ {
     switch (self.kind) {
@@ -78,7 +104,7 @@ pub fn checkConst(self: *@This(), hint: okc.Expr.Hint, ctx: Check) !okc.Typ {
 
 pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}!okc.Expr.Info {
     switch (self.kind) {
-        .method => unreachable,
+        .method => |method| return method.check(hint.typ, ctx),
         .deref => |deref| return deref.check(self.location, ctx),
         .neg => |neg| return neg.check(ctx),
         .notb => |notb| return notb.check(ctx),
@@ -89,7 +115,11 @@ pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}
         .struc => |*struc| return struc.check(self.location, hint.typ, ctx),
         .int => |*int| return int.check(),
         .str => return Str.check(ctx.arena),
-        .vari => |*vari| return vari.check(self.location, hint.mutable, ctx),
+        .vari => |*vari| return vari.check(
+            self.location,
+            if (hint.mutable) .mutable else .constant,
+            ctx,
+        ),
         .char => return .{
             .typ = .{ .prime = .u8 },
             .mutable = false,
@@ -107,13 +137,6 @@ pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}
     }
 }
 
-pub const Method = struct {
-    expr: okc.Expr,
-    vari: Var,
-    args: []okc.Expr,
-    name_location: okc.Location,
-};
-
 pub const Hint = struct {
     typ: okc.Typ = .any,
     mutable: bool = false,
@@ -122,6 +145,16 @@ pub const Hint = struct {
 pub const Check = struct {
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
+    mod_typ: okc.Typ.Name,
     items: std.StringHashMap(okc.Item.Info),
+    modules: std.StringHashMap(okc.Module.Info),
     failer: *okc.Failer,
+
+    pub fn inside(self: @This(), typ: okc.Typ) ?@This() {
+        var res = self;
+        const name = typ.getName() orelse return null;
+        res.mod_typ = name;
+        res.items = name.getItems(self.items) orelse return null;
+        return res;
+    }
 };

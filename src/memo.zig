@@ -34,8 +34,7 @@ pub fn Memo(T: type) type {
             if (self.slice_map.getKey(slice)) |res| {
                 return res;
             }
-            const res = try arena.alloc(T, slice.len);
-            @memcpy(res, slice);
+            const res = try arena.dupe(T, slice);
             try self.slice_map.put(res, {});
             return res;
         }

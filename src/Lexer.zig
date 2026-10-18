@@ -29,7 +29,7 @@ fn populate(self: *@This(), gpa: std.mem.Allocator, res: *std.ArrayList(Token)) 
         if (self.cursor == self.source.code.len) {
             // so that eof is right after last lexeme
             self.cursor = before_skip;
-            try res.append(gpa, self.makeToken(.eof, 1));
+            try res.append(gpa, self.makeToken(.eof, 0));
             break;
         }
         if (self.lexNext()) |token| {
@@ -235,13 +235,16 @@ fn isNameChar(c: u8) bool {
 }
 
 fn makeToken(self: *@This(), lexeme: okc.Lexeme, len: usize) Token {
-    const location = okc.Location{
+    var location = okc.Location{
         .name = self.source.name,
         .start = self.poses[self.cursor],
         .end = self.poses[self.cursor + len],
         .lines = self.source.lines,
     };
     self.cursor += len;
+    if (len == 0) {
+        location.end.symbol += 1;
+    }
     return .{ .lexeme = lexeme, .location = location };
 }
 

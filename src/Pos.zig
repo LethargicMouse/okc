@@ -15,11 +15,6 @@ pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) error{OutOfMemory}![]
             current.symbol += 1;
         }
     }
-    // additional poses for eof lexeme
-    for (0..2) |_| {
-        try vec.append(gpa, current);
-        current.symbol += 1;
-    }
     return vec.toOwnedSlice(gpa);
 }
 

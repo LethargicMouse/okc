@@ -2,20 +2,17 @@ const std = @import("std");
 
 const okc = @import("okc");
 
-structs: okc.HashMap(okc.Typ.Name, okc.Item.Struct.GenInfo),
+name: []const u8,
+items: std.StringHashMap(okc.Item.Kind),
 
-pub fn init(gpa: std.mem.Allocator) @This() {
+pub fn init(gpa: std.mem.Allocator, name: []const u8) @This() {
     return .{
-        .structs = .init(gpa),
+        .name = name,
+        .items = .init(gpa),
     };
 }
 
-pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
-    var iter = self.structs.valueIterator();
-    while (iter.next()) |info| {
-        info.fields.deinit();
-        gpa.free(info.default_fields);
-    }
-    self.structs.deinit();
+pub fn deinit(self: *@This()) void {
+    self.items.deinit();
     self.* = undefined;
 }
