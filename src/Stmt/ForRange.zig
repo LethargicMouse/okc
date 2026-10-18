@@ -13,7 +13,7 @@ pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
         start.typ = .err;
     }
     const end = try self.end.check(.{}, ctx.exprCheck());
-    const typ = start.typ.unify(end.typ, self.end.location, ctx.failer);
+    const typ = end.typ.unify(start.typ, self.end.location, ctx.failer);
     try ctx.declare(self.vari, self.vari_location, .{
         .typ = typ,
         .mutable = false,

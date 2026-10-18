@@ -15,7 +15,7 @@ pub fn reg(self: @This(), ctx: okc.Item.Check) !Info {
         var defaulted = false;
         if (field.default) |*expr| {
             const expr_typ = try expr.checkConst(.{ .typ = field.typ }, ctx.checkExprCtx());
-            _ = field.typ.unify(expr_typ, expr.location, ctx.failer);
+            _ = expr_typ.unify(field.typ, expr.location, ctx.failer);
             defaulted = true;
         }
         if (res.fields.get(field.name)) |prev| {

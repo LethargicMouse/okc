@@ -10,7 +10,7 @@ pub fn check(
 ) !okc.ControlFlow {
     if (ret.expr) |*expr| {
         const info = try expr.check(.{ .typ = ret_typ }, ctx);
-        _ = ret_typ.unify(info.typ, expr.location, ctx.failer);
+        _ = info.typ.unify(ret_typ, expr.location, ctx.failer);
     } else if (!ret_typ.isVoid()) {
         ctx.failer.fail(location, "should return a value", .{});
     }

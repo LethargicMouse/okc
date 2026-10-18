@@ -86,15 +86,14 @@ fn checkSlice(
                 .mutable = slice.mutable,
             } };
             const info = try field.expr.check(.{ .typ = expected }, ctx);
-            const typ = expected.unify(info.typ, field.expr.location, ctx.failer);
+            const typ = info.typ.unify(expected, field.expr.location, ctx.failer);
             was_ptr = if (typ == .ptr) typ.ptr.typ else try okc.Typ.memo.box(.err, ctx.arena);
         } else if (std.mem.eql(u8, field.name, "len")) {
             if (was_len) {
                 ctx.failer.newFieldSecond(field.location, field.name);
             }
             const info = try field.expr.check(.{ .typ = .{ .prime = .u64 } }, ctx);
-            const expected: okc.Typ = .{ .prime = .u64 };
-            _ = expected.unify(info.typ, field.expr.location, ctx.failer);
+            _ = info.typ.unify(.{ .prime = .u64 }, field.expr.location, ctx.failer);
             was_len = true;
         }
     }

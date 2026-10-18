@@ -43,11 +43,11 @@ pub const Call = struct {
         var params = fun.params;
         if (self.maybe_first) |first| {
             params = fun.params[1..];
-            _ = fun.params[0].unify(first.bare.typ, self.location, ctx.failer);
+            _ = first.bare.typ.unify(fun.params[0], self.location, ctx.failer);
         }
         for (self.args, params) |*arg, param| {
             const info = try arg.check(.{ .typ = param }, ctx);
-            _ = param.unify(info.typ, arg.location, ctx.failer);
+            _ = info.typ.unify(param, arg.location, ctx.failer);
         }
         return .{
             .typ = fun.ret_typ.*,

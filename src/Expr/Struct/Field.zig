@@ -19,5 +19,5 @@ pub fn check(
     };
     const decl_typ = try f_decl.typ.resolve(resolve_map, ctx.arena);
     const info = try self.expr.check(.{ .typ = decl_typ }, ctx);
-    _ = decl_typ.unify(info.typ, self.expr.location, ctx.failer);
+    _ = info.typ.unify(decl_typ, self.expr.location, ctx.failer);
 }

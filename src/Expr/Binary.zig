@@ -11,7 +11,7 @@ pub fn check(self: *@This(), ctx: okc.Expr.Check) !okc.Expr.Info {
         left.typ = .err;
     }
     const right = try self.right.check(.{}, ctx);
-    const unityp = left.typ.unify(right.typ, self.right.location, ctx.failer);
+    const unityp = right.typ.unify(left.typ, self.right.location, ctx.failer);
     const typ = switch (self.kind.getClass()) {
         .arith => unityp,
         .bool => okc.Typ{ .prime = .bool },

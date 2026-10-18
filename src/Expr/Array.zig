@@ -39,7 +39,7 @@ pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info 
     }
     for (self.exprs) |*expr| {
         const info = try expr.check(.{ .typ = inner_hint }, ctx);
-        inner_typ = inner_typ.unify(info.typ, expr.location, ctx.failer);
+        inner_typ = info.typ.unify(inner_typ, expr.location, ctx.failer);
     }
     self.typ = okc.Typ{ .array = .{
         .typ = try okc.Typ.memo.box(inner_typ, ctx.arena),

@@ -17,6 +17,6 @@ pub fn check(self: *@This(), ctx: okc.Expr.Check) !okc.ControlFlow {
         left.typ = .err;
     }
     const right = try self.right.check(.{}, ctx);
-    _ = left.typ.unify(right.typ, self.right.location, ctx.failer);
+    _ = right.typ.unify(left.typ, self.right.location, ctx.failer);
     return .cont;
 }

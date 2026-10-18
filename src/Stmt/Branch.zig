@@ -9,8 +9,7 @@ pub fn check(
     ctx: *okc.Stmt.Check,
 ) !okc.ControlFlow {
     const info = try self.condition.check(.{}, ctx.exprCheck());
-    const expected: okc.Typ = .{ .prime = .bool };
-    _ = expected.unify(info.typ, self.condition.location, ctx.failer);
+    _ = info.typ.unify(.{ .prime = .bool }, self.condition.location, ctx.failer);
     if (kind == .loop) {
         return self.body.checkLoop(ctx);
     } else {

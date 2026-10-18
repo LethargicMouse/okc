@@ -6,7 +6,7 @@ pub fn reg(self: *@This(), ctx: okc.Item.Check) !okc.Stmt.Declare.Info {
     const hint_typ = if (self.declare.typ) |typ| typ else .any;
     const typ = try self.declare.expr.checkConst(.{ .typ = hint_typ }, ctx.checkExprCtx());
     if (self.declare.typ) |typ_decl| {
-        _ = typ_decl.unify(typ, self.declare.expr.location, ctx.failer);
+        _ = typ.unify(typ_decl, self.declare.expr.location, ctx.failer);
     }
     return .{
         .mutable = false,
