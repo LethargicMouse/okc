@@ -23,6 +23,10 @@ pub const Stmt = @import("Stmt.zig");
 pub const Typ = @import("typ.zig").Typ;
 pub const Val = @import("val.zig").Val;
 
+pub const std_options: std.Options = .{
+    .log_level = .debug,
+};
+
 pub fn main(init: std.process.Init) u8 {
     const code = run(init) catch |err| {
         switch (err) {
