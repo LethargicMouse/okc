@@ -1,0 +1,22 @@
+x 2026-10-14 2026-10-14 global Typ.memo +refactor
+x 2026-10-14 2026-10-14 Checker owns arena +refactor
+x 2026-10-14 2026-10-14 items out of ast +refactor
+x 2026-10-14 2026-10-14 exprs out of ast +refactor
+x 2026-10-14 2026-10-14 stmts out of ast +refactor
+x 2026-10-14 2026-10-14 items info to items +refactor
+x 2026-10-14 2026-10-14 no Memo.free & Memo.alloc +refactor
+x 2026-10-14 2026-10-14 resolve with map only +refactor
+x 2026-10-14 2026-10-14 generic Typ recursion +refactor
+x 2026-10-15 2026-10-14 typ: Typ to self: This +refactor
+x 2026-10-15 2026-10-14 self to This +refactor
+x 2026-10-15 2026-10-14 LocName.name -> LocName.bare +refactor
+x 2026-10-15 2026-10-14 no *Loud parse funs +refactor
+x 2026-10-15 2026-10-14 Module.Info +refactor
+x 2026-10-15 2026-10-14 move Declare to Item +refactor
+x 2026-10-15 2026-10-14 Module.arena: Allocator +refactor
+x 2026-10-15 2026-10-15 Typ.Lazy +refactor
+x 2026-10-16 2026-10-15 typ/mod -> typ/typ +refactor
+x 2026-10-16 2026-10-16 Typ.Lazy all inputs visible +refactor
+x 2026-10-18 2026-10-16 invert unify +refactor
+x 2026-10-18 2026-10-16 no unary +refactor
+x 2026-10-18 2026-10-16 Expr.runRec +refactor
