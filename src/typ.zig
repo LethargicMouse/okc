@@ -202,7 +202,7 @@ pub const Typ = union(enum) {
 
     pub const debug_unify = false;
 
-    pub fn unify(a: Typ, b: Typ, location: okc.Location, failer: *okc.Failer) Typ {
+    pub fn unify(b: Typ, a: Typ, location: okc.Location, failer: *okc.Failer) Typ {
         if (a.unifyOrNull(b, .active)) |typ| {
             if (Typ.debug_unify) {
                 std.log.debug("==> {f}", .{typ});
