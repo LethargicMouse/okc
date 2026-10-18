@@ -1,0 +1,12 @@
+fn main() i32 {
+    let color: Color = .green;
+    switch (color) {
+        .red, .yellow {
+            put_str("wait\n");
+        }
+        .green {
+            putStr("go\n");
+        }
+    }
+    return 0;
+}
