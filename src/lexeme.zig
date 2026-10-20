@@ -1,5 +1,6 @@
 pub const Lexeme = union(enum) {
     amp,
+    arrow,
     att,
     bral,
     brar,
@@ -41,6 +42,7 @@ pub const Lexeme = union(enum) {
     slash,
     star,
     str: []const u8,
+    swi,
     tild,
     tru,
     typ,
@@ -54,6 +56,8 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: @typeInfo(Lexeme).@"union".tag_type.?) []const u8 {
         return switch (lexeme) {
+            .arrow => "`=>`",
+            .swi => "`switch`",
             .use => "`use`",
             .typ => "`type`",
             .fals => "`false`",

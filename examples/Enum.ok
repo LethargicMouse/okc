@@ -7,10 +7,10 @@ type Color {
 fn main() i32 {
     let color: Color = Color.green;
     switch (color) {
-        Color.red, Color.yellow {
+        Color.red, Color.yellow => {
             put_str("wait\n");
         }
-        Color.green {
+        Color.green => {
             putStr("go\n");
         }
     }

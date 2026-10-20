@@ -13,13 +13,33 @@ pub const IfStmt = @import("Stmt/IfStmt.zig");
 pub const Ignore = @import("Stmt/Ignore.zig");
 pub const OpAssign = @import("Stmt/OpAssign.zig");
 pub const Return = @import("Stmt/Return.zig");
+pub const Switch = @import("Stmt/Switch.zig");
 pub const While = @import("Stmt/While.zig");
 
 location: okc.Location,
 kind: Kind,
 
+pub fn parse(ctx: *okc.Parser) !@This() {
+    return ctx.either(.{
+        Switch.parseStmt,
+        okc.Parser.parseUnreachableStmt,
+        okc.Parser.parseBreakStmt,
+        okc.Parser.parseRetStmt,
+        okc.Parser.parseDeclareStmt,
+        okc.Parser.parseIfStmt,
+        okc.Parser.parseForStmt,
+        okc.Parser.parseWhileStmt,
+        okc.Parser.parseIgnoreStmt,
+        okc.Parser.parseExprStmt,
+    }) catch |err| {
+        try ctx.fail("<statement>");
+        return err;
+    };
+}
+
 pub fn check(self: *@This(), ctx: *Check) error{OutOfMemory}!okc.ControlFlow {
     switch (self.kind) {
+        .swi => unreachable,
         .for_range => |*forr| return forr.check(ctx),
         .forr => |*forr| return forr.check(ctx),
         .unre => return .ret,
@@ -46,6 +66,7 @@ pub const Kind = union(enum) {
     ignore: Ignore,
     op_assign: OpAssign,
     ret: Return,
+    swi: Switch,
     unre,
     whi: While,
 };

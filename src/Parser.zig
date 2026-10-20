@@ -123,7 +123,7 @@ fn parseFunItem(self: *@This()) !okc.Item {
 }
 
 fn parseTypItem(self: *@This()) !okc.Item {
-    const typ = try self.parseTypDecl();
+    const typ: okc.Item.Typ = try .parse(self);
     return .{
         .name = self.tmp_name,
         .location = self.tmp_location,
@@ -131,23 +131,7 @@ fn parseTypItem(self: *@This()) !okc.Item {
     };
 }
 
-fn parseTypDecl(self: *@This()) !okc.Item.Typ {
-    try self.expect(.typ, .quiet);
-    const location = self.getLocation();
-    const name = try self.parseName(.loud);
-    const generics = try self.maybe(parseGenerics, .{}) orelse &.{};
-    try self.expect(.curl, .loud);
-    const fields = try self.sep(parseFieldDecl, .{});
-    try self.expect(.curr, .quiet);
-    self.tmp_location = location;
-    self.tmp_name = name;
-    return .{
-        .generics = generics,
-        .fields = fields,
-    };
-}
-
-fn parseGenerics(self: *@This()) ![]const okc.Item.Generic {
+pub fn parseGenerics(self: *@This()) ![]const okc.Item.Generic {
     try self.expect(.les, .quiet);
     const res = try self.sep(parseGeneric, .{});
     try self.expect(.mor, .quiet);
@@ -163,7 +147,7 @@ fn parseGeneric(self: *@This()) !okc.Item.Generic {
     };
 }
 
-fn parseFieldDecl(self: *@This()) !okc.Item.Typ.Field {
+pub fn parseFieldDecl(self: *@This()) !okc.Item.Typ.Field {
     const location = self.getLocation();
     const name = try self.parseName(.loud);
     try self.expect(.colon, .loud);
@@ -202,7 +186,7 @@ fn parseHeader(self: *@This(), mode: ParseMode) !okc.Item.Fun.Header {
     };
 }
 
-fn sep(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) {
+pub fn sep(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) {
     var vec = std.ArrayList(ParseRes(parse, args)).empty;
     defer vec.deinit(self.gpa);
     if (try self.maybe(parse, args)) |first| {
@@ -299,7 +283,7 @@ fn parseArrayTyp(self: *@This()) !okc.Typ {
     } };
 }
 
-fn either(self: *@This(), comptime parses: anytype) !ParseRes(parses[0], .{}) {
+pub fn either(self: *@This(), comptime parses: anytype) !ParseRes(parses[0], .{}) {
     inline for (parses) |parse| {
         if (try self.maybe(parse, .{})) |res| {
             return res;
@@ -328,7 +312,7 @@ fn parseVerbalTyp(self: *@This()) Error!okc.Typ {
     return okc.Typ.fromName(name, location);
 }
 
-fn many(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) {
+pub fn many(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) {
     var vec = std.ArrayList(ParseRes(parse, args)).empty;
     defer vec.deinit(self.gpa);
     while (try self.maybe(parse, args)) |item| {
@@ -343,7 +327,7 @@ fn ParseRes(fun: anytype, args: anytype) type {
         .error_union.payload;
 }
 
-fn maybe(self: *@This(), parse: anytype, args: anytype) !?ParseRes(parse, args) {
+pub fn maybe(self: *@This(), parse: anytype, args: anytype) !?ParseRes(parse, args) {
     const cursor_before = self.cursor;
     const res = @call(.auto, parse, .{self} ++ args) catch |err| switch (err) {
         error.ParseFailed => {
@@ -368,31 +352,14 @@ fn parseFun(self: *@This()) !okc.Item.Fun {
     };
 }
 
-fn parseBlock(self: *@This()) Error!okc.Stmt.Block {
+pub fn parseBlock(self: *@This()) Error!okc.Stmt.Block {
     try self.expect(.curl, .loud);
-    const stmts = try self.many(parseStmt, .{});
+    const stmts = try self.many(okc.Stmt.parse, .{});
     try self.expect(.curr, .quiet);
     return .{ .stmts = stmts };
 }
 
-fn parseStmt(self: *@This()) !okc.Stmt {
-    return self.either(.{
-        parseUnreachableStmt,
-        parseBreakStmt,
-        parseRetStmt,
-        parseDeclareStmt,
-        parseIfStmt,
-        parseForStmt,
-        parseWhileStmt,
-        parseIgnoreStmt,
-        parseExprStmt,
-    }) catch |err| {
-        try self.fail("<Stmt>");
-        return err;
-    };
-}
-
-fn parseUnreachableStmt(self: *@This()) !okc.Stmt {
+pub fn parseUnreachableStmt(self: *@This()) !okc.Stmt {
     const location = self.getLocation();
     try self.expect(.unre, .quiet);
     try self.expect(.semi, .loud);
@@ -402,7 +369,7 @@ fn parseUnreachableStmt(self: *@This()) !okc.Stmt {
     };
 }
 
-fn parseBreakStmt(self: *@This()) !okc.Stmt {
+pub fn parseBreakStmt(self: *@This()) !okc.Stmt {
     const location = self.getLocation();
     try self.expect(.brek, .quiet);
     try self.expect(.semi, .loud);
@@ -434,7 +401,7 @@ fn parseOpAssignBinOp(self: *@This()) !okc.Expr.Binary.Kind {
     return res;
 }
 
-fn parseIgnoreStmt(self: *@This()) !okc.Stmt {
+pub fn parseIgnoreStmt(self: *@This()) !okc.Stmt {
     const location = self.getLocation();
     try self.expect(.wild, .quiet);
     try self.expect(.equ, .loud);
@@ -448,7 +415,7 @@ fn parseIgnoreStmt(self: *@This()) !okc.Stmt {
     };
 }
 
-fn parseForStmt(self: *@This()) !okc.Stmt {
+pub fn parseForStmt(self: *@This()) !okc.Stmt {
     const location = self.getLocation();
     try self.expect(.whi, .quiet);
     try self.expect(.parl, .loud);
@@ -487,14 +454,14 @@ fn parseRangeEnd(self: *@This()) !okc.Expr {
     return self.parseExpr(.loud);
 }
 
-fn parseWhileStmt(self: *@This()) !okc.Stmt {
+pub fn parseWhileStmt(self: *@This()) !okc.Stmt {
     const location = self.getLocation();
     try self.expect(.whi, .quiet);
     const branch = try self.parseBranch();
     return .{ .location = location, .kind = .{ .whi = .{ .branch = branch } } };
 }
 
-fn parseIfStmt(self: *@This()) !okc.Stmt {
+pub fn parseIfStmt(self: *@This()) !okc.Stmt {
     const location = self.getLocation();
     try self.expect(.iff, .quiet);
     const branch = try self.parseBranch();
@@ -544,7 +511,7 @@ fn parseAssignPostfix(self: *@This()) !okc.Expr {
     return self.parseExpr(.loud);
 }
 
-fn parseDeclareStmt(self: *@This()) !okc.Stmt {
+pub fn parseDeclareStmt(self: *@This()) !okc.Stmt {
     const declare = try self.parseDeclare();
     return .{
         .location = self.tmp_location,
@@ -583,7 +550,7 @@ fn parseTypAnnot(self: *@This()) !okc.Typ {
     return typ;
 }
 
-fn parseExprStmt(self: *@This()) !okc.Stmt {
+pub fn parseExprStmt(self: *@This()) !okc.Stmt {
     const expr = try self.parseExpr(.quiet);
     const postfix = try self.parseExprStmtPostfix();
     try self.expect(.semi, .loud);
@@ -633,7 +600,7 @@ fn parseCallPostfix(self: *@This()) !Postfix {
     };
 }
 
-fn parseRetStmt(self: *@This()) !okc.Stmt {
+pub fn parseRetStmt(self: *@This()) !okc.Stmt {
     const location = self.getLocation();
     try self.expect(.ret, .quiet);
     const expr = try self.maybe(parseExpr, .{.loud});
@@ -646,7 +613,7 @@ fn parseRetStmt(self: *@This()) !okc.Stmt {
     };
 }
 
-fn parseExpr(self: *@This(), mode: ParseMode) !okc.Expr {
+pub fn parseExpr(self: *@This(), mode: ParseMode) !okc.Expr {
     return self.parseExprPrior(0, mode);
 }
 
@@ -822,7 +789,7 @@ fn parseFieldPostfix(self: *@This()) !Postfix {
     };
 }
 
-fn getLocation(self: @This()) okc.Location {
+pub fn getLocation(self: @This()) okc.Location {
     return self.tokens[self.cursor].location;
 }
 
@@ -1020,7 +987,7 @@ fn parseIntExpr(self: *@This()) Error!okc.Expr {
     };
 }
 
-fn parseName(self: *@This(), mode: ParseMode) ![]const u8 {
+pub fn parseName(self: *@This(), mode: ParseMode) ![]const u8 {
     return try self.maybe(parseLexeme, .{.name}) orelse {
         if (mode == .loud) {
             try self.fail("<name>");
@@ -1059,7 +1026,7 @@ fn deinit(self: *@This()) void {
     self.* = undefined;
 }
 
-fn expect(self: *@This(), lexeme: @typeInfo(okc.Lexeme).@"union".tag_type.?, mode: ParseMode) !void {
+pub fn expect(self: *@This(), lexeme: @typeInfo(okc.Lexeme).@"union".tag_type.?, mode: ParseMode) !void {
     if (self.tokens[self.cursor].lexeme == lexeme) {
         self.cursor += 1;
     } else {
@@ -1070,7 +1037,7 @@ fn expect(self: *@This(), lexeme: @typeInfo(okc.Lexeme).@"union".tag_type.?, mod
     }
 }
 
-fn fail(self: *@This(), msg: []const u8) !void {
+pub fn fail(self: *@This(), msg: []const u8) !void {
     switch (std.math.order(self.cursor, self.err_cursor)) {
         .lt => {},
         .eq => {

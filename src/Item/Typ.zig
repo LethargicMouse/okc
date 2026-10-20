@@ -4,6 +4,29 @@ const okc = @import("okc");
 
 generics: []const okc.Item.Generic,
 fields: []Field,
+variants: []const []const u8,
+
+pub fn parse(ctx: *okc.Parser) !@This() {
+    try ctx.expect(.typ, .quiet);
+    const location = ctx.getLocation();
+    const name = try ctx.parseName(.loud);
+    const generics = try ctx.maybe(okc.Parser.parseGenerics, .{}) orelse &.{};
+    try ctx.expect(.curl, .loud);
+    const fields = try ctx.sep(okc.Parser.parseFieldDecl, .{});
+    var variants: []const []const u8 = &.{};
+    const prev = ctx.tokens[ctx.cursor - 1].lexeme;
+    if (prev == .comma or prev == .curl) {
+        variants = try ctx.sep(okc.Parser.parseName, .{.quiet});
+    }
+    try ctx.expect(.curr, .quiet);
+    ctx.tmp_location = location;
+    ctx.tmp_name = name;
+    return .{
+        .generics = generics,
+        .fields = fields,
+        .variants = variants,
+    };
+}
 
 pub fn reg(self: @This(), ctx: okc.Item.Check) !Info {
     try ctx.checkGenericsRedeclare(self.generics);

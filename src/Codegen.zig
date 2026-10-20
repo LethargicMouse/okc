@@ -230,6 +230,7 @@ fn genParam(self: *@This(), typ: okc.Typ) !okc.Val.Typed {
 
 fn genStmt(self: *@This(), stmt: okc.Stmt) Error!void {
     switch (stmt.kind) {
+        .swi => unreachable,
         .for_range => |forr| try self.genForRange(forr),
         .forr => |forr| try self.genFor(forr),
         .op_assign => |op_assign| try self.genOpAssign(op_assign),
