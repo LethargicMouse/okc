@@ -8,6 +8,10 @@ pub fn init() @This() {
     return .{};
 }
 
+pub fn noConstruct(self: *@This(), location: okc.Location, typ: okc.Typ.Name) void {
+    self.fail(location, "cannot construct type `{f}` like that", .{typ});
+}
+
 pub fn noMethod(self: *@This(), location: okc.Location, name: []const u8, typ: okc.Typ) void {
     self.fail(location, "no method `{s}` in type `{f}`", .{ name, typ });
 }
@@ -68,10 +72,6 @@ pub fn noField(
     typ: okc.Typ,
 ) void {
     self.fail(location, "type `{f}` has no field named `{s}`", .{ typ, field });
-}
-
-pub fn notStruct(self: *@This(), location: okc.Location, typ: okc.Typ) void {
-    self.fail(location, "type `{f}` is not a struct", .{typ});
 }
 
 pub fn cannotInfer(self: *@This(), typ: okc.Typ, location: okc.Location) void {

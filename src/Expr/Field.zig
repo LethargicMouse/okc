@@ -24,17 +24,23 @@ pub fn check(
     if (norm == .slice) {
         return norm.slice.checkField(info.mutable, self.name, location, ctx.failer);
     }
-    const name = norm.getStructName(self.expr.location, ctx.failer) orelse return err;
+    if (norm == .err) {
+        return err;
+    }
+    const name = norm.getName() orelse {
+        ctx.failer.noField(location, self.name, norm);
+        return err;
+    };
     const item = ctx.items.get(name.name) orelse {
-        ctx.failer.notStruct(self.expr.location, norm);
+        ctx.failer.noField(location, self.name, norm);
         return err;
     };
     const struc = if (item.kind == .struc) item.kind.struc else {
-        ctx.failer.notStruct(self.expr.location, norm);
+        ctx.failer.noField(location, self.name, norm);
         return err;
     };
     const fiel = struc.fields.getPtr(self.name) orelse {
-        ctx.failer.noField(location, self.name, .{ .name = name });
+        ctx.failer.noField(location, self.name, norm);
         return err;
     };
     fiel.used = true;

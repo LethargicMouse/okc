@@ -134,7 +134,7 @@ fn parseTypItem(self: *@This()) !okc.Item {
 pub fn parseGenerics(self: *@This()) ![]const okc.Item.Generic {
     try self.expect(.les, .quiet);
     const res = try self.sep(parseGeneric, .{});
-    try self.expect(.mor, .quiet);
+    try self.expect(.mor, .loud);
     return res;
 }
 
@@ -177,7 +177,7 @@ fn parseHeader(self: *@This(), mode: ParseMode) !okc.Item.Fun.Header {
     const generics = try self.maybe(parseGenerics, .{}) orelse &.{};
     try self.expect(.parl, .loud);
     const params = try self.sep(parseParam, .{});
-    try self.expect(.parr, .quiet);
+    try self.expect(.parr, .loud);
     const ret_typ = try self.parseTyp();
     return .{
         .generics = generics,
@@ -192,7 +192,7 @@ pub fn sep(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, arg
     if (try self.maybe(parse, args)) |first| {
         try vec.append(self.gpa, first);
         while (true) {
-            try self.maybe(expect, .{ .comma, .loud }) orelse break;
+            try self.maybe(expect, .{ .comma, .quiet }) orelse break;
             if (try self.maybe(parse, args)) |item| {
                 try vec.append(self.gpa, item);
             } else break;
@@ -232,7 +232,7 @@ fn parseFunTyp(self: *@This()) Error!okc.Typ {
     try self.expect(.fun, .quiet);
     try self.expect(.parl, .loud);
     const params = try self.sep(parseTyp, .{});
-    try self.expect(.parr, .quiet);
+    try self.expect(.parr, .loud);
     const ret_typ = try self.parseTyp();
     const ptr = try okc.Typ.memo.box(ret_typ, self.arena);
     return .{ .fun = .{
@@ -261,7 +261,7 @@ fn parseGenericTyp(self: *@This()) Error!okc.Typ {
     const name = try self.parseName(.quiet);
     try self.expect(.les, .quiet);
     const generics = try self.sep(parseTyp, .{});
-    try self.expect(.mor, .quiet);
+    try self.expect(.mor, .loud);
     return .{ .loc_name = .{
         .bare = .{
             .name = name,
@@ -593,7 +593,7 @@ fn parseCallPostfix(self: *@This()) !Postfix {
     try self.expect(.parl, .quiet);
     const args = try self.sep(parseExpr, .{.loud});
     const location = self.getLocation();
-    try self.expect(.parr, .quiet);
+    try self.expect(.parr, .loud);
     return .{
         .location = location,
         .kind = .{ .call = args },
@@ -839,7 +839,7 @@ fn parseArrayExpr(self: *@This()) Error!okc.Expr {
     try self.expect(.bral, .quiet);
     const exprs = try self.sep(parseExpr, .{.loud});
     const end = self.getLocation();
-    try self.expect(.brar, .quiet);
+    try self.expect(.brar, .loud);
     return .{
         .location = start.combine(end),
         .kind = .{ .array = .{
@@ -908,7 +908,7 @@ fn parseStructExpr(self: *@This()) Error!okc.Expr {
 fn parseStructExprBody(self: *@This()) ![]okc.Expr.Struct.Field {
     try self.expect(.curl, .quiet);
     const fields = try self.sep(parseNewField, .{});
-    try self.expect(.curr, .quiet);
+    try self.expect(.curr, .loud);
     return fields;
 }
 

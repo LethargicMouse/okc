@@ -47,22 +47,6 @@ pub const Typ = union(enum) {
         };
     }
 
-    pub fn getStructName(norm: Typ, location: okc.Location, failer: *okc.Failer) ?Typ.Name {
-        switch (norm) {
-            .err => return null,
-            .name => |name| return name,
-            .loc_name => |located| return located.bare,
-            .slice, .array, .any, .lazy, .int => {
-                std.log.err("getTypName: {f}", .{norm});
-                unreachable;
-            },
-            .fun, .prime, .ptr, .typ => {
-                failer.notStruct(location, norm);
-                return null;
-            },
-        }
-    }
-
     pub fn solve(self: @This(), arena: std.mem.Allocator) error{OutOfMemory}!@This() {
         if (self == .lazy) {
             return self.lazy.typ.solve(arena);

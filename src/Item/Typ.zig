@@ -18,7 +18,7 @@ pub fn parse(ctx: *okc.Parser) !@This() {
     if (prev == .comma or prev == .curl) {
         variants = try ctx.sep(okc.Parser.parseName, .{.quiet});
     }
-    try ctx.expect(.curr, .quiet);
+    try ctx.expect(.curr, .loud);
     ctx.tmp_location = location;
     ctx.tmp_name = name;
     return .{

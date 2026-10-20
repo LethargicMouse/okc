@@ -11,11 +11,11 @@ pub fn getStruct(self: @This(), typ: okc.Typ.Name, location: okc.Location, ctx: 
         if (ctx.modules.get(typ.name).?.items.get(typ.name)) |item| {
             return item.getStruct(typ, location, ctx);
         } else {
-            ctx.failer.notStruct(location, .{ .name = typ });
+            ctx.failer.noConstruct(location, typ);
             return null;
         }
     } else {
-        ctx.failer.notStruct(location, .{ .name = typ });
+        ctx.failer.noConstruct(location, typ);
         return null;
     }
 }
