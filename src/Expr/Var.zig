@@ -46,7 +46,7 @@ pub fn check(
             self.fun_meta = @as(okc.Expr.FunMeta, undefined);
             return self.fun_meta.?.fillFromHeader(ctx.gpa, ctx.arena, header.*);
         },
-        .struc, .typ, .module => {
+        .typ, .alias, .module => {
             return .{
                 .typ = .typ,
                 .mutable = false,

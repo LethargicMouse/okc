@@ -137,11 +137,11 @@ pub const Located = struct {
                 ctx.failer.fail(self.location, "item `{s}` is not a type", .{self.bare.name});
                 return error.BadType;
             },
-            .typ => |typ| {
+            .alias => |alias| {
                 item.used = true;
-                return typ;
+                return alias.typ;
             },
-            .struc => |struc| {
+            .typ => |struc| {
                 item.used = true;
                 std.log.debug("item {s} used", .{name});
                 if (struc.generics.len != self.bare.generics.len) {

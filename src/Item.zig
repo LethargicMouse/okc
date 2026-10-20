@@ -15,9 +15,9 @@ location: okc.Location,
 
 pub fn reg(self: *@This(), ctx: Check) !void {
     const kind: okc.Item.Info.Kind = switch (self.kind) {
-        .typ_alias => |alias| .{ .typ = alias.typ },
+        .typ_alias => |alias| .{ .alias = alias },
         .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
-        .typ => |struc| .{ .struc = try struc.reg(ctx) },
+        .typ => |struc| .{ .typ = try struc.reg(ctx) },
         .fun => |*fun| .{ .fun = &fun.header },
         .constant => |*constt| .{ .vari = try constt.reg(ctx) },
         .use => .{ .module = try .load(self.name, self.location, ctx.loadCtx()) },

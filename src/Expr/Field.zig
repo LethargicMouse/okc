@@ -35,7 +35,7 @@ pub fn check(
         ctx.failer.noField(location, self.name, norm);
         return err;
     };
-    const struc = if (item.kind == .struc) item.kind.struc else {
+    const struc = if (item.kind == .typ) item.kind.typ else {
         ctx.failer.noField(location, self.name, norm);
         return err;
     };
