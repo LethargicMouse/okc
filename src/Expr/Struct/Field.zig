@@ -9,7 +9,7 @@ location: okc.Location,
 pub fn check(
     self: *@This(),
     struc_typ: okc.Typ,
-    decl_fields: std.StringHashMap(okc.Item.Struct.Field.Info),
+    decl_fields: std.StringHashMap(okc.Item.Typ.Field.Info),
     resolve_map: std.StringHashMap(okc.Typ),
     ctx: okc.Expr.Check,
 ) !void {

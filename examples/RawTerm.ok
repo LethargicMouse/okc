@@ -1,4 +1,4 @@
-struct Termios {
+type Termios {
     _iflag: u32,
     oflag: u32,
     _cflag: u32,

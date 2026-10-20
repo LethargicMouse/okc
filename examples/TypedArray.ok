@@ -1,6 +1,6 @@
 extern fn puts(s: &u8) void;
 
-struct number {
+type number {
     name: []u8,
 }
 

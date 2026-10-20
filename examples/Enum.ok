@@ -1,10 +1,16 @@
+type Color {
+    red,
+    yellow,
+    green,
+}
+
 fn main() i32 {
-    let color: Color = .green;
+    let color: Color = Color.green;
     switch (color) {
-        .red, .yellow {
+        Color.red, Color.yellow {
             put_str("wait\n");
         }
-        .green {
+        Color.green {
             putStr("go\n");
         }
     }

@@ -1,6 +1,6 @@
 extern fn printf(fmt: &u8, n: i32) void;
 
-struct Array<t> {
+type Array<t> {
     buffer: [256]t,
     len: u64,
 }

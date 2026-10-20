@@ -157,7 +157,6 @@ const verbal_list = [_]LexPair{
     .{ .str = "break", .lexeme = .brek },
     .{ .str = "true", .lexeme = .tru },
     .{ .str = "undefined", .lexeme = .undef },
-    .{ .str = "struct", .lexeme = .struc },
     .{ .str = "mut", .lexeme = .mut },
     .{ .str = "_", .lexeme = .wild },
     .{ .str = "else", .lexeme = .els },

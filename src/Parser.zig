@@ -56,7 +56,7 @@ fn parseModule(self: *@This()) !okc.Module {
 fn parseItem(self: *@This()) Error!okc.Item {
     return self.either(.{
         parseFunItem,
-        parseStructItem,
+        parseTypItem,
         parseExtFunItem,
         parseConstantItem,
         parseTypAliasItem,
@@ -122,17 +122,17 @@ fn parseFunItem(self: *@This()) !okc.Item {
     };
 }
 
-fn parseStructItem(self: *@This()) !okc.Item {
-    const struc = try self.parseStruct();
+fn parseTypItem(self: *@This()) !okc.Item {
+    const typ = try self.parseTypDecl();
     return .{
         .name = self.tmp_name,
         .location = self.tmp_location,
-        .kind = .{ .struc = struc },
+        .kind = .{ .typ = typ },
     };
 }
 
-fn parseStruct(self: *@This()) !okc.Item.Struct {
-    try self.expect(.struc, .quiet);
+fn parseTypDecl(self: *@This()) !okc.Item.Typ {
+    try self.expect(.typ, .quiet);
     const location = self.getLocation();
     const name = try self.parseName(.loud);
     const generics = try self.maybe(parseGenerics, .{}) orelse &.{};
@@ -163,7 +163,7 @@ fn parseGeneric(self: *@This()) !okc.Item.Generic {
     };
 }
 
-fn parseFieldDecl(self: *@This()) !okc.Item.Struct.Field {
+fn parseFieldDecl(self: *@This()) !okc.Item.Typ.Field {
     const location = self.getLocation();
     const name = try self.parseName(.loud);
     try self.expect(.colon, .loud);

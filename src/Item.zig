@@ -7,7 +7,7 @@ pub const Const = @import("Item/Const.zig");
 pub const Fun = @import("Item/Fun.zig");
 pub const Generic = @import("Item/Generic.zig");
 pub const Info = @import("Item/Info.zig");
-pub const Struct = @import("Item/Struct.zig");
+pub const Typ = @import("Item/Typ.zig");
 
 name: []const u8,
 kind: Kind,
@@ -17,7 +17,7 @@ pub fn reg(self: *@This(), ctx: Check) !void {
     const kind: okc.Item.Info.Kind = switch (self.kind) {
         .typ_alias => |alias| .{ .typ = alias.typ },
         .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
-        .struc => |struc| .{ .struc = try struc.reg(ctx) },
+        .typ => |struc| .{ .struc = try struc.reg(ctx) },
         .fun => |*fun| .{ .fun = &fun.header },
         .constant => |*constt| .{ .vari = try constt.reg(ctx) },
         .use => .{ .module = try .load(self.name, self.location, ctx.loadCtx()) },
@@ -41,7 +41,7 @@ pub fn reg(self: *@This(), ctx: Check) !void {
 
 pub fn check(self: @This(), ctx: Check) error{OutOfMemory}!void {
     switch (self.kind) {
-        .typ_alias, .constant, .struc, .ext_fun, .use => {},
+        .typ_alias, .constant, .typ, .ext_fun, .use => {},
         .fun => |fun| try fun.check(self.location, ctx),
     }
 }
@@ -50,16 +50,16 @@ pub const Kind = union(enum) {
     constant: Const,
     ext_fun: okc.Item.Fun.Extern,
     fun: Fun,
-    struc: Struct,
+    typ: Typ,
     typ_alias: TypAlias,
     use,
 
-    pub fn getStruct(self: @This(), name: []const u8, ctx: *okc.Codegen) !Struct {
+    pub fn getStruct(self: @This(), name: []const u8, ctx: *okc.Codegen) !Typ {
         switch (self) {
-            .struc => |struc| return struc,
+            .typ => |struc| return struc,
             .use => {
                 const module = try ctx.getModule(name);
-                return module.items.get("Self").?.struc;
+                return module.items.get("Self").?.typ;
             },
             else => unreachable,
         }

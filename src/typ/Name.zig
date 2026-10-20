@@ -24,9 +24,9 @@ pub fn genStruct(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFail
         ctx.buffer.?.deinit(ctx.gpa);
         ctx.buffer = buffer;
     }
-    var fields: std.StringHashMap(okc.Item.Struct.Field.GenInfo) = .init(ctx.gpa);
+    var fields: std.StringHashMap(okc.Item.Typ.Field.GenInfo) = .init(ctx.gpa);
     errdefer fields.deinit();
-    var default_fields_vec: std.ArrayList(okc.Item.Struct.Field.DefaultedGenInfo) = .empty;
+    var default_fields_vec: std.ArrayList(okc.Item.Typ.Field.DefaultedGenInfo) = .empty;
     errdefer default_fields_vec.deinit(ctx.gpa);
     try ctx.buffer.?.print(ctx.gpa, "\n%\"{f}\" = type {{", .{self});
     const struc = try ctx.module.items.get(self.name).?.getStruct(self.name, ctx);

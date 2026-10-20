@@ -11,7 +11,7 @@ buffer: ?std.ArrayList(u8) = null,
 extra_buffer: std.ArrayList(u8) = .empty,
 module: *okc.Module.GenInfo,
 consts: std.StringHashMap(okc.Typ),
-structs: okc.HashMap(okc.Typ.Name, okc.Item.Struct.GenInfo),
+structs: okc.HashMap(okc.Typ.Name, okc.Item.Typ.GenInfo),
 vars: std.StringHashMap(okc.Val.Ref),
 loop_ends: std.ArrayList(u32) = .empty,
 fun_queue: std.ArrayList(FunReq) = .empty,
@@ -90,7 +90,7 @@ fn genFunNamed(self: *@This(), req: FunReq) !void {
             return;
         },
         .fun => |fun| fun,
-        .constant, .struc => unreachable,
+        .constant, .typ => unreachable,
     };
     const was = try self.generated.getOrPut(req.name);
     if (was.found_existing) {
