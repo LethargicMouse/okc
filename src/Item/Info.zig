@@ -25,7 +25,7 @@ pub fn checkUsage(self: @This(), name: []const u8, failer: *okc.Failer) void {
         switch (self.kind) {
             .fun, .alias, .module => {},
             .vari => |vari| vari.checkUsage(self.location, failer),
-            .typ => |struc| struc.checkUsage(failer),
+            .typ => |typ| typ.checkUsage(failer),
         }
     } else {
         failer.unused(self.location, name);

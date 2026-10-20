@@ -17,7 +17,7 @@ pub fn reg(self: *@This(), ctx: Check) !void {
     const kind: okc.Item.Info.Kind = switch (self.kind) {
         .typ_alias => |alias| .{ .alias = alias },
         .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
-        .typ => |struc| .{ .typ = try struc.reg(ctx) },
+        .typ => |typ| .{ .typ = try typ.makeInfo(ctx) },
         .fun => |*fun| .{ .fun = &fun.header },
         .constant => |*constt| .{ .vari = try constt.reg(ctx) },
         .use => .{ .module = try .load(self.name, self.location, ctx.loadCtx()) },
@@ -54,9 +54,9 @@ pub const Kind = union(enum) {
     typ_alias: TypAlias,
     use,
 
-    pub fn getStruct(self: @This(), name: []const u8, ctx: *okc.Codegen) !Typ {
+    pub fn getTypDecl(self: @This(), name: []const u8, ctx: *okc.Codegen) !Typ {
         switch (self) {
-            .typ => |struc| return struc,
+            .typ => |typ| return typ,
             .use => {
                 const module = try ctx.getModule(name);
                 return module.items.get("Self").?.typ;

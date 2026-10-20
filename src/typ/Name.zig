@@ -29,16 +29,16 @@ pub fn genStruct(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFail
     var default_fields_vec: std.ArrayList(okc.Item.Typ.Field.DefaultedGenInfo) = .empty;
     errdefer default_fields_vec.deinit(ctx.gpa);
     try ctx.buffer.?.print(ctx.gpa, "\n%\"{f}\" = type {{", .{self});
-    const struc = try ctx.module.items.get(self.name).?.getStruct(self.name, ctx);
+    const decl = try ctx.module.items.get(self.name).?.getTypDecl(self.name, ctx);
     var resolve_map: std.StringHashMap(okc.Typ) = .init(ctx.gpa);
     defer resolve_map.deinit();
-    for (struc.generics, self.generics) |generic, typ| {
+    for (decl.generics, self.generics) |generic, typ| {
         try resolve_map.put(generic.name, typ);
     }
     var struct_layout = okc.Layout{ .size = 0, .alig = 1 };
-    const field_typs = try ctx.gpa.alloc(okc.Typ, struc.fields.len);
+    const field_typs = try ctx.gpa.alloc(okc.Typ, decl.fields.len);
     defer ctx.gpa.free(field_typs);
-    for (field_typs, struc.fields, 0..) |*typ, field, i| {
+    for (field_typs, decl.fields, 0..) |*typ, field, i| {
         typ.* = try field.typ.resolve(resolve_map, ctx.arena);
         const layout = try ctx.getLayout(typ.*);
         struct_layout.add(layout);
@@ -141,14 +141,14 @@ pub const Located = struct {
                 item.used = true;
                 return alias.typ;
             },
-            .typ => |struc| {
+            .typ => |typ| {
                 item.used = true;
                 std.log.debug("item {s} used", .{name});
-                if (struc.generics.len != self.bare.generics.len) {
+                if (typ.generics.len != self.bare.generics.len) {
                     ctx.failer.fail(
                         self.location,
                         "expected {} generics\n        found {}",
-                        .{ struc.generics.len, self.bare.generics.len },
+                        .{ typ.generics.len, self.bare.generics.len },
                     );
                 }
                 if (std.mem.eql(u8, self.bare.name, "Self")) {

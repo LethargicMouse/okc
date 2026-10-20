@@ -28,7 +28,7 @@ pub fn parse(ctx: *okc.Parser) !@This() {
     };
 }
 
-pub fn reg(self: @This(), ctx: okc.Item.Check) !Info {
+pub fn makeInfo(self: @This(), ctx: okc.Item.Check) !Info {
     try ctx.checkGenericsRedeclare(self.generics);
     var res = @This().Info{
         .generics = self.generics,
