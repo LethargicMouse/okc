@@ -188,3 +188,7 @@ test "TypeAlias.ok" {
 test "Method.ok" {
     try testFile("Method", "katze says six\nkatze says seven\n");
 }
+
+test "Enum.ok" {
+    try testFile("Enum", "go\n");
+}
