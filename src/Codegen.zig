@@ -328,7 +328,7 @@ fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     const ival_ = try iref.loadTypVal(self.loadCtx());
     const len = try self.genField(.{
         .expr = forr.expr,
-        .name = "len",
+        .vari = .{ .name = "len" },
     });
     const less = try self.genBinary(.les, ival.typ, ival_.bare, len.bare);
     // if cond, body, end
@@ -588,13 +588,13 @@ fn genFieldRef(self: *@This(), field: okc.Expr.Field) !okc.Val.Ref {
         };
     }
     if (vari.inner_typ == .array) {
-        std.debug.assert(std.mem.eql(u8, field.name, "len"));
+        std.debug.assert(std.mem.eql(u8, field.vari.name, "len"));
         return self.toStack(.{
             .typ = .{ .prime = .u64 },
             .bare = .{ .int = vari.inner_typ.array.len },
         });
     }
-    const info = vari.inner_typ.getFieldGenInfo(field.name, self.structs);
+    const info = vari.inner_typ.getFieldGenInfo(field.vari.name, self.structs);
     const tmp = try self.genGEPIB(vari, .int(info.index));
     return .{
         .inner_typ = info.typ,

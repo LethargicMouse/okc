@@ -8,12 +8,12 @@ pub fn init() @This() {
     return .{};
 }
 
-pub fn noConstruct(self: *@This(), location: okc.Location, typ: okc.Typ.Name) void {
-    self.fail(location, "cannot construct type `{f}` like that", .{typ});
+pub fn notCompound(self: *@This(), location: okc.Location, typ: okc.Typ.Name) void {
+    self.fail(location, "`{f}` is not a compound type", .{typ});
 }
 
-pub fn noMethod(self: *@This(), location: okc.Location, name: []const u8, typ: okc.Typ) void {
-    self.fail(location, "no method `{s}` in type `{f}`", .{ name, typ });
+pub fn noMember(self: *@This(), location: okc.Location, name: []const u8, typ: okc.Typ) void {
+    self.fail(location, "no member `{s}` in type `{f}`", .{ name, typ });
 }
 
 pub fn ensureNoErrors(self: @This()) error{Handled}!void {

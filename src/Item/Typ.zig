@@ -4,7 +4,7 @@ const okc = @import("okc");
 
 generics: []const okc.Item.Generic,
 fields: []Field,
-variants: []const []const u8,
+variants: []const Variant,
 
 pub fn parse(ctx: *okc.Parser) !@This() {
     try ctx.expect(.typ, .quiet);
@@ -13,10 +13,10 @@ pub fn parse(ctx: *okc.Parser) !@This() {
     const generics = try ctx.maybe(okc.Parser.parseGenerics, .{}) orelse &.{};
     try ctx.expect(.curl, .loud);
     const fields = try ctx.sep(okc.Parser.parseFieldDecl, .{});
-    var variants: []const []const u8 = &.{};
+    var variants: []const okc.Item.Typ.Variant = &.{};
     const prev = ctx.tokens[ctx.cursor - 1].lexeme;
     if (prev == .comma or prev == .curl) {
-        variants = try ctx.sep(okc.Parser.parseName, .{.quiet});
+        variants = try ctx.sep(okc.Item.Typ.Variant.parse, .{});
     }
     try ctx.expect(.curr, .loud);
     ctx.tmp_location = location;
@@ -30,9 +30,10 @@ pub fn parse(ctx: *okc.Parser) !@This() {
 
 pub fn makeInfo(self: @This(), ctx: okc.Item.Check) !Info {
     try ctx.checkGenericsRedeclare(self.generics);
-    var res = @This().Info{
+    var res = Info{
         .generics = self.generics,
         .fields = .init(ctx.gpa),
+        .variants = .init(ctx.gpa),
     };
     for (self.fields) |*field| {
         var defaulted = false;
@@ -51,6 +52,13 @@ pub fn makeInfo(self: @This(), ctx: okc.Item.Check) !Info {
             .defaulted = defaulted,
             .used = field.name[0] == '_',
         });
+    }
+    for (self.variants) |variant| {
+        if (res.variants.get(variant.name)) |prev| {
+            ctx.failer.alreadyDeclared(variant.location, variant.name, prev.location);
+            continue;
+        }
+        try res.variants.put(variant.name, .{ .location = variant.location });
     }
     return res;
 }
@@ -82,6 +90,7 @@ pub const Field = struct {
 pub const Info = struct {
     generics: []const okc.Item.Generic,
     fields: std.StringHashMap(Field.Info),
+    variants: std.StringHashMap(Variant.Info),
 
     pub fn checkUsage(self: @This(), failer: *okc.Failer) void {
         var iter = self.fields.iterator();
@@ -102,4 +111,23 @@ pub const GenInfo = struct {
     fields: std.StringHashMap(Field.GenInfo),
     default_fields: []const Field.DefaultedGenInfo,
     layout: okc.Layout,
+};
+
+pub const Variant = struct {
+    name: []const u8,
+    location: okc.Location,
+
+    pub fn parse(ctx: *okc.Parser) !@This() {
+        const location = ctx.getLocation();
+        const name = try ctx.parseName(.quiet);
+        return .{
+            .name = name,
+            .location = location,
+        };
+    }
+
+    pub const Info = struct {
+        used: bool = false,
+        location: okc.Location,
+    };
 };

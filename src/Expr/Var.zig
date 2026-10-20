@@ -5,6 +5,11 @@ const okc = @import("okc");
 name: []const u8,
 fun_meta: ?okc.Expr.FunMeta = null,
 
+pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !@This() {
+    const name = try ctx.parseName(mode);
+    return .{ .name = name };
+}
+
 pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
     if (self.fun_meta) |fun_meta| {
         return ctx.toStack(try ctx.genFunPtr(self.name, fun_meta));

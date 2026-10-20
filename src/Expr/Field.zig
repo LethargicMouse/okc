@@ -3,7 +3,7 @@ const std = @import("std");
 const okc = @import("okc");
 
 expr: okc.Expr,
-name: []const u8,
+vari: okc.Expr.Var,
 
 pub fn check(
     self: *@This(),
@@ -22,25 +22,43 @@ pub fn check(
         norm = norm.ptr.typ.normalise();
     }
     if (norm == .slice) {
-        return norm.slice.checkField(info.mutable, self.name, location, ctx.failer);
+        return norm.slice.checkField(info.mutable, self.vari.name, location, ctx.failer);
     }
     if (norm == .err) {
         return err;
     }
+    if (norm == .typ) {
+        const name = self.expr.kind.vari.name;
+        const item = ctx.items.get(name).?;
+        const decl = item.getTypDecl(.{ .name = name }, self.expr.location, ctx) orelse return err;
+        if (decl.variants.getPtr(self.vari.name)) |variant| {
+            variant.used = true;
+            return .{
+                .typ = .{ .name = .{ .name = name } },
+                .mutable = false,
+            };
+        } else {
+            const inner_ctx = ctx.inside(.{ .name = .{ .name = name } }) orelse {
+                ctx.failer.noMember(location, self.vari.name, norm);
+                return err;
+            };
+            return self.vari.check(location, if (hint_mutable) .mutable else .constant, inner_ctx);
+        }
+    }
     const name = norm.getName() orelse {
-        ctx.failer.noField(location, self.name, norm);
+        ctx.failer.noField(location, self.vari.name, norm);
         return err;
     };
     const item = ctx.items.get(name.name) orelse {
-        ctx.failer.noField(location, self.name, norm);
+        ctx.failer.noField(location, self.vari.name, norm);
         return err;
     };
     const struc = if (item.kind == .typ) item.kind.typ else {
-        ctx.failer.noField(location, self.name, norm);
+        ctx.failer.noField(location, self.vari.name, norm);
         return err;
     };
-    const fiel = struc.fields.getPtr(self.name) orelse {
-        ctx.failer.noField(location, self.name, norm);
+    const fiel = struc.fields.getPtr(self.vari.name) orelse {
+        ctx.failer.noField(location, self.vari.name, norm);
         return err;
     };
     fiel.used = true;

@@ -170,7 +170,7 @@ fn parseExtFun(self: *@This()) !okc.Item.Fun.Extern {
     };
 }
 
-fn parseHeader(self: *@This(), mode: ParseMode) !okc.Item.Fun.Header {
+fn parseHeader(self: *@This(), mode: Mode) !okc.Item.Fun.Header {
     try self.expect(.fun, mode);
     self.tmp_location = self.getLocation();
     self.tmp_name = try self.parseName(.loud);
@@ -613,11 +613,11 @@ pub fn parseRetStmt(self: *@This()) !okc.Stmt {
     };
 }
 
-pub fn parseExpr(self: *@This(), mode: ParseMode) !okc.Expr {
+pub fn parseExpr(self: *@This(), mode: Mode) !okc.Expr {
     return self.parseExprPrior(0, mode);
 }
 
-fn parseExprPrior(self: *@This(), prior: u8, mode: ParseMode) Error!okc.Expr {
+fn parseExprPrior(self: *@This(), prior: u8, mode: Mode) Error!okc.Expr {
     var res = try self.parseExprPosted(mode);
     while (try self.parseBinPostfix(prior)) |bin_postfix| {
         const binary = try self.arena.create(okc.Expr.Binary);
@@ -660,7 +660,7 @@ fn parseBinOp(self: *@This(), prior: u8) ?okc.Expr.Binary.Kind {
     return res;
 }
 
-fn parseExprPosted(self: *@This(), mode: ParseMode) Error!okc.Expr {
+fn parseExprPosted(self: *@This(), mode: Mode) Error!okc.Expr {
     var res = try self.parseExprAtom(mode);
     while (try self.maybe(parsePostfix, .{})) |postfix| {
         switch (postfix.kind) {
@@ -692,7 +692,7 @@ fn parseExprPosted(self: *@This(), mode: ParseMode) Error!okc.Expr {
                 const field = try self.arena.create(okc.Expr.Field);
                 field.* = .{
                     .expr = res,
-                    .name = name,
+                    .vari = name,
                 };
                 res = .{
                     .location = res.location.combine(postfix.location),
@@ -782,10 +782,10 @@ fn parseElemPostfix(self: *@This()) !Postfix {
 fn parseFieldPostfix(self: *@This()) !Postfix {
     try self.expect(.dot, .quiet);
     const location = self.getLocation();
-    const name = try self.parseName(.loud);
+    const vari: okc.Expr.Var = try .parse(self, .loud);
     return .{
         .location = location,
-        .kind = .{ .field = name },
+        .kind = .{ .field = vari },
     };
 }
 
@@ -793,7 +793,7 @@ pub fn getLocation(self: @This()) okc.Location {
     return self.tokens[self.cursor].location;
 }
 
-fn parseExprAtom(self: *@This(), mode: ParseMode) Error!okc.Expr {
+fn parseExprAtom(self: *@This(), mode: Mode) Error!okc.Expr {
     return self.either(.{
         parseAtExpr,
         parseParExpr,
@@ -926,10 +926,10 @@ fn parseNewField(self: *@This()) !okc.Expr.Struct.Field {
 
 fn parseVarExpr(self: *@This()) Error!okc.Expr {
     const location = self.getLocation();
-    const name = try self.parseName(.quiet);
+    const vari: okc.Expr.Var = try .parse(self, .quiet);
     return .{
         .location = location,
-        .kind = .{ .vari = .{ .name = name } },
+        .kind = .{ .vari = vari },
     };
 }
 
@@ -987,7 +987,7 @@ fn parseIntExpr(self: *@This()) Error!okc.Expr {
     };
 }
 
-pub fn parseName(self: *@This(), mode: ParseMode) ![]const u8 {
+pub fn parseName(self: *@This(), mode: Mode) ![]const u8 {
     return try self.maybe(parseLexeme, .{.name}) orelse {
         if (mode == .loud) {
             try self.fail("<name>");
@@ -1026,7 +1026,7 @@ fn deinit(self: *@This()) void {
     self.* = undefined;
 }
 
-pub fn expect(self: *@This(), lexeme: @typeInfo(okc.Lexeme).@"union".tag_type.?, mode: ParseMode) !void {
+pub fn expect(self: *@This(), lexeme: @typeInfo(okc.Lexeme).@"union".tag_type.?, mode: Mode) !void {
     if (self.tokens[self.cursor].lexeme == lexeme) {
         self.cursor += 1;
     } else {
@@ -1076,7 +1076,7 @@ const Postfix = struct {
     const Kind = union(enum) {
         call: []okc.Expr,
         elem: okc.Expr,
-        field: []const u8,
+        field: okc.Expr.Var,
         method: Method,
         subslice: Subslice,
     };
@@ -1108,7 +1108,7 @@ const ErrMsgsPrinter = struct {
     }
 };
 
-const ParseMode = enum {
+pub const Mode = enum {
     loud,
     quiet,
 };

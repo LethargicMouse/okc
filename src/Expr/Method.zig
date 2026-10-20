@@ -39,7 +39,7 @@ pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info 
         };
     }
     const inner_ctx = ctx.inside(caller.typ) orelse {
-        ctx.failer.noMethod(self.name_location, self.vari.name, caller.typ);
+        ctx.failer.noMember(self.name_location, self.vari.name, caller.typ);
         for (self.args) |*expr| {
             _ = try expr.check(.{}, ctx);
         }

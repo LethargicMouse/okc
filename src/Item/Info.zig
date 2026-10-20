@@ -4,18 +4,23 @@ kind: Kind,
 location: okc.Location,
 used: bool = false,
 
-pub fn getStruct(self: @This(), typ: okc.Typ.Name, location: okc.Location, ctx: okc.Expr.Check) ?okc.Item.Typ.Info {
+pub fn getTypDecl(
+    self: @This(),
+    typ: okc.Typ.Name,
+    location: okc.Location,
+    ctx: okc.Expr.Check,
+) ?okc.Item.Typ.Info {
     if (self.kind == .typ) {
         return self.kind.typ;
     } else if (self.kind == .module) {
         if (ctx.modules.get(typ.name).?.items.get(typ.name)) |item| {
-            return item.getStruct(typ, location, ctx);
+            return item.getTypDecl(typ, location, ctx);
         } else {
-            ctx.failer.noConstruct(location, typ);
+            ctx.failer.notCompound(location, typ);
             return null;
         }
     } else {
-        ctx.failer.noConstruct(location, typ);
+        ctx.failer.notCompound(location, typ);
         return null;
     }
 }
