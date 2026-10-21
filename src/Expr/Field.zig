@@ -29,7 +29,8 @@ pub fn check(
     }
     if (norm == .typ) {
         const name = self.expr.kind.vari.name;
-        const item = ctx.items.get(name).?;
+        const item = ctx.items.getPtr(name).?;
+        item.used = true;
         const decl = item.getTypDecl(.{ .name = name }, self.expr.location, ctx) orelse return err;
         if (decl.variants.getPtr(self.vari.name)) |variant| {
             variant.used = true;

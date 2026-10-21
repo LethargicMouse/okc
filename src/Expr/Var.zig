@@ -3,7 +3,7 @@ const std = @import("std");
 const okc = @import("okc");
 
 name: []const u8,
-fun_meta: ?okc.Expr.FunMeta = null,
+kind: Kind = .simple,
 
 pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !@This() {
     const name = try ctx.parseName(mode);
@@ -11,24 +11,29 @@ pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !@This() {
 }
 
 pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
-    if (self.fun_meta) |fun_meta| {
-        return ctx.toStack(try ctx.genFunPtr(self.name, fun_meta));
+    switch (self.kind) {
+        .fun => |fun| return ctx.toStack(try ctx.genFunPtr(self.name, fun)),
+        .simple => {
+            std.log.debug("var ref `{s}`", .{self.name});
+            return ctx.vars.get(self.name) orelse {
+                try okc.Item.Const.genNamed(self.name, ctx);
+                return .{
+                    .inner_typ = ctx.consts.get(self.name).?,
+                    .val = .{ .global = .{ .name = self.name } },
+                };
+            };
+        },
     }
-    return ctx.vars.get(self.name) orelse {
-        try ctx.genConst(self.name);
-        return .{
-            .inner_typ = ctx.consts.get(self.name).?,
-            .val = .{ .global = .{ .name = self.name } },
-        };
-    };
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
-    if (self.fun_meta) |fun_meta| {
-        return ctx.genFunPtr(self.name, fun_meta);
+    switch (self.kind) {
+        .fun => |fun| return ctx.genFunPtr(self.name, fun),
+        .simple => {
+            const ref = try self.genRef(ctx);
+            return ref.loadTypVal(ctx.loadCtx());
+        },
     }
-    const ref = try self.genRef(ctx);
-    return ref.loadTypVal(ctx.loadCtx());
 }
 
 pub fn check(
@@ -48,8 +53,8 @@ pub fn check(
     switch (item.kind) {
         .fun => |header| {
             item.used = true;
-            self.fun_meta = @as(okc.Expr.FunMeta, undefined);
-            return self.fun_meta.?.fillFromHeader(ctx.gpa, ctx.arena, header.*);
+            self.kind = .{ .fun = undefined };
+            return self.kind.fun.fillFromHeader(ctx.gpa, ctx.arena, header.*);
         },
         .typ, .alias, .module => {
             return .{
@@ -75,3 +80,8 @@ pub fn check(
         },
     }
 }
+
+pub const Kind = union(enum) {
+    fun: okc.Expr.FunMeta,
+    simple,
+};

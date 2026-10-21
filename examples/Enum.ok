@@ -1,3 +1,5 @@
+extern fn write(fd: i32, ptr: &u8, len: u64) void;
+
 type Color {
     red,
     yellow,
@@ -11,8 +13,12 @@ fn main() i32 {
             put_str("wait\n");
         }
         Color.green => {
-            putStr("go\n");
+            put_str("go\n");
         }
     }
     return 0;
+}
+
+fn put_str(s: []u8) void {
+    write(1, s.ptr, s.len);
 }

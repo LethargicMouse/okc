@@ -4,8 +4,15 @@ expr: okc.Expr,
 branches: []const Branch,
 
 pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
-    const expr = self.expr.check(.{}, ctx.exprCheckCtx());
-    unreachable;
+    _ = try self.expr.check(.{}, ctx.exprCheckCtx());
+    var res: okc.ControlFlow = .ret;
+    for (self.branches) |branch| {
+        const control_flow = try branch.body.check(ctx);
+        if (@backingInt(control_flow) < @backingInt(res)) {
+            res = control_flow;
+        }
+    }
+    return res;
 }
 
 pub fn parseStmt(ctx: *okc.Parser) !okc.Stmt {

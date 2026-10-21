@@ -858,30 +858,6 @@ pub fn genFunPtr(self: *@This(), fun_name: []const u8, fun_meta: okc.Expr.FunMet
     };
 }
 
-pub fn genConst(self: *@This(), name: []const u8) !void {
-    const was = try self.generated.getOrPut(.{ .name = name });
-    if (was.found_existing) {
-        return;
-    }
-    std.log.debug("gen const `{s}`", .{name});
-    const expr = self.module.items.get(name).?.constant.declare.expr;
-    const buffer = self.buffer.?;
-    self.buffer = .empty;
-    defer {
-        if (self.buffer) |*buf| {
-            buf.deinit(self.gpa);
-        }
-        self.buffer = buffer;
-    }
-    try self.print("\n@{s} = private unnamed_addr constant ", .{name});
-    const typ = try expr.genConst(self);
-    try self.consts.put(name, typ);
-    var written = self.buffer.?;
-    self.buffer = null;
-    defer written.deinit(self.gpa);
-    try self.print("{s}", .{written.items});
-}
-
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
     if (self.buffer) |*buffer| {
         try buffer.print(self.gpa, fmt, args);

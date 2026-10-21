@@ -9,7 +9,7 @@ caller: okc.Typ.Name = .{ .name = "<unknown>" },
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const old = ctx.module;
     ctx.module = try ctx.getModule(self.caller.name);
-    const callee = try ctx.genFunPtr(self.vari.name, self.vari.fun_meta.?);
+    const callee = try ctx.genFunPtr(self.vari.name, self.vari.kind.fun);
     ctx.module = old;
     const first = if (self.args.len != callee.typ.fun.params.len)
         try self.expr.gen(ctx)
