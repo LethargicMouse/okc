@@ -12,6 +12,7 @@ pub const FunMeta = @import("Expr/FunMeta.zig");
 pub const Info = @import("Expr/Info.zig");
 pub const Int = @import("Expr/Int.zig");
 pub const Kind = @import("Expr/kind.zig").Kind;
+pub const Member = @import("Expr/Member.zig");
 pub const Method = @import("Expr/Method.zig");
 pub const Neg = @import("Expr/Neg.zig");
 pub const Notb = @import("Expr/Notb.zig");
@@ -27,8 +28,36 @@ pub const Var = @import("Expr/Var.zig");
 location: okc.Location,
 kind: Kind,
 
+pub fn parseAtom(
+    ctx: *okc.Parser,
+    mode: okc.Parser.Mode,
+) error{ ParseFailed, OutOfMemory }!okc.Expr {
+    return ctx.either(.{
+        okc.Parser.parseAtExpr,
+        Member.parseExpr,
+        okc.Parser.parseParExpr,
+        okc.Parser.parseArrayExpr,
+        okc.Parser.parseUnaryExpr,
+        okc.Parser.parseInferStructExpr,
+        okc.Parser.parseStructExpr,
+        okc.Parser.parseIntExpr,
+        okc.Parser.parseStrExpr,
+        okc.Parser.parseCharExpr,
+        okc.Parser.parseVarExpr,
+        okc.Parser.parseUndefinedExpr,
+        okc.Parser.parseTrueExpr,
+        okc.Parser.parseFalseExpr,
+    }) catch |err| {
+        if (mode == .loud) {
+            try ctx.fail("<expr>");
+        }
+        return err;
+    };
+}
+
 pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!okc.Val.Ref {
     switch (self.kind) {
+        .member => unreachable,
         .vari => |vari| return vari.genRef(ctx),
         .field => |field| return field.genRef(ctx),
         .elem => |elem| return ctx.genElemExprRef(elem.*),
@@ -58,6 +87,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory 
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!okc.Val.Typed {
     switch (self.kind) {
+        .member => unreachable,
         .method => |method| return method.gen(ctx),
         .deref => |deref| return ctx.genDeref(deref.expr),
         .neg => |neg| return ctx.genNeg(neg.expr),
@@ -107,6 +137,7 @@ pub fn genConstField(self: @This(), index: usize, ctx: *okc.Codegen) !okc.Typ {
 
 fn checkComptime(self: @This(), failer: *okc.Failer) void {
     switch (self.kind) {
+        .member => unreachable,
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
         .call, .method => failer.fail(self.location, "cannot evaluate at compile time", .{}),
         .deref => |deref| deref.expr.checkComptime(failer),
@@ -147,6 +178,7 @@ pub fn checkConst(self: *@This(), hint: okc.Expr.Hint, ctx: Check) !okc.Typ {
 
 pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}!okc.Expr.Info {
     switch (self.kind) {
+        .member => unreachable,
         .method => |method| return method.check(hint.typ, ctx),
         .deref => |deref| return deref.check(self.location, ctx),
         .neg => |neg| return neg.check(ctx),
