@@ -192,3 +192,7 @@ test "Method.ok" {
 test "Enum.ok" {
     try testFile("Enum", "go\n");
 }
+
+test "EnumInfer.ok" {
+    try testFile("EnumInfer", "go\n");
+}

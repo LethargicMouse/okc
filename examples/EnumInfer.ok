@@ -1,0 +1,24 @@
+extern fn write(fd: i32, ptr: &u8, len: u64) void;
+
+type Color {
+    red,
+    yellow,
+    green,
+}
+
+fn main() i32 {
+    let color: Color = .green;
+    switch (color) {
+        .red, .yellow => {
+            put_str("wait\n");
+        }
+        .green => {
+            put_str("go\n");
+        }
+    }
+    return 0;
+}
+
+fn put_str(s: []u8) void {
+    write(1, s.ptr, s.len);
+}
