@@ -38,21 +38,21 @@ pub fn parse(ctx: *okc.Parser) !@This() {
 }
 
 pub fn check(self: *@This(), ctx: *Check) error{OutOfMemory}!okc.ControlFlow {
-    switch (self.kind) {
+    return switch (self.kind) {
         .swi => unreachable,
-        .for_range => |*forr| return forr.check(ctx),
-        .forr => |*forr| return forr.check(ctx),
-        .unre => return .ret,
-        .brek => return brek.check(self.location, ctx.*),
-        .ret => |*ret| return ret.check(self.location, ctx.ret_typ, ctx.exprCheck()),
-        .expr => |*expr| return Expr.check(expr, ctx.exprCheck()),
-        .declare => |*named| return named.check(self.location, ctx),
-        .op_assign => |*op_assign| return op_assign.check(ctx.exprCheck()),
-        .assign => |*assign| return assign.check(ctx.exprCheck()),
-        .iff => |*iff| return iff.check(ctx),
-        .whi => |*whi| return whi.check(ctx),
-        .ignore => |*ignore| return ignore.check(self.location, ctx.exprCheck()),
-    }
+        .for_range => |*forr| forr.check(ctx),
+        .forr => |*forr| forr.check(ctx),
+        .unre => .ret,
+        .brek => brek.check(self.location, ctx.*),
+        .ret => |*ret| ret.check(self.location, ctx.ret_typ, ctx.exprCheck()),
+        .expr => |*expr| Expr.check(expr, ctx.exprCheck()),
+        .declare => |*named| named.check(self.location, ctx),
+        .op_assign => |*op_assign| op_assign.check(ctx.exprCheck()),
+        .assign => |*assign| assign.check(ctx.exprCheck()),
+        .iff => |*iff| iff.check(ctx),
+        .whi => |*whi| whi.check(ctx),
+        .ignore => |*ignore| ignore.check(self.location, ctx.exprCheck()),
+    };
 }
 
 pub const Kind = union(enum) {
