@@ -1,7 +1,7 @@
 pub const Lexeme = union(enum) {
     amp,
     arrow,
-    att,
+    bad_builtin,
     bral,
     brar,
     brek,
@@ -20,6 +20,7 @@ pub const Lexeme = union(enum) {
     fals,
     forr,
     fun,
+    hash,
     iff,
     int: u64,
     int_too_big,
@@ -39,6 +40,7 @@ pub const Lexeme = union(enum) {
     rem,
     ret,
     semi,
+    sizeof,
     slash,
     star,
     str: []const u8,
@@ -56,6 +58,8 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: @typeInfo(Lexeme).@"union".tag_type.?) []const u8 {
         return switch (lexeme) {
+            .hash => "`#`",
+            .bad_builtin => "#<unknown builtin>",
             .arrow => "`=>`",
             .swi => "`switch`",
             .use => "`use`",
@@ -66,7 +70,7 @@ pub const Lexeme = union(enum) {
             .int_too_big => "<int too big>",
             .unclosed_char => "<unclosed char>",
             .invalid_char => "<invalid char>",
-            .att => "`@`",
+            .sizeof => "`sizeof`",
             .moreq => "`>=`",
             .mor => "`>`",
             .unre => "`unreachable`",

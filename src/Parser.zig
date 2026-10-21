@@ -593,7 +593,9 @@ fn parseCallPostfix(self: *@This()) !Postfix {
     try self.expect(.parl, .quiet);
     const args = try self.sep(parseExpr, .{.loud});
     const location = self.getLocation();
-    try self.expect(.parr, .loud);
+    const prev = self.tokens[self.cursor - 1].lexeme;
+    const endmode: Mode = if (prev == .comma or prev == .parl) .quiet else .loud;
+    try self.expect(.parr, endmode);
     return .{
         .location = location,
         .kind = .{ .call = args },
@@ -793,21 +795,17 @@ pub fn getLocation(self: @This()) okc.Location {
     return self.tokens[self.cursor].location;
 }
 
-pub fn parseAtExpr(self: *@This()) Error!okc.Expr {
+pub fn parseSizeofExpr(self: *@This()) Error!okc.Expr {
     const start = self.getLocation();
-    try self.expect(.att, .quiet);
-    const name = try self.parseName(.loud);
-    if (std.mem.eql(u8, name, "sizeof")) {
-        try self.expect(.les, .loud);
-        const typ = try self.parseTyp();
-        const end = self.getLocation();
-        try self.expect(.mor, .loud);
-        return .{
-            .location = start.combine(end),
-            .kind = .{ .sizeof = typ },
-        };
-    }
-    return error.ParseFailed;
+    try self.expect(.sizeof, .quiet);
+    try self.expect(.les, .loud);
+    const typ = try self.parseTyp();
+    const end = self.getLocation();
+    try self.expect(.mor, .loud);
+    return .{
+        .location = start.combine(end),
+        .kind = .{ .sizeof = typ },
+    };
 }
 
 pub fn parseArrayExpr(self: *@This()) Error!okc.Expr {

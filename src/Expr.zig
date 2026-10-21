@@ -33,7 +33,7 @@ pub fn parseAtom(
     mode: okc.Parser.Mode,
 ) error{ ParseFailed, OutOfMemory }!okc.Expr {
     return ctx.either(.{
-        okc.Parser.parseAtExpr,
+        okc.Parser.parseSizeofExpr,
         Member.parseExpr,
         okc.Parser.parseParExpr,
         okc.Parser.parseArrayExpr,

@@ -75,7 +75,24 @@ fn lexNext(self: *@This()) ?Token {
         self.lexVerbal() orelse
         self.lexInt() orelse
         self.lexStr() orelse
-        self.lexChar();
+        self.lexChar() orelse
+        self.lexBuiltin();
+}
+
+fn lexBuiltin(self: *@This()) ?Token {
+    if (self.getRest()[0] != '#') {
+        return null;
+    }
+    self.cursor += 1;
+    const name = self.takeWhile(isNameChar);
+    self.cursor -= 1;
+    if (name.len == 0 or !isNameFirstChar(name[0])) {
+        return self.makeToken(.hash, 1);
+    }
+    if (std.mem.eql(u8, name, "size")) {
+        return self.makeToken(.sizeof, 5);
+    }
+    return self.makeToken(.bad_builtin, 1 + name.len);
 }
 
 fn lexChar(self: *@This()) ?Token {
@@ -179,7 +196,6 @@ fn lexByList(self: *@This()) ?Token {
 }
 
 const lex_list = [_]LexPair{
-    .{ .str = "@", .lexeme = .att },
     .{ .str = ">=", .lexeme = .moreq },
     .{ .str = ">", .lexeme = .mor },
     .{ .str = "|", .lexeme = .pipe },
