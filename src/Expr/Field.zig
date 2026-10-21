@@ -85,22 +85,12 @@ pub fn check(
     }
     if (norm == .typ) {
         const name = self.expr.kind.vari.name;
-        const item = ctx.items.getPtr(name).?;
-        item.used = true;
-        const decl = item.getTypDecl(.{ .name = name }, self.expr.location, ctx) orelse return err;
-        if (decl.variants.getPtr(self.vari.name)) |variant| {
-            variant.used = true;
-            return .{
-                .typ = .{ .name = .{ .name = name } },
-                .mutable = false,
-            };
-        } else {
-            const inner_ctx = ctx.inside(.{ .name = .{ .name = name } }) orelse {
-                ctx.failer.noMember(location, self.vari.name, norm);
-                return err;
-            };
-            return self.vari.check(location, if (hint_mutable) .mutable else .constant, inner_ctx);
-        }
+        return self.vari.checkIn(
+            .{ .name = name },
+            location,
+            if (hint_mutable) .mutable else .constant,
+            ctx,
+        );
     }
     const name = norm.getName() orelse {
         ctx.failer.noField(location, self.vari.name, norm);

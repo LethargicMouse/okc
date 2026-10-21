@@ -19,7 +19,10 @@ pub fn check(
         return err;
     };
     item.used = true;
-    const decl = item.getTypDecl(self.typ, location, ctx) orelse return err;
+    const decl = item.getTypDecl(self.typ, ctx) orelse {
+        ctx.failer.notCompound(location, self.typ);
+        return err;
+    };
     const generics = try ctx.gpa.alloc(okc.Typ, decl.generics.len);
     defer ctx.gpa.free(generics);
     if (self.typ.generics.len == 0) {

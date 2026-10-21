@@ -7,20 +7,17 @@ used: bool = false,
 pub fn getTypDecl(
     self: @This(),
     typ: okc.Typ.Name,
-    location: okc.Location,
     ctx: okc.Expr.Check,
 ) ?okc.Item.TypDecl.Info {
     if (self.kind == .typ_decl) {
         return self.kind.typ_decl;
     } else if (self.kind == .module) {
         if (ctx.modules.get(typ.name).?.items.get(typ.name)) |item| {
-            return item.getTypDecl(typ, location, ctx);
+            return item.getTypDecl(typ, ctx);
         } else {
-            ctx.failer.notCompound(location, typ);
             return null;
         }
     } else {
-        ctx.failer.notCompound(location, typ);
         return null;
     }
 }

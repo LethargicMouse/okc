@@ -178,7 +178,12 @@ pub fn checkConst(self: *@This(), hint: okc.Expr.Hint, ctx: Check) !okc.Typ {
 
 pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}!okc.Expr.Info {
     switch (self.kind) {
-        .member => unreachable,
+        .member => |*member| return member.check(
+            self.location,
+            hint.typ,
+            if (hint.mutable) .mutable else .constant,
+            ctx,
+        ),
         .method => |method| return method.check(hint.typ, ctx),
         .deref => |deref| return deref.check(self.location, ctx),
         .neg => |neg| return neg.check(ctx),

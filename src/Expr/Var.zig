@@ -44,10 +44,44 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     }
 }
 
+pub fn checkIn(
+    self: *@This(),
+    typ: okc.Typ.Name,
+    location: okc.Location,
+    mutability: Mutability,
+    ctx: okc.Expr.Check,
+) !okc.Expr.Info {
+    const item = ctx.items.getPtr(typ.name).?;
+    item.used = true;
+    const decl = item.getTypDecl(typ, ctx) orelse {
+        ctx.failer.noMember(location, self.name, .{ .name = typ });
+        return .{
+            .typ = .err,
+            .mutable = true,
+        };
+    };
+    if (decl.variants.getPtr(self.name)) |variant| {
+        variant.used = true;
+        return .{
+            .typ = .{ .name = typ },
+            .mutable = false,
+        };
+    } else {
+        const inner_ctx = ctx.inside(.{ .name = typ }) orelse {
+            ctx.failer.noMember(location, self.name, .{ .name = typ });
+            return .{
+                .typ = .err,
+                .mutable = true,
+            };
+        };
+        return self.check(location, mutability, inner_ctx);
+    }
+}
+
 pub fn check(
     self: *@This(),
     location: okc.Location,
-    mutability: enum { constant, mutable },
+    mutability: Mutability,
     ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
     const err = okc.Expr.Info{
@@ -94,4 +128,9 @@ pub const Kind = union(enum) {
     fun: okc.Expr.FunMeta,
     simple,
     typ,
+};
+
+pub const Mutability = enum {
+    constant,
+    mutable,
 };
