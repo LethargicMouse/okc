@@ -1,7 +1,16 @@
 const okc = @import("okc");
 
 vari: okc.Expr.Var,
-typ: okc.Typ = .any,
+typ: okc.Typ.Name = .{ .name = "<unknown>" },
+
+pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+    const ref = try self.genRef(ctx);
+    return ref.loadTypVal(ctx.loadCtx());
+}
+
+pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
+    return self.vari.genRefIn(self.typ, ctx);
+}
 
 pub fn check(
     self: *@This(),
@@ -10,8 +19,9 @@ pub fn check(
     mutability: okc.Expr.Var.Mutability,
     ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
-    if (hint.getName()) |name| {
-        return self.vari.checkIn(name, location, mutability, ctx);
+    if (hint.getName()) |typ| {
+        self.typ = typ;
+        return self.vari.checkIn(typ, location, mutability, ctx);
     }
     ctx.failer.cannotInfer(hint, location);
     return .{ .typ = .err, .mutable = true };

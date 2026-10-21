@@ -86,29 +86,29 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory 
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!okc.Val.Typed {
-    switch (self.kind) {
-        .member => unreachable,
-        .method => |method| return method.gen(ctx),
-        .deref => |deref| return ctx.genDeref(deref.expr),
-        .neg => |neg| return ctx.genNeg(neg.expr),
-        .notb => |notb| return ctx.genNotb(notb.expr),
-        .ptr => |ptr| return ctx.genPtr(ptr.expr),
-        .subslice => |subslice| return ctx.genSubslice(subslice.*),
-        .sizeof => |typ| return ctx.genSizeof(typ),
-        .array => |array| return ctx.genArray(array),
-        .struc => |struc| return ctx.genStructExpr(struc),
-        .int => |int| return okc.Codegen.genInt(int),
-        .str => |str| return ctx.genStr(str.bare),
-        .vari => |vari| return vari.gen(ctx),
-        .char => |char| return okc.Codegen.genChar(char),
-        .bool => |boo| return okc.Codegen.genBool(boo),
-        .undef => |undef| return okc.Codegen.genUndef(undef),
-        .call => |call| return call.gen(ctx),
-        .binary => |binary| return ctx.genBinaryExpr(binary.*),
-        .field => |field| return field.gen(ctx),
-        .named_struc => |struc| return ctx.genNamedStructExpr(struc),
-        .elem => |elem| return ctx.genElem(elem.*),
-    }
+    return switch (self.kind) {
+        .member => |member| member.gen(ctx),
+        .method => |method| method.gen(ctx),
+        .deref => |deref| ctx.genDeref(deref.expr),
+        .neg => |neg| ctx.genNeg(neg.expr),
+        .notb => |notb| ctx.genNotb(notb.expr),
+        .ptr => |ptr| ctx.genPtr(ptr.expr),
+        .subslice => |subslice| ctx.genSubslice(subslice.*),
+        .sizeof => |typ| ctx.genSizeof(typ),
+        .array => |array| ctx.genArray(array),
+        .struc => |struc| ctx.genStructExpr(struc),
+        .int => |int| okc.Codegen.genInt(int),
+        .str => |str| ctx.genStr(str.bare),
+        .vari => |vari| vari.gen(ctx),
+        .char => |char| okc.Codegen.genChar(char),
+        .bool => |boo| okc.Codegen.genBool(boo),
+        .undef => |undef| okc.Codegen.genUndef(undef),
+        .call => |call| call.gen(ctx),
+        .binary => |binary| ctx.genBinaryExpr(binary.*),
+        .field => |field| field.gen(ctx),
+        .named_struc => |struc| ctx.genNamedStructExpr(struc),
+        .elem => |elem| ctx.genElem(elem.*),
+    };
 }
 
 pub fn genConst(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!okc.Typ {
@@ -127,7 +127,17 @@ pub fn genConstField(self: @This(), index: usize, ctx: *okc.Codegen) !okc.Typ {
             // it is enum
             std.debug.assert(index == 0);
             const name = field.expr.kind.vari.name;
-            const variant_index = ctx.typ_decls.get(.{ .name = name }).?.variants.get(field.vari.name).?;
+            const variant_index = ctx.typ_decls.get(.{ .name = name }).?
+                .variants.get(field.vari.name).?;
+            try ctx.buffer.?.print(ctx.gpa, "i32 {}", .{variant_index});
+            return .{ .prime = .i32 };
+        },
+        .member => |member| {
+            // it is again enum
+            std.debug.assert(index == 0);
+            const name = member.typ.name;
+            const variant_index = ctx.typ_decls.get(.{ .name = name }).?
+                .variants.get(member.vari.name).?;
             try ctx.buffer.?.print(ctx.gpa, "i32 {}", .{variant_index});
             return .{ .prime = .i32 };
         },

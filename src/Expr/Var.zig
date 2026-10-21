@@ -10,6 +10,33 @@ pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !@This() {
     return .{ .name = name };
 }
 
+pub fn genRefIn(self: @This(), typ: okc.Typ.Name, ctx: *okc.Codegen) !okc.Val.Ref {
+    const item = ctx.module.items.get(typ.name).?;
+    switch (item) {
+        .typ_decl => |decl| {
+            try decl.gen(typ, ctx);
+            const index = ctx.typ_decls.get(typ).?
+                .variants.get(self.name).?;
+            var res: okc.Val.Typed = .{
+                .typ = .{ .name = typ },
+                .bare = .undef,
+            };
+            try ctx.genIV(&res, .{
+                .typ = .{ .prime = .i32 },
+                .bare = .{ .int = index },
+            }, 0);
+            return ctx.toStack(res);
+        },
+        .use => {
+            const old = ctx.module;
+            defer ctx.module = old;
+            ctx.module = try ctx.getModule(typ.name);
+            return self.genRef(ctx);
+        },
+        else => unreachable,
+    }
+}
+
 pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
     switch (self.kind) {
         .fun => |fun| return ctx.toStack(try ctx.genFunPtr(self.name, fun)),
