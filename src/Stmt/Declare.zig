@@ -14,7 +14,7 @@ pub const Named = struct {
 
     pub fn check(self: *@This(), location: okc.Location, ctx: *okc.Stmt.Check) !okc.ControlFlow {
         const typ_decl = if (self.bare.typ) |typ| typ else .any;
-        const info = try self.bare.expr.check(.{ .typ = typ_decl }, ctx.exprCheck());
+        const info = try self.bare.expr.check(.{ .typ = typ_decl }, ctx.exprCheckCtx());
         const typ = info.typ.unify(typ_decl, self.bare.expr.location, ctx.failer);
         try ctx.declare(self.name, location, .{
             .typ = typ,

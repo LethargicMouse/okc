@@ -39,19 +39,19 @@ pub fn parse(ctx: *okc.Parser) !@This() {
 
 pub fn check(self: *@This(), ctx: *Check) error{OutOfMemory}!okc.ControlFlow {
     return switch (self.kind) {
-        .swi => unreachable,
+        .swi => |*swi| swi.check(ctx),
         .for_range => |*forr| forr.check(ctx),
         .forr => |*forr| forr.check(ctx),
         .unre => .ret,
         .brek => brek.check(self.location, ctx.*),
-        .ret => |*ret| ret.check(self.location, ctx.ret_typ, ctx.exprCheck()),
-        .expr => |*expr| Expr.check(expr, ctx.exprCheck()),
+        .ret => |*ret| ret.check(self.location, ctx.ret_typ, ctx.exprCheckCtx()),
+        .expr => |*expr| Expr.check(expr, ctx.exprCheckCtx()),
         .declare => |*named| named.check(self.location, ctx),
-        .op_assign => |*op_assign| op_assign.check(ctx.exprCheck()),
-        .assign => |*assign| assign.check(ctx.exprCheck()),
+        .op_assign => |*op_assign| op_assign.check(ctx.exprCheckCtx()),
+        .assign => |*assign| assign.check(ctx.exprCheckCtx()),
         .iff => |*iff| iff.check(ctx),
         .whi => |*whi| whi.check(ctx),
-        .ignore => |*ignore| ignore.check(self.location, ctx.exprCheck()),
+        .ignore => |*ignore| ignore.check(self.location, ctx.exprCheckCtx()),
     };
 }
 

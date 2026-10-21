@@ -3,6 +3,11 @@ const okc = @import("okc");
 expr: okc.Expr,
 branches: []const Branch,
 
+pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
+    const expr = self.expr.check(.{}, ctx.exprCheckCtx());
+    unreachable;
+}
+
 pub fn parseStmt(ctx: *okc.Parser) !okc.Stmt {
     const location = ctx.getLocation();
     try ctx.expect(.swi, .quiet);

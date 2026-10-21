@@ -35,7 +35,7 @@ pub fn declare(
     });
 }
 
-pub fn exprCheck(self: @This()) okc.Expr.Check {
+pub fn exprCheckCtx(self: @This()) okc.Expr.Check {
     return .{
         .gpa = self.gpa,
         .arena = self.arena,
