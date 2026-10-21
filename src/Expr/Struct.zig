@@ -11,19 +11,19 @@ typ: okc.Typ = .any,
 
 pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
     if (self.typ.getName()) |name| {
-        try name.genStruct(ctx);
+        try okc.Item.TypDecl.genNamed(name, ctx);
     }
     try ctx.buffer.?.print(ctx.gpa, "{f} {{", .{okc.Typ.LLPrinter{ .typ = self.typ }});
     if (self.fields.len != 0) {
         const fields = try ctx.gpa.alloc(okc.Expr, self.fields.len);
         defer ctx.gpa.free(fields);
         if (self.typ.getName()) |typ_name| {
-            for (ctx.structs.get(typ_name).?.default_fields) |field| {
+            for (ctx.typ_decls.get(typ_name).?.default_fields) |field| {
                 fields[field.index] = field.expr;
             }
         }
         for (self.fields) |field| {
-            const info = self.typ.getFieldGenInfo(field.name, ctx.structs);
+            const info = self.typ.getFieldGenInfo(field.name, ctx.typ_decls);
             fields[info.index] = field.expr;
         }
         try ctx.buffer.?.print(ctx.gpa, "\n  ", .{});

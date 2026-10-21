@@ -30,11 +30,11 @@ pub const Typ = union(enum) {
     pub fn getFieldGenInfo(
         self: @This(),
         name: []const u8,
-        structs: okc.HashMap(Name, okc.Item.Typ.GenInfo),
-    ) okc.Item.Typ.Field.GenInfo {
+        typ_decls: okc.HashMap(Name, okc.Item.TypDecl.GenInfo),
+    ) okc.Item.TypDecl.Field.GenInfo {
         std.log.debug("get field `{s}` of `{f}`", .{ name, self });
         return if (self.getName()) |typ_name|
-            structs.get(typ_name).?.fields.get(name).?
+            typ_decls.get(typ_name).?.fields.get(name).?
         else if (std.mem.eql(u8, name, "ptr")) .{
             .typ = .{ .ptr = .{
                 .typ = self.slice.typ,

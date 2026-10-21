@@ -9,7 +9,7 @@ pub fn getTypDecl(
     typ: okc.Typ.Name,
     location: okc.Location,
     ctx: okc.Expr.Check,
-) ?okc.Item.Typ.Info {
+) ?okc.Item.TypDecl.Info {
     if (self.kind == .typ) {
         return self.kind.typ;
     } else if (self.kind == .module) {
@@ -40,7 +40,7 @@ pub fn checkUsage(self: @This(), name: []const u8, failer: *okc.Failer) void {
 pub const Kind = union(enum) {
     fun: *okc.Item.Fun.Header,
     module: okc.Module.Info,
-    typ: okc.Item.Typ.Info,
+    typ: okc.Item.TypDecl.Info,
     alias: okc.Item.TypAlias,
     vari: okc.Stmt.Declare.Info,
 

@@ -11,7 +11,7 @@ buffer: ?std.ArrayList(u8) = null,
 extra_buffer: std.ArrayList(u8) = .empty,
 module: *okc.Module.GenInfo,
 consts: std.StringHashMap(okc.Typ),
-structs: okc.HashMap(okc.Typ.Name, okc.Item.Typ.GenInfo),
+typ_decls: okc.HashMap(okc.Typ.Name, okc.Item.TypDecl.GenInfo),
 vars: std.StringHashMap(okc.Val.Ref),
 loop_ends: std.ArrayList(u32) = .empty,
 fun_queue: std.ArrayList(FunReq) = .empty,
@@ -42,7 +42,7 @@ pub fn init(
         return error.Handled;
     };
     return .{
-        .structs = .init(ctx.gpa),
+        .typ_decls = .init(ctx.gpa),
         .io = ctx.io,
         .gpa = ctx.gpa,
         .arena = ctx.arena,
@@ -306,7 +306,7 @@ fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
 }
 
 fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
-    const slice = try self.genExprRef(forr.expr);
+    const slice = try forr.expr.genRef(self);
     // int i = 0
     const iref = try self.toStack(.{
         .typ = .{ .prime = .u64 },
@@ -326,10 +326,11 @@ fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     try self.uncond(cond_label, cond_label);
     // cond = i < .len
     const ival_ = try iref.loadTypVal(self.loadCtx());
-    const len = try self.genField(.{
+    const len_field: okc.Expr.Field = .{
         .expr = forr.expr,
         .vari = .{ .name = "len" },
-    });
+    };
+    const len = try len_field.gen(self);
     const less = try self.genBinary(.les, ival.typ, ival_.bare, len.bare);
     // if cond, body, end
     // body:
@@ -404,7 +405,7 @@ fn genBranch(self: *@This(), branch: okc.Stmt.Branch, end_label: u32, kind: okc.
 }
 
 fn genOpAssign(self: *@This(), op_assign: okc.Stmt.OpAssign) !void {
-    const vari = try self.genExprRef(op_assign.left);
+    const vari = try op_assign.left.genRef(self);
     const typ_val = try self.genBinaryExpr(.{
         .left = op_assign.left,
         .kind = op_assign.kind,
@@ -414,7 +415,7 @@ fn genOpAssign(self: *@This(), op_assign: okc.Stmt.OpAssign) !void {
 }
 
 fn genAssign(self: *@This(), assign: okc.Stmt.Assign) !void {
-    const vari = try self.genExprRef(assign.left);
+    const vari = try assign.left.genRef(self);
     const typ_val = try assign.expr.gen(self);
     try self.storeInto(vari.val, typ_val);
 }
@@ -427,7 +428,7 @@ fn genDeclare(self: *@This(), name: []const u8, declare: okc.Stmt.Declare) !void
 
 pub fn toStack(self: *@This(), typ_val: okc.Val.Typed) !okc.Val.Ref {
     if (typ_val.typ.getName()) |name| {
-        try name.genStruct(self);
+        try okc.Item.TypDecl.genNamed(name, self);
     }
     const tmp = self.newTmp();
     try self.genAlloca(tmp, typ_val.typ);
@@ -510,12 +511,12 @@ pub fn getLayout(self: *@This(), typ: okc.Typ) !okc.Layout {
         .fun, .ptr => return .new(8, 8),
         .slice => return .new(16, 8),
         .name => |name| {
-            try name.genStruct(self);
-            return self.structs.get(name).?.layout;
+            try okc.Item.TypDecl.genNamed(name, self);
+            return self.typ_decls.get(name).?.layout;
         },
-        .loc_name => |located| {
-            try located.bare.genStruct(self);
-            return self.structs.get(located.bare).?.layout;
+        .loc_name => |name| {
+            try okc.Item.TypDecl.genNamed(name.bare, self);
+            return self.typ_decls.get(name.bare).?.layout;
         },
         .any, .err, .int, .lazy, .typ => unreachable,
     }
@@ -546,7 +547,7 @@ pub fn genNeg(self: *@This(), expr: okc.Expr) !okc.Val.Typed {
     };
 }
 
-fn genDerefRef(self: *@This(), expr: okc.Expr) !okc.Val.Ref {
+pub fn genDerefRef(self: *@This(), expr: okc.Expr) !okc.Val.Ref {
     const val = try expr.gen(self);
     return .{
         .inner_typ = val.typ.ptr.typ.*,
@@ -570,7 +571,7 @@ pub fn genNotb(self: *@This(), expr: okc.Expr) !okc.Val.Typed {
 }
 
 pub fn genPtr(self: *@This(), expr: okc.Expr) !okc.Val.Typed {
-    const ref = try self.genExprRef(expr);
+    const ref = try expr.genRef(self);
     return ref.toPtrTypVal(self.arena);
 }
 
@@ -578,37 +579,8 @@ pub fn genUndef(undef: okc.Expr.Undef) !okc.Val.Typed {
     return .{ .typ = undef.typ, .bare = .undef };
 }
 
-fn genFieldRef(self: *@This(), field: okc.Expr.Field) !okc.Val.Ref {
-    var vari = try self.genExprRef(field.expr);
-    if (vari.inner_typ == .ptr) {
-        const tmp = try vari.load(self.loadCtx());
-        vari = .{
-            .inner_typ = vari.inner_typ.ptr.typ.*,
-            .val = .{ .tmp = tmp },
-        };
-    }
-    if (vari.inner_typ == .array) {
-        std.debug.assert(std.mem.eql(u8, field.vari.name, "len"));
-        return self.toStack(.{
-            .typ = .{ .prime = .u64 },
-            .bare = .{ .int = vari.inner_typ.array.len },
-        });
-    }
-    const info = vari.inner_typ.getFieldGenInfo(field.vari.name, self.structs);
-    const tmp = try self.genGEPIB(vari, .int(info.index));
-    return .{
-        .inner_typ = info.typ,
-        .val = .{ .tmp = tmp },
-    };
-}
-
-pub fn genField(self: *@This(), field: okc.Expr.Field) !okc.Val.Typed {
-    const ref = try self.genFieldRef(field);
-    return ref.loadTypVal(self.loadCtx());
-}
-
-fn genElemExprRef(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Ref {
-    const ref = try self.genExprRef(elem.expr);
+pub fn genElemExprRef(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Ref {
+    const ref = try elem.expr.genRef(self);
     const index = try elem.index.gen(self);
     return self.genElemRef(ref, index);
 }
@@ -651,7 +623,7 @@ fn genGEP(self: *@This(), typ: okc.Typ, ptr: u32, index: okc.Val.Typed) !u32 {
     return tmp;
 }
 
-fn genGEPIB(self: *@This(), ref: okc.Val.Ref, index: okc.Val.Typed) !u32 {
+pub fn genGEPIB(self: *@This(), ref: okc.Val.Ref, index: okc.Val.Typed) !u32 {
     const tmp = self.newTmp();
     try self.print(
         "\n  %t{} = getelementptr inbounds {f}, ptr {f}, i32 0, {f}",
@@ -666,7 +638,7 @@ pub fn genElem(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Typed {
 }
 
 pub fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !okc.Val.Typed {
-    const ref = try self.genExprRef(subslice.expr);
+    const ref = try subslice.expr.genRef(self);
     const start = try subslice.start.gen(self);
     const end = try subslice.end.gen(self);
     const ptr_ref = try self.genElemRef(ref, start);
@@ -685,35 +657,6 @@ pub fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !okc.Val.Typed {
         .bare = .{ .tmp = len },
     }, 1);
     return res;
-}
-
-fn genExprRef(self: *@This(), expr: okc.Expr) Error!okc.Val.Ref {
-    switch (expr.kind) {
-        .vari => |vari| return vari.genRef(self),
-        .field => |field| return self.genFieldRef(field.*),
-        .elem => |elem| return self.genElemExprRef(elem.*),
-        .deref => |deref| return self.genDerefRef(deref.expr),
-        .subslice,
-        .sizeof,
-        .call,
-        .method,
-        .binary,
-        .named_struc,
-        .int,
-        .str,
-        .char,
-        .undef,
-        .bool,
-        .struc,
-        .array,
-        .ptr,
-        .neg,
-        .notb,
-        => {
-            const typ_val = try expr.gen(self);
-            return self.toStack(typ_val);
-        },
-    }
 }
 
 pub fn genInt(int: okc.Expr.Int) okc.Val.Typed {
@@ -763,21 +706,21 @@ pub fn genStr(self: *@This(), str: []const u8) !okc.Val.Typed {
 
 pub fn genStructExpr(self: *@This(), struc: okc.Expr.Struct) !okc.Val.Typed {
     if (struc.typ.getName()) |name| {
-        try name.genStruct(self);
+        try okc.Item.TypDecl.genNamed(name, self);
     }
     var res = okc.Val.Typed{
         .typ = struc.typ,
         .bare = .undef,
     };
     if (struc.typ.getName()) |typ_name| {
-        for (self.structs.get(typ_name).?.default_fields) |field| {
+        for (self.typ_decls.get(typ_name).?.default_fields) |field| {
             const typ_val = try field.expr.gen(self);
             try self.genIV(&res, typ_val, field.index);
         }
     }
     for (struc.fields) |field| {
         const typ_val = try field.expr.gen(self);
-        const info = struc.typ.getFieldGenInfo(field.name, self.structs);
+        const info = struc.typ.getFieldGenInfo(field.name, self.typ_decls);
         try self.genIV(&res, typ_val, info.index);
     }
     return res;
@@ -892,12 +835,12 @@ pub fn deinit(self: *@This()) void {
         module.*.deinit();
         self.gpa.destroy(module.*);
     }
-    var structs_iter = self.structs.valueIterator();
+    var structs_iter = self.typ_decls.valueIterator();
     while (structs_iter.next()) |info| {
         info.fields.deinit();
         self.gpa.free(info.default_fields);
     }
-    self.structs.deinit();
+    self.typ_decls.deinit();
     self.modules.deinit();
     self.vars.deinit();
     self.file.close(self.io);

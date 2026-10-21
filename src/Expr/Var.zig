@@ -13,6 +13,10 @@ pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !@This() {
 pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
     switch (self.kind) {
         .fun => |fun| return ctx.toStack(try ctx.genFunPtr(self.name, fun)),
+        .typ => return .{
+            .inner_typ = .typ,
+            .val = .undef,
+        },
         .simple => {
             std.log.debug("var ref `{s}`", .{self.name});
             return ctx.vars.get(self.name) orelse {
@@ -29,6 +33,10 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     switch (self.kind) {
         .fun => |fun| return ctx.genFunPtr(self.name, fun),
+        .typ => return .{
+            .typ = .typ,
+            .bare = .undef,
+        },
         .simple => {
             const ref = try self.genRef(ctx);
             return ref.loadTypVal(ctx.loadCtx());
@@ -57,6 +65,7 @@ pub fn check(
             return self.kind.fun.fillFromHeader(ctx.gpa, ctx.arena, header.*);
         },
         .typ, .alias, .module => {
+            self.kind = .typ;
             return .{
                 .typ = .typ,
                 .mutable = false,
@@ -84,4 +93,5 @@ pub fn check(
 pub const Kind = union(enum) {
     fun: okc.Expr.FunMeta,
     simple,
+    typ,
 };

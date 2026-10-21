@@ -123,7 +123,7 @@ fn parseFunItem(self: *@This()) !okc.Item {
 }
 
 fn parseTypItem(self: *@This()) !okc.Item {
-    const typ: okc.Item.Typ = try .parse(self);
+    const typ: okc.Item.TypDecl = try .parse(self);
     return .{
         .name = self.tmp_name,
         .location = self.tmp_location,
@@ -147,7 +147,7 @@ fn parseGeneric(self: *@This()) !okc.Item.Generic {
     };
 }
 
-pub fn parseFieldDecl(self: *@This()) !okc.Item.Typ.Field {
+pub fn parseFieldDecl(self: *@This()) !okc.Item.TypDecl.Field {
     const location = self.getLocation();
     const name = try self.parseName(.loud);
     try self.expect(.colon, .loud);

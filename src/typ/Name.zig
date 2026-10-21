@@ -13,60 +13,6 @@ pub fn getItems(self: @This(), items: std.StringHashMap(okc.Item.Info)) ?std.Str
     }
 }
 
-pub fn genStruct(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!void {
-    const was = try ctx.generated.getOrPut(self);
-    if (was.found_existing) {
-        return;
-    }
-    const buffer = ctx.buffer.?;
-    ctx.buffer = .empty;
-    defer {
-        ctx.buffer.?.deinit(ctx.gpa);
-        ctx.buffer = buffer;
-    }
-    var fields: std.StringHashMap(okc.Item.Typ.Field.GenInfo) = .init(ctx.gpa);
-    errdefer fields.deinit();
-    var default_fields_vec: std.ArrayList(okc.Item.Typ.Field.DefaultedGenInfo) = .empty;
-    errdefer default_fields_vec.deinit(ctx.gpa);
-    try ctx.buffer.?.print(ctx.gpa, "\n%\"{f}\" = type {{", .{self});
-    const decl = try ctx.module.items.get(self.name).?.getTypDecl(self.name, ctx);
-    var resolve_map: std.StringHashMap(okc.Typ) = .init(ctx.gpa);
-    defer resolve_map.deinit();
-    for (decl.generics, self.generics) |generic, typ| {
-        try resolve_map.put(generic.name, typ);
-    }
-    var struct_layout = okc.Layout{ .size = 0, .alig = 1 };
-    const field_typs = try ctx.gpa.alloc(okc.Typ, decl.fields.len);
-    defer ctx.gpa.free(field_typs);
-    for (field_typs, decl.fields, 0..) |*typ, field, i| {
-        typ.* = try field.typ.resolve(resolve_map, ctx.arena);
-        const layout = try ctx.getLayout(typ.*);
-        struct_layout.add(layout);
-        try fields.put(field.name, .{
-            .typ = typ.*,
-            .index = i,
-        });
-        if (field.default) |expr| {
-            try default_fields_vec.append(ctx.gpa, .{
-                .expr = expr,
-                .index = i,
-            });
-        }
-    }
-    if (field_typs.len != 0) {
-        try ctx.buffer.?.print(ctx.gpa, "\n  {f}", .{okc.Typ.LLPrinter{ .typ = field_typs[0] }});
-        for (field_typs[1..]) |typ| {
-            try ctx.buffer.?.print(ctx.gpa, ",\n  {f}", .{okc.Typ.LLPrinter{ .typ = typ }});
-        }
-    }
-    try ctx.writer.interface.print("{s}\n}}", .{ctx.buffer.?.items});
-    try ctx.structs.put(self, .{
-        .fields = fields,
-        .default_fields = try default_fields_vec.toOwnedSlice(ctx.gpa),
-        .layout = struct_layout,
-    });
-}
-
 pub fn updateGenerics(
     self: @This(),
     fun: anytype,

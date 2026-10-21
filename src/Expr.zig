@@ -27,6 +27,35 @@ pub const Var = @import("Expr/Var.zig");
 location: okc.Location,
 kind: Kind,
 
+pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!okc.Val.Ref {
+    switch (self.kind) {
+        .vari => |vari| return vari.genRef(ctx),
+        .field => |field| return field.genRef(ctx),
+        .elem => |elem| return ctx.genElemExprRef(elem.*),
+        .deref => |deref| return ctx.genDerefRef(deref.expr),
+        .subslice,
+        .sizeof,
+        .call,
+        .method,
+        .binary,
+        .named_struc,
+        .int,
+        .str,
+        .char,
+        .undef,
+        .bool,
+        .struc,
+        .array,
+        .ptr,
+        .neg,
+        .notb,
+        => {
+            const typ_val = try self.gen(ctx);
+            return ctx.toStack(typ_val);
+        },
+    }
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!okc.Val.Typed {
     switch (self.kind) {
         .method => |method| return method.gen(ctx),
@@ -46,7 +75,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!o
         .undef => |undef| return okc.Codegen.genUndef(undef),
         .call => |call| return call.gen(ctx),
         .binary => |binary| return ctx.genBinaryExpr(binary.*),
-        .field => |field| return ctx.genField(field.*),
+        .field => |field| return field.gen(ctx),
         .named_struc => |struc| return ctx.genNamedStructExpr(struc),
         .elem => |elem| return ctx.genElem(elem.*),
     }

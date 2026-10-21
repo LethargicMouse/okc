@@ -5,6 +5,57 @@ const okc = @import("okc");
 expr: okc.Expr,
 vari: okc.Expr.Var,
 
+pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
+    var vari = try self.expr.genRef(ctx);
+    if (vari.inner_typ == .typ) {
+        const name = self.expr.kind.vari.name;
+        const item = ctx.module.items.get(name).?;
+        switch (item) {
+            .typ => |typ| {
+                try typ.gen(.{ .name = name }, ctx);
+                const index = ctx.typ_decls.get(.{ .name = name }).?
+                    .variants.get(self.vari.name).?;
+                return ctx.toStack(.{
+                    .typ = .{ .name = .{ .name = name } },
+                    .bare = .{ .int = index },
+                });
+            },
+            .use => {
+                const old = ctx.module;
+                defer ctx.module = old;
+                ctx.module = try ctx.getModule(name);
+                return self.vari.genRef(ctx);
+            },
+            else => unreachable,
+        }
+    }
+    if (vari.inner_typ == .ptr) {
+        const tmp = try vari.load(ctx.loadCtx());
+        vari = .{
+            .inner_typ = vari.inner_typ.ptr.typ.*,
+            .val = .{ .tmp = tmp },
+        };
+    }
+    if (vari.inner_typ == .array) {
+        std.debug.assert(std.mem.eql(u8, self.vari.name, "len"));
+        return ctx.toStack(.{
+            .typ = .{ .prime = .u64 },
+            .bare = .{ .int = vari.inner_typ.array.len },
+        });
+    }
+    const info = vari.inner_typ.getFieldGenInfo(self.vari.name, ctx.typ_decls);
+    const tmp = try ctx.genGEPIB(vari, .int(info.index));
+    return .{
+        .inner_typ = info.typ,
+        .val = .{ .tmp = tmp },
+    };
+}
+
+pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+    const ref = try self.genRef(ctx);
+    return ref.loadTypVal(ctx.loadCtx());
+}
+
 pub fn check(
     self: *@This(),
     location: okc.Location,

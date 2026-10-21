@@ -7,7 +7,7 @@ pub const Const = @import("Item/Const.zig");
 pub const Fun = @import("Item/Fun.zig");
 pub const Generic = @import("Item/Generic.zig");
 pub const Info = @import("Item/Info.zig");
-pub const Typ = @import("Item/Typ.zig");
+pub const TypDecl = @import("Item/TypDecl.zig");
 
 name: []const u8,
 kind: Kind,
@@ -50,11 +50,11 @@ pub const Kind = union(enum) {
     constant: Const,
     ext_fun: okc.Item.Fun.Extern,
     fun: Fun,
-    typ: Typ,
+    typ: TypDecl,
     typ_alias: TypAlias,
     use,
 
-    pub fn getTypDecl(self: @This(), name: []const u8, ctx: *okc.Codegen) !Typ {
+    pub fn getTypDecl(self: @This(), name: []const u8, ctx: *okc.Codegen) !TypDecl {
         switch (self) {
             .typ => |typ| return typ,
             .use => {
