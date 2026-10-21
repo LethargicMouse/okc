@@ -127,7 +127,7 @@ fn parseTypItem(self: *@This()) !okc.Item {
     return .{
         .name = self.tmp_name,
         .location = self.tmp_location,
-        .kind = .{ .typ = typ },
+        .kind = .{ .typ_decl = typ },
     };
 }
 

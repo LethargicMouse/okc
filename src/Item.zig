@@ -17,7 +17,7 @@ pub fn reg(self: *@This(), ctx: Check) !void {
     const kind: okc.Item.Info.Kind = switch (self.kind) {
         .typ_alias => |alias| .{ .alias = alias },
         .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
-        .typ => |typ| .{ .typ = try typ.makeInfo(ctx) },
+        .typ_decl => |typ| .{ .typ_decl = try typ.makeInfo(ctx) },
         .fun => |*fun| .{ .fun = &fun.header },
         .constant => |*constt| .{ .vari = try constt.reg(ctx) },
         .use => .{ .module = try .load(self.name, self.location, ctx.loadCtx()) },
@@ -41,7 +41,7 @@ pub fn reg(self: *@This(), ctx: Check) !void {
 
 pub fn check(self: @This(), ctx: Check) error{OutOfMemory}!void {
     switch (self.kind) {
-        .typ_alias, .constant, .typ, .ext_fun, .use => {},
+        .typ_alias, .constant, .typ_decl, .ext_fun, .use => {},
         .fun => |fun| try fun.check(self.location, ctx),
     }
 }
@@ -50,16 +50,16 @@ pub const Kind = union(enum) {
     constant: Const,
     ext_fun: okc.Item.Fun.Extern,
     fun: Fun,
-    typ: TypDecl,
     typ_alias: TypAlias,
+    typ_decl: TypDecl,
     use,
 
     pub fn getTypDecl(self: @This(), name: []const u8, ctx: *okc.Codegen) !TypDecl {
         switch (self) {
-            .typ => |typ| return typ,
+            .typ_decl => |typ| return typ,
             .use => {
                 const module = try ctx.getModule(name);
-                return module.items.get("Self").?.typ;
+                return module.items.get(name).?.typ_decl;
             },
             else => unreachable,
         }

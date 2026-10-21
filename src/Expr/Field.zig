@@ -11,14 +11,19 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
         const name = self.expr.kind.vari.name;
         const item = ctx.module.items.get(name).?;
         switch (item) {
-            .typ => |typ| {
+            .typ_decl => |typ| {
                 try typ.gen(.{ .name = name }, ctx);
                 const index = ctx.typ_decls.get(.{ .name = name }).?
                     .variants.get(self.vari.name).?;
-                return ctx.toStack(.{
+                var res: okc.Val.Typed = .{
                     .typ = .{ .name = .{ .name = name } },
+                    .bare = .undef,
+                };
+                try ctx.genIV(&res, .{
+                    .typ = .{ .prime = .i32 },
                     .bare = .{ .int = index },
-                });
+                }, 0);
+                return ctx.toStack(res);
             },
             .use => {
                 const old = ctx.module;
@@ -44,7 +49,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
         });
     }
     const info = vari.inner_typ.getFieldGenInfo(self.vari.name, ctx.typ_decls);
-    const tmp = try ctx.genGEPIB(vari, .int(info.index));
+    const tmp = try vari.genGEPIB(.int(info.index), ctx.loadCtx());
     return .{
         .inner_typ = info.typ,
         .val = .{ .tmp = tmp },
@@ -105,7 +110,7 @@ pub fn check(
         ctx.failer.noField(location, self.vari.name, norm);
         return err;
     };
-    const struc = if (item.kind == .typ) item.kind.typ else {
+    const struc = if (item.kind == .typ_decl) item.kind.typ_decl else {
         ctx.failer.noField(location, self.vari.name, norm);
         return err;
     };

@@ -90,7 +90,7 @@ fn genFunNamed(self: *@This(), req: FunReq) !void {
             return;
         },
         .fun => |fun| fun,
-        .constant, .typ => unreachable,
+        .constant, .typ_decl => unreachable,
     };
     const was = try self.generated.getOrPut(req.name);
     if (was.found_existing) {
@@ -343,7 +343,7 @@ fn cond(
     });
 }
 
-fn uncond(self: *@This(), to: u32, next: u32) !void {
+pub fn uncond(self: *@This(), to: u32, next: u32) !void {
     try self.print(
         \\
         \\  br label %l{}
@@ -560,14 +560,14 @@ pub fn genElemExprRef(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Ref {
 fn genElemRef(self: *@This(), from: okc.Val.Ref, index: okc.Val.Typed) !okc.Val.Ref {
     switch (from.inner_typ) {
         .array => {
-            const tmp = try self.genGEPIB(from, index);
+            const tmp = try from.genGEPIB(index, self.loadCtx());
             return .{
                 .inner_typ = from.inner_typ.array.typ.*,
                 .val = .{ .tmp = tmp },
             };
         },
         .slice => |slice| {
-            const ptrptr = try self.genGEPIB(from, .int(0));
+            const ptrptr = try from.genGEPIB(.int(0), self.loadCtx());
             const ptrref: okc.Val.Ref = .{
                 .inner_typ = .{ .ptr = .{
                     .typ = slice.typ,
@@ -591,15 +591,6 @@ fn genGEP(self: *@This(), typ: okc.Typ, ptr: u32, index: okc.Val.Typed) !u32 {
     try self.print(
         "\n  %t{} = getelementptr {f}, ptr %t{}, {f}",
         .{ tmp, okc.Typ.LLPrinter{ .typ = typ }, ptr, index },
-    );
-    return tmp;
-}
-
-pub fn genGEPIB(self: *@This(), ref: okc.Val.Ref, index: okc.Val.Typed) !u32 {
-    const tmp = self.newTmp();
-    try self.print(
-        "\n  %t{} = getelementptr inbounds {f}, ptr {f}, i32 0, {f}",
-        .{ tmp, okc.Typ.LLPrinter{ .typ = ref.inner_typ }, ref.val, index },
     );
     return tmp;
 }
@@ -698,7 +689,7 @@ pub fn genStructExpr(self: *@This(), struc: okc.Expr.Struct) !okc.Val.Typed {
     return res;
 }
 
-fn genIV(self: *@This(), to: *okc.Val.Typed, typ_val: okc.Val.Typed, index: u64) !void {
+pub fn genIV(self: *@This(), to: *okc.Val.Typed, typ_val: okc.Val.Typed, index: u64) !void {
     const tmp = self.newTmp();
     try self.print(
         "\n  %t{} = insertvalue {f}, {f}, {d}",
@@ -799,8 +790,6 @@ pub fn getModule(self: *@This(), name: []const u8) !*okc.Module.GenInfo {
     return new;
 }
 
-const Error = error{ WriteFailed, OutOfMemory };
-
 pub fn deinit(self: *@This()) void {
     var iter = self.modules.valueIterator();
     while (iter.next()) |module| {
@@ -809,8 +798,7 @@ pub fn deinit(self: *@This()) void {
     }
     var structs_iter = self.typ_decls.valueIterator();
     while (structs_iter.next()) |info| {
-        info.fields.deinit();
-        self.gpa.free(info.default_fields);
+        info.deinit(self.gpa);
     }
     self.typ_decls.deinit();
     self.modules.deinit();

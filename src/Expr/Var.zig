@@ -64,7 +64,7 @@ pub fn check(
             self.kind = .{ .fun = undefined };
             return self.kind.fun.fillFromHeader(ctx.gpa, ctx.arena, header.*);
         },
-        .typ, .alias, .module => {
+        .typ_decl, .alias, .module => {
             self.kind = .typ;
             return .{
                 .typ = .typ,

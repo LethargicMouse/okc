@@ -2,6 +2,7 @@ const std = @import("std");
 
 const okc = @import("okc");
 
+pub const GenInfo = @import("TypDecl/GenInfo.zig");
 pub const Info = @import("TypDecl/Info.zig");
 pub const Variant = @import("TypDecl/Variant.zig");
 
@@ -10,7 +11,13 @@ fields: []Field,
 variants: []const Variant,
 
 pub fn genNamed(name_typ: okc.Typ.Name, ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!void {
-    const was = try ctx.generated.getOrPut(name_typ);
+    std.log.debug("gen typ decl `{f}` in mod `{s}`", .{ name_typ, ctx.module.name });
+    const self = try ctx.module.items.get(name_typ.name).?.getTypDecl(name_typ.name, ctx);
+    try self.gen(name_typ, ctx);
+}
+
+pub fn gen(self: @This(), name: okc.Typ.Name, ctx: *okc.Codegen) !void {
+    const was = try ctx.generated.getOrPut(name);
     if (was.found_existing) {
         return;
     }
@@ -20,11 +27,6 @@ pub fn genNamed(name_typ: okc.Typ.Name, ctx: *okc.Codegen) error{ OutOfMemory, W
         ctx.buffer.?.deinit(ctx.gpa);
         ctx.buffer = buffer;
     }
-    const self = try ctx.module.items.get(name_typ.name).?.getTypDecl(name_typ.name, ctx);
-    try self.gen(name_typ, ctx);
-}
-
-pub fn gen(self: @This(), name: okc.Typ.Name, ctx: *okc.Codegen) !void {
     var fields: std.StringHashMap(Field.GenInfo) = .init(ctx.gpa);
     errdefer fields.deinit();
     var variants: std.StringHashMap(usize) = .init(ctx.gpa);
@@ -157,11 +159,4 @@ pub const Field = struct {
         index: usize,
         typ: okc.Typ,
     };
-};
-
-pub const GenInfo = struct {
-    fields: std.StringHashMap(Field.GenInfo),
-    variants: std.StringHashMap(usize),
-    default_fields: []const Field.DefaultedGenInfo,
-    layout: okc.Layout,
 };

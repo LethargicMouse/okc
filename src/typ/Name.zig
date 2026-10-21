@@ -87,7 +87,7 @@ pub const Located = struct {
                 item.used = true;
                 return alias.typ;
             },
-            .typ => |typ| {
+            .typ_decl => |typ| {
                 item.used = true;
                 std.log.debug("item {s} used", .{name});
                 if (typ.generics.len != self.bare.generics.len) {

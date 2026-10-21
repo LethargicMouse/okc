@@ -10,8 +10,8 @@ pub fn getTypDecl(
     location: okc.Location,
     ctx: okc.Expr.Check,
 ) ?okc.Item.TypDecl.Info {
-    if (self.kind == .typ) {
-        return self.kind.typ;
+    if (self.kind == .typ_decl) {
+        return self.kind.typ_decl;
     } else if (self.kind == .module) {
         if (ctx.modules.get(typ.name).?.items.get(typ.name)) |item| {
             return item.getTypDecl(typ, location, ctx);
@@ -30,7 +30,7 @@ pub fn checkUsage(self: @This(), name: []const u8, failer: *okc.Failer) void {
         switch (self.kind) {
             .fun, .alias, .module => {},
             .vari => |vari| vari.checkUsage(self.location, failer),
-            .typ => |typ| typ.checkUsage(failer),
+            .typ_decl => |typ| typ.checkUsage(failer),
         }
     } else {
         failer.unused(self.location, name);
@@ -38,15 +38,15 @@ pub fn checkUsage(self: @This(), name: []const u8, failer: *okc.Failer) void {
 }
 
 pub const Kind = union(enum) {
+    alias: okc.Item.TypAlias,
     fun: *okc.Item.Fun.Header,
     module: okc.Module.Info,
-    typ: okc.Item.TypDecl.Info,
-    alias: okc.Item.TypAlias,
+    typ_decl: okc.Item.TypDecl.Info,
     vari: okc.Stmt.Declare.Info,
 
     pub fn deinit(self: *@This()) void {
         switch (self.*) {
-            .typ => |*struc| struc.deinit(),
+            .typ_decl => |*struc| struc.deinit(),
             .fun, .vari, .alias, .module => {},
         }
         self.* = undefined;

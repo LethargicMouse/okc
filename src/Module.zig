@@ -21,7 +21,8 @@ pub fn makeGenInfo(self: @This(), gpa: std.mem.Allocator, name: []const u8) !*Ge
     const res = try gpa.create(GenInfo);
     res.* = .init(gpa, name);
     for (self.items) |item| {
-        try res.items.put(item.name, item.kind);
+        const item_name = if (std.mem.eql(u8, item.name, "Self")) name else item.name;
+        try res.items.put(item_name, item.kind);
     }
     return res;
 }

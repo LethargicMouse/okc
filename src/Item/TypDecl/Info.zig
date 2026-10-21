@@ -17,5 +17,6 @@ pub fn checkUsage(self: @This(), failer: *okc.Failer) void {
 
 pub fn deinit(self: *@This()) void {
     self.fields.deinit();
+    self.variants.deinit();
     self.* = undefined;
 }

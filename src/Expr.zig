@@ -91,6 +91,20 @@ pub fn genConst(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFaile
     }
 }
 
+pub fn genConstField(self: @This(), index: usize, ctx: *okc.Codegen) !okc.Typ {
+    switch (self.kind) {
+        .field => |field| {
+            // it is enum
+            std.debug.assert(index == 0);
+            const name = field.expr.kind.vari.name;
+            const variant_index = ctx.typ_decls.get(.{ .name = name }).?.variants.get(field.vari.name).?;
+            try ctx.buffer.?.print(ctx.gpa, "i32 {}", .{variant_index});
+            return .{ .prime = .i32 };
+        },
+        else => unreachable,
+    }
+}
+
 fn checkComptime(self: @This(), failer: *okc.Failer) void {
     switch (self.kind) {
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},

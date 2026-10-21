@@ -21,7 +21,7 @@ kind: Kind,
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!void {
     switch (self.kind) {
-        .swi => unreachable,
+        .swi => |swi| try swi.gen(ctx),
         .for_range => |forr| try ctx.genForRange(forr),
         .forr => |forr| try ctx.genFor(forr),
         .op_assign => |op_assign| try ctx.genOpAssign(op_assign),
