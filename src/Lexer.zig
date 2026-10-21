@@ -209,7 +209,6 @@ const lex_list = [_]LexPair{
     .{ .str = "/", .lexeme = .slash },
     .{ .str = "-", .lexeme = .minus },
     .{ .str = "+", .lexeme = .plus },
-    .{ .str = "=>", .lexeme = .arrow },
     .{ .str = "==", .lexeme = .equ2 },
     .{ .str = "=", .lexeme = .equ },
     .{ .str = ",", .lexeme = .comma },

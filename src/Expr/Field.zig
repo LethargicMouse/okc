@@ -9,30 +9,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
     var vari = try self.expr.genRef(ctx);
     if (vari.inner_typ == .typ) {
         const name = self.expr.kind.vari.name;
-        const item = ctx.module.items.get(name).?;
-        switch (item) {
-            .typ_decl => |typ| {
-                try typ.gen(.{ .name = name }, ctx);
-                const index = ctx.typ_decls.get(.{ .name = name }).?
-                    .variants.get(self.vari.name).?;
-                var res: okc.Val.Typed = .{
-                    .typ = .{ .name = .{ .name = name } },
-                    .bare = .undef,
-                };
-                try ctx.genIV(&res, .{
-                    .typ = .{ .prime = .i32 },
-                    .bare = .{ .int = index },
-                }, 0);
-                return ctx.toStack(res);
-            },
-            .use => {
-                const old = ctx.module;
-                defer ctx.module = old;
-                ctx.module = try ctx.getModule(name);
-                return self.vari.genRef(ctx);
-            },
-            else => unreachable,
-        }
+        return try self.vari.genRefIn(.{ .name = name }, ctx);
     }
     if (vari.inner_typ == .ptr) {
         const tmp = try vari.load(ctx.loadCtx());

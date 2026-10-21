@@ -1,6 +1,5 @@
 pub const Lexeme = union(enum) {
     amp,
-    arrow,
     bad_builtin,
     bral,
     brar,
@@ -60,7 +59,6 @@ pub const Lexeme = union(enum) {
         return switch (lexeme) {
             .hash => "`#`",
             .bad_builtin => "#<unknown builtin>",
-            .arrow => "`=>`",
             .swi => "`switch`",
             .use => "`use`",
             .typ => "`type`",
