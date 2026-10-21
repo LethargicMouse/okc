@@ -4,6 +4,12 @@ stmts: []okc.Stmt,
 
 pub const empty = @This(){ .stmts = @constCast(&.{}) };
 
+pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
+    for (self.stmts) |stmt| {
+        try stmt.gen(ctx);
+    }
+}
+
 pub fn checkLoop(self: @This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
     ctx.loops_nested += 1;
     const res = try self.check(ctx);

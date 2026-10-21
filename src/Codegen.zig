@@ -204,9 +204,7 @@ fn genFun(
         const vari = try self.toStack(typ_val);
         try self.vars.put(param.name, vari);
     }
-    for (fun.body.stmts) |stmt| {
-        try self.genStmt(stmt);
-    }
+    try fun.body.gen(self);
     if (fun.header.ret_typ.isVoid()) {
         try self.genRet(.{ .expr = null });
     } else {
@@ -228,44 +226,26 @@ fn genParam(self: *@This(), typ: okc.Typ) !okc.Val.Typed {
     return .{ .typ = typ, .bare = .{ .tmp = tmp } };
 }
 
-fn genStmt(self: *@This(), stmt: okc.Stmt) Error!void {
-    switch (stmt.kind) {
-        .swi => unreachable,
-        .for_range => |forr| try self.genForRange(forr),
-        .forr => |forr| try self.genFor(forr),
-        .op_assign => |op_assign| try self.genOpAssign(op_assign),
-        .unre => try self.genUnreachable(),
-        .ret => |ret| try self.genRet(ret),
-        .expr => |expr| _ = try expr.expr.gen(self),
-        .declare => |named| try self.genDeclare(named.name, named.bare),
-        .assign => |assign| try self.genAssign(assign),
-        .iff => |iff| try self.genIf(iff),
-        .whi => |whi| try self.genWhile(whi),
-        .ignore => |ignore| try self.genIgnore(ignore),
-        .brek => try self.genBreak(),
-    }
-}
-
-fn genUnreachable(self: *@This()) !void {
+pub fn genUnreachable(self: *@This()) !void {
     try self.print("\n  unreachable", .{});
 }
 
-fn genIgnore(self: *@This(), ignore: okc.Stmt.Ignore) !void {
+pub fn genIgnore(self: *@This(), ignore: okc.Stmt.Ignore) !void {
     _ = try ignore.expr.gen(self);
 }
 
-fn genBreak(self: *@This()) !void {
+pub fn genBreak(self: *@This()) !void {
     const label = self.newTmp();
     try self.uncond(self.loop_ends.getLast(), label);
 }
 
-fn genWhile(self: *@This(), whi: okc.Stmt.While) !void {
+pub fn genWhile(self: *@This(), whi: okc.Stmt.While) !void {
     const condition_label = self.newTmp();
     try self.uncond(condition_label, condition_label);
     try self.genBranch(whi.branch, condition_label, .loop);
 }
 
-fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
+pub fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     // int i = start
     try self.genDeclare(forr.vari, .{
         .expr = forr.start,
@@ -297,15 +277,13 @@ fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     const end_label = self.newTmp();
     try self.cond(.{ .tmp = at_end }, body_label, end_label);
     // <body>
-    for (forr.body.stmts) |stmt| {
-        try self.genStmt(stmt);
-    }
+    try forr.body.gen(self);
     // goto start
     // end:
     try self.uncond(start_label, end_label);
 }
 
-fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
+pub fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     const slice = try forr.expr.genRef(self);
     // int i = 0
     const iref = try self.toStack(.{
@@ -341,9 +319,7 @@ fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     const elem = try self.genElemRef(slice, ival_);
     try self.vars.put(forr.vari, elem);
     // <body>
-    for (forr.body.stmts) |stmt| {
-        try self.genStmt(stmt);
-    }
+    try forr.body.gen(self);
     // goto start
     // end:
     try self.uncond(start_label, end_label);
@@ -375,15 +351,13 @@ fn uncond(self: *@This(), to: u32, next: u32) !void {
     , .{ to, next });
 }
 
-fn genIf(self: *@This(), iff: okc.Stmt.IfStmt) !void {
+pub fn genIf(self: *@This(), iff: okc.Stmt.IfStmt) !void {
     const end_label = self.newTmp();
     try self.genBranch(iff.branch, end_label, .simple);
     for (iff.else_ifs) |branch| {
         try self.genBranch(branch, end_label, .simple);
     }
-    for (iff.else_block.stmts) |stmt| {
-        try self.genStmt(stmt);
-    }
+    try iff.else_block.gen(self);
     try self.uncond(end_label, end_label);
 }
 
@@ -395,16 +369,14 @@ fn genBranch(self: *@This(), branch: okc.Stmt.Branch, end_label: u32, kind: okc.
         try self.loop_ends.append(self.gpa, else_label);
     }
     try self.cond(condition.bare, then_label, else_label);
-    for (branch.body.stmts) |stmt| {
-        try self.genStmt(stmt);
-    }
+    try branch.body.gen(self);
     try self.uncond(end_label, else_label);
     if (kind == .loop) {
         _ = self.loop_ends.pop();
     }
 }
 
-fn genOpAssign(self: *@This(), op_assign: okc.Stmt.OpAssign) !void {
+pub fn genOpAssign(self: *@This(), op_assign: okc.Stmt.OpAssign) !void {
     const vari = try op_assign.left.genRef(self);
     const typ_val = try self.genBinaryExpr(.{
         .left = op_assign.left,
@@ -414,13 +386,13 @@ fn genOpAssign(self: *@This(), op_assign: okc.Stmt.OpAssign) !void {
     try self.storeInto(vari.val, typ_val);
 }
 
-fn genAssign(self: *@This(), assign: okc.Stmt.Assign) !void {
+pub fn genAssign(self: *@This(), assign: okc.Stmt.Assign) !void {
     const vari = try assign.left.genRef(self);
     const typ_val = try assign.expr.gen(self);
     try self.storeInto(vari.val, typ_val);
 }
 
-fn genDeclare(self: *@This(), name: []const u8, declare: okc.Stmt.Declare) !void {
+pub fn genDeclare(self: *@This(), name: []const u8, declare: okc.Stmt.Declare) !void {
     const typ_val = try declare.expr.gen(self);
     const vari = try self.toStack(typ_val);
     try self.vars.put(name, vari);
@@ -480,7 +452,7 @@ pub fn newTmp(self: *@This()) u32 {
     return self.counter.next();
 }
 
-fn genRet(self: *@This(), ret: okc.Stmt.Return) !void {
+pub fn genRet(self: *@This(), ret: okc.Stmt.Return) !void {
     if (ret.expr) |expr| {
         const val = try expr.gen(self);
         try self.print("\n  ret {f}", .{val});

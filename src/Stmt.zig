@@ -19,6 +19,24 @@ pub const While = @import("Stmt/While.zig");
 location: okc.Location,
 kind: Kind,
 
+pub fn gen(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!void {
+    switch (self.kind) {
+        .swi => unreachable,
+        .for_range => |forr| try ctx.genForRange(forr),
+        .forr => |forr| try ctx.genFor(forr),
+        .op_assign => |op_assign| try ctx.genOpAssign(op_assign),
+        .unre => try ctx.genUnreachable(),
+        .ret => |ret| try ctx.genRet(ret),
+        .expr => |expr| _ = try expr.expr.gen(ctx),
+        .declare => |named| try ctx.genDeclare(named.name, named.bare),
+        .assign => |assign| try ctx.genAssign(assign),
+        .iff => |iff| try ctx.genIf(iff),
+        .whi => |whi| try ctx.genWhile(whi),
+        .ignore => |ignore| try ctx.genIgnore(ignore),
+        .brek => try ctx.genBreak(),
+    }
+}
+
 pub fn parse(ctx: *okc.Parser) !@This() {
     return ctx.either(.{
         Switch.parseStmt,
