@@ -2,29 +2,31 @@ extern fn exit(code: int) noreturn;
 extern fn printf(fmt: [*]u8, s: [*]u8) void;
 
 fn main() i32 {
-    let ctx.log_level = 123;
-    let ctx.exit_callback = exit;
-    let ctx.pacifism = trure;
-    launch_rockets();
+    launch_rockets() {
+        log_level = 123,
+        exit_callback = exit,
+        pacifism = true,
+    };
 }
 
 enum Log_Level { no_logs, error, warn, info, debug }
 
-fn launch_rockets(ctx.pacifism: bool) void {
+fn launch_rockets() ctx {
+    pacifism: bool,
+} void {
     if (pacifism) {
         log_fatal("can't launch rockets cuz I'm not evil");
     }
     unreachable;
 }
 
-fn log_fatal(
-    msg: str,
-    ctx.log_level: Log_Level,
-    ctx.exit_callback: fn(i32) noreturn
-) noreturn {
-    if (ctx.log_level < .error) {
+fn log_fatal(msg: str) ctx {
+    log_level: Log_Level,
+    exit_callback: fn(i32) noreturn
+} noreturn {
+    if (log_level < .error) {
         return;
     }
     printf("fatal: %s", msg);
-    ctx.exit_callback(1);
+    exit_callback(1);
 }
