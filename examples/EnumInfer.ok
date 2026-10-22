@@ -9,10 +9,10 @@ type Color {
 fn main() i32 {
     let color: Color = .green;
     switch (color) {
-        .red, .yellow {
+        case .red, .yellow {
             put_str("wait\n");
         }
-        .green {
+        case .green {
             put_str("go\n");
         }
     }
