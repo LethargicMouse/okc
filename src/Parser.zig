@@ -315,6 +315,10 @@ fn parseVerbalTyp(self: *@This()) Error!okc.Typ {
 pub fn many(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) {
     var vec = std.ArrayList(ParseRes(parse, args)).empty;
     defer vec.deinit(self.gpa);
+    return self.manyTo(&vec, parse, args);
+}
+
+pub fn manyTo(self: *@This(), vec: anytype, parse: anytype, args: anytype) ![]ParseRes(parse, args) {
     while (try self.maybe(parse, args)) |item| {
         try vec.append(self.gpa, item);
     }
@@ -808,24 +812,7 @@ pub fn parseSizeofExpr(self: *@This()) Error!okc.Expr {
     };
 }
 
-pub fn parseArrayExpr(self: *@This()) Error!okc.Expr {
-    const start = self.getLocation();
-    const mtyp = try self.maybe(parseTypHint, .{});
-    try self.expect(.bral, .quiet);
-    const exprs = try self.sep(parseExpr, .{.loud});
-    const end = self.getLocation();
-    try self.expect(.brar, .loud);
-    return .{
-        .location = start.combine(end),
-        .kind = .{ .array = .{
-            .exprs = exprs,
-            .mtyp = mtyp,
-            .typ = undefined,
-        } },
-    };
-}
-
-fn parseTypHint(self: *@This()) !okc.Typ {
+pub fn parseTypHint(self: *@This()) !okc.Typ {
     try self.expect(.les, .quiet);
     const typ = try self.parseTyp();
     try self.expect(.mor, .loud);

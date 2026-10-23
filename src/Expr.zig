@@ -36,7 +36,7 @@ pub fn parseAtom(
         okc.Parser.parseSizeofExpr,
         Member.parseExpr,
         okc.Parser.parseParExpr,
-        okc.Parser.parseArrayExpr,
+        Array.parseExpr,
         okc.Parser.parseUnaryExpr,
         okc.Parser.parseInferStructExpr,
         okc.Parser.parseStructExpr,
@@ -57,6 +57,7 @@ pub fn parseAtom(
 
 pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!okc.Val.Ref {
     switch (self.kind) {
+        .i_array => unreachable,
         .member => unreachable,
         .vari => |vari| return vari.genRef(ctx),
         .field => |field| return field.genRef(ctx),
@@ -87,6 +88,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory 
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!okc.Val.Typed {
     return switch (self.kind) {
+        .i_array => unreachable,
         .member => |member| member.gen(ctx),
         .method => |method| method.gen(ctx),
         .deref => |deref| ctx.genDeref(deref.expr),
@@ -147,6 +149,7 @@ pub fn genConstField(self: @This(), index: usize, ctx: *okc.Codegen) !okc.Typ {
 
 fn checkComptime(self: @This(), failer: *okc.Failer) void {
     switch (self.kind) {
+        .i_array => unreachable,
         .member => unreachable,
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
         .call, .method => failer.fail(self.location, "cannot evaluate at compile time", .{}),
@@ -188,6 +191,7 @@ pub fn checkConst(self: *@This(), hint: okc.Expr.Hint, ctx: Check) !okc.Typ {
 
 pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}!okc.Expr.Info {
     switch (self.kind) {
+        .i_array => unreachable,
         .member => |*member| return member.check(
             self.location,
             hint.typ,

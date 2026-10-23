@@ -2,7 +2,7 @@ extern fn exit(code: int) noreturn;
 extern fn printf(fmt: [*]u8, s: [*]u8) void;
 
 fn main() i32 {
-    launch_rockets() {
+    launch_rockets() ctx {
         log_level = 123,
         exit_callback = exit,
         pacifism = true,

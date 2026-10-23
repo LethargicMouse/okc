@@ -11,6 +11,7 @@ pub const Kind = union(enum) {
     deref: *okc.Expr.Deref,
     elem: *okc.Expr.Elem,
     field: *okc.Expr.Field,
+    i_array: okc.Expr.Array.Indexed,
     int: okc.Expr.Int,
     member: okc.Expr.Member,
     method: *okc.Expr.Method,

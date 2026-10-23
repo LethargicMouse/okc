@@ -196,3 +196,7 @@ test "Enum.ok" {
 test "EnumInfer.ok" {
     try testFile("EnumInfer", "go\n");
 }
+
+test "EnumArray.ok" {
+    try testFile("EnumArray", "go");
+}
