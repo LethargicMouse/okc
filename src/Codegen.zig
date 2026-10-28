@@ -443,7 +443,7 @@ pub fn genArrayToSlice(self: *@This(), array: okc.Typ.Array, val: okc.Val) !okc.
     }, 0);
     try self.genIV(&res, .{
         .typ = .{ .prime = .u64 },
-        .bare = .{ .int = array.len },
+        .bare = .{ .int = try array.getLen(self) },
     }, 1);
     return res;
 }
@@ -475,8 +475,9 @@ pub fn getLayout(self: *@This(), typ: okc.Typ) !okc.Layout {
         .prime => |prime| return prime.getLayout(),
         .array => |array| {
             const inner = try self.getLayout(array.typ.*);
+            const cnt = try array.getLen(self);
             return .{
-                .size = inner.size * array.len,
+                .size = inner.size * cnt,
                 .alig = inner.alig,
             };
         },

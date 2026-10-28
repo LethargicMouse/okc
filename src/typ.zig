@@ -27,6 +27,20 @@ pub const Typ = union(enum) {
 
     pub var memo: okc.Memo(@This()) = undefined;
 
+    pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!okc.Typ {
+        return ctx.either(.{
+            okc.Parser.parseFunTyp,
+            okc.Parser.parseGenericTyp,
+            okc.Parser.parseVerbalTyp,
+            okc.Parser.parsePtrTyp,
+            Array.parseTyp,
+            okc.Parser.parseSliceTyp,
+        }) catch |err| {
+            try ctx.fail("<type>");
+            return err;
+        };
+    }
+
     pub fn getFieldGenInfo(
         self: @This(),
         name: []const u8,
@@ -307,7 +321,7 @@ pub const Typ = union(enum) {
                 return a;
             },
             .array => |arr| {
-                if (arr.len != b.array.len or
+                if (!arr.index.eql(b.array.index) or
                     (arr.typ != b.array.typ and arr.typ.unifyOrNull(b.array.typ.*, mode) == null))
                 {
                     return null;
@@ -329,7 +343,7 @@ pub const Typ = union(enum) {
                 const new = try @call(.auto, fun, .{array.typ.*} ++ args);
                 return .{ .array = .{
                     .typ = try memo.box(new, arena),
-                    .len = array.len,
+                    .index = array.index,
                 } };
             },
             .fun => |fun_typ| {

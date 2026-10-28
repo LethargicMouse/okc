@@ -22,7 +22,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
         std.debug.assert(std.mem.eql(u8, self.vari.name, "len"));
         return ctx.toStack(.{
             .typ = .{ .prime = .u64 },
-            .bare = .{ .int = vari.inner_typ.array.len },
+            .bare = .{ .int = try vari.inner_typ.array.getLen(ctx) },
         });
     }
     const info = vari.inner_typ.getFieldGenInfo(self.vari.name, ctx.typ_decls);

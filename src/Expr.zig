@@ -190,45 +190,45 @@ pub fn checkConst(self: *@This(), hint: okc.Expr.Hint, ctx: Check) !okc.Typ {
 }
 
 pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}!okc.Expr.Info {
-    switch (self.kind) {
-        .i_array => unreachable,
-        .member => |*member| return member.check(
+    return switch (self.kind) {
+        .i_array => |*array| array.check(hint.typ, self.location, ctx),
+        .member => |*member| member.check(
             self.location,
             hint.typ,
             if (hint.mutable) .mutable else .constant,
             ctx,
         ),
-        .method => |method| return method.check(hint.typ, ctx),
-        .deref => |deref| return deref.check(self.location, ctx),
-        .neg => |neg| return neg.check(ctx),
-        .notb => |notb| return notb.check(ctx),
-        .ptr => |ptr| return ptr.check(hint.typ, ctx),
-        .subslice => |subslice| return subslice.check(self.location, ctx),
-        .sizeof => |typ| return Sizeof.check(typ),
-        .array => |*array| return array.check(hint.typ, ctx),
-        .struc => |*struc| return struc.check(self.location, hint.typ, ctx),
-        .int => |*int| return int.check(),
-        .str => return Str.check(ctx.arena),
-        .vari => |*vari| return vari.check(
+        .method => |method| method.check(hint.typ, ctx),
+        .deref => |deref| deref.check(self.location, ctx),
+        .neg => |neg| neg.check(ctx),
+        .notb => |notb| notb.check(ctx),
+        .ptr => |ptr| ptr.check(hint.typ, ctx),
+        .subslice => |subslice| subslice.check(self.location, ctx),
+        .sizeof => |typ| Sizeof.check(typ),
+        .array => |*array| array.check(hint.typ, ctx),
+        .struc => |*struc| struc.check(self.location, hint.typ, ctx),
+        .int => |*int| int.check(),
+        .str => Str.check(ctx.arena),
+        .vari => |*vari| vari.check(
             self.location,
             if (hint.mutable) .mutable else .constant,
             ctx,
         ),
-        .char => return .{
+        .char => .{
             .typ = .{ .prime = .u8 },
             .mutable = false,
         },
-        .bool => return .{
+        .bool => .{
             .typ = .{ .prime = .bool },
             .mutable = false,
         },
-        .undef => |*undef| return undef.check(hint.typ, ctx.arena),
-        .call => |call| return call.check(hint.typ, ctx),
-        .binary => |binary| return binary.check(ctx),
-        .field => |field| return field.check(self.location, hint.mutable, ctx),
-        .named_struc => |*struc| return struc.check(self.location, ctx),
-        .elem => |elem| return elem.check(self.location, ctx),
-    }
+        .undef => |*undef| undef.check(hint.typ, ctx.arena),
+        .call => |call| call.check(hint.typ, ctx),
+        .binary => |binary| binary.check(ctx),
+        .field => |field| field.check(self.location, hint.mutable, ctx),
+        .named_struc => |*struc| struc.check(self.location, ctx),
+        .elem => |elem| elem.check(self.location, ctx),
+    };
 }
 
 pub const Hint = struct {

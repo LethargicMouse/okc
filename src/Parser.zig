@@ -84,7 +84,7 @@ fn parseTypAliasItem(self: *@This()) !okc.Item {
     const location = self.getLocation();
     const name = try self.parseName(.loud);
     try self.expect(.equ, .loud);
-    const typ = try self.parseTyp();
+    const typ: okc.Typ = try .parse(self);
     try self.expect(.semi, .loud);
     return .{
         .name = name,
@@ -151,7 +151,7 @@ pub fn parseFieldDecl(self: *@This()) !okc.Item.TypDecl.Field {
     const location = self.getLocation();
     const name = try self.parseName(.loud);
     try self.expect(.colon, .loud);
-    const typ = try self.parseTyp();
+    const typ: okc.Typ = try .parse(self);
     const default = try self.maybe(parseAssignPostfix, .{});
     return .{
         .name = name,
@@ -178,7 +178,7 @@ fn parseHeader(self: *@This(), mode: Mode) !okc.Item.Fun.Header {
     try self.expect(.parl, .loud);
     const params = try self.sep(parseParam, .{});
     try self.expect(.parr, .loud);
-    const ret_typ = try self.parseTyp();
+    const ret_typ: okc.Typ = try .parse(self);
     return .{
         .generics = generics,
         .params = params,
@@ -206,7 +206,7 @@ fn parseParam(self: *@This()) !okc.Item.Fun.Header.Param {
     const location = self.getLocation();
     const name = try self.parseName(.loud);
     try self.expect(.colon, .loud);
-    const typ = try self.parseTyp();
+    const typ: okc.Typ = try .parse(self);
     return .{
         .name = name,
         .typ = typ,
@@ -214,26 +214,12 @@ fn parseParam(self: *@This()) !okc.Item.Fun.Header.Param {
     };
 }
 
-fn parseTyp(self: *@This()) Error!okc.Typ {
-    return self.either(.{
-        parseFunTyp,
-        parseGenericTyp,
-        parseVerbalTyp,
-        parsePtrTyp,
-        parseArrayTyp,
-        parseSliceTyp,
-    }) catch |err| {
-        try self.fail("<type>");
-        return err;
-    };
-}
-
-fn parseFunTyp(self: *@This()) Error!okc.Typ {
+pub fn parseFunTyp(self: *@This()) Error!okc.Typ {
     try self.expect(.fun, .quiet);
     try self.expect(.parl, .loud);
-    const params = try self.sep(parseTyp, .{});
+    const params = try self.sep(okc.Typ.parse, .{});
     try self.expect(.parr, .loud);
-    const ret_typ = try self.parseTyp();
+    const ret_typ: okc.Typ = try .parse(self);
     const ptr = try okc.Typ.memo.box(ret_typ, self.arena);
     return .{ .fun = .{
         .params = params,
@@ -241,14 +227,14 @@ fn parseFunTyp(self: *@This()) Error!okc.Typ {
     } };
 }
 
-fn parseSliceTyp(self: *@This()) !okc.Typ {
+pub fn parseSliceTyp(self: *@This()) !okc.Typ {
     try self.expect(.bral, .quiet);
     try self.expect(.brar, .loud);
     var mutable = true;
     try self.maybe(expect, .{ .mut, .quiet }) orelse {
         mutable = false;
     };
-    const typ = try self.parseTyp();
+    const typ: okc.Typ = try .parse(self);
     const ptr = try okc.Typ.memo.box(typ, self.arena);
     return .{ .slice = .{
         .typ = ptr,
@@ -256,11 +242,11 @@ fn parseSliceTyp(self: *@This()) !okc.Typ {
     } };
 }
 
-fn parseGenericTyp(self: *@This()) Error!okc.Typ {
+pub fn parseGenericTyp(self: *@This()) Error!okc.Typ {
     const location = self.getLocation();
     const name = try self.parseName(.quiet);
     try self.expect(.les, .quiet);
-    const generics = try self.sep(parseTyp, .{});
+    const generics = try self.sep(okc.Typ.parse, .{});
     try self.expect(.mor, .loud);
     return .{ .loc_name = .{
         .bare = .{
@@ -268,18 +254,6 @@ fn parseGenericTyp(self: *@This()) Error!okc.Typ {
             .generics = generics,
         },
         .location = location,
-    } };
-}
-
-fn parseArrayTyp(self: *@This()) !okc.Typ {
-    try self.expect(.bral, .quiet);
-    const len = try self.parseInt();
-    try self.expect(.brar, .loud);
-    const typ = try self.parseTyp();
-    const ptr = try okc.Typ.memo.box(typ, self.arena);
-    return .{ .array = .{
-        .len = len,
-        .typ = ptr,
     } };
 }
 
@@ -292,13 +266,13 @@ pub fn either(self: *@This(), comptime parses: anytype) !ParseRes(parses[0], .{}
     return error.ParseFailed;
 }
 
-fn parsePtrTyp(self: *@This()) Error!okc.Typ {
+pub fn parsePtrTyp(self: *@This()) Error!okc.Typ {
     try self.expect(.amp, .quiet);
     var mutable = false;
     if (try self.maybe(expect, .{ .mut, .quiet })) |_| {
         mutable = true;
     }
-    const typ = try self.parseTyp();
+    const typ: okc.Typ = try .parse(self);
     const ptr = try okc.Typ.memo.box(typ, self.arena);
     return .{ .ptr = .{
         .typ = ptr,
@@ -306,7 +280,7 @@ fn parsePtrTyp(self: *@This()) Error!okc.Typ {
     } };
 }
 
-fn parseVerbalTyp(self: *@This()) Error!okc.Typ {
+pub fn parseVerbalTyp(self: *@This()) Error!okc.Typ {
     const location = self.getLocation();
     const name = try self.parseName(.quiet);
     return okc.Typ.fromName(name, location);
@@ -550,7 +524,7 @@ fn parseMutable(self: *@This()) Error!bool {
 
 fn parseTypAnnot(self: *@This()) !okc.Typ {
     try self.expect(.colon, .loud);
-    const typ = try self.parseTyp();
+    const typ: okc.Typ = try .parse(self);
     return typ;
 }
 
@@ -803,7 +777,7 @@ pub fn parseSizeofExpr(self: *@This()) Error!okc.Expr {
     const start = self.getLocation();
     try self.expect(.sizeof, .quiet);
     try self.expect(.les, .loud);
-    const typ = try self.parseTyp();
+    const typ: okc.Typ = try .parse(self);
     const end = self.getLocation();
     try self.expect(.mor, .loud);
     return .{
@@ -814,7 +788,7 @@ pub fn parseSizeofExpr(self: *@This()) Error!okc.Expr {
 
 pub fn parseTypHint(self: *@This()) !okc.Typ {
     try self.expect(.les, .quiet);
-    const typ = try self.parseTyp();
+    const typ: okc.Typ = try .parse(self);
     try self.expect(.mor, .loud);
     return typ;
 }
@@ -958,7 +932,7 @@ pub fn parseName(self: *@This(), mode: Mode) ![]const u8 {
     };
 }
 
-fn parseInt(self: *@This()) !u64 {
+pub fn parseInt(self: *@This()) !u64 {
     return self.parseLexeme(.int);
 }
 

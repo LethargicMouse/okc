@@ -20,7 +20,7 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
         },
         .array => |array| {
             try writer.print("[{} x {f}]", .{
-                array.len,
+                array.index.len,
                 @This(){ .typ = array.typ.* },
             });
         },
