@@ -495,18 +495,6 @@ pub fn getLayout(self: *@This(), typ: okc.Typ) !okc.Layout {
     }
 }
 
-pub fn genArray(self: *@This(), array: okc.Expr.Array) !okc.Val.Typed {
-    var res = okc.Val.Typed{
-        .typ = try array.typ.solve(self.arena),
-        .bare = .undef,
-    };
-    for (array.exprs, 0..) |expr, i| {
-        const typ_val = try expr.gen(self);
-        try self.genIV(&res, typ_val, i);
-    }
-    return res;
-}
-
 pub fn genNeg(self: *@This(), expr: okc.Expr) !okc.Val.Typed {
     const val = try expr.gen(self);
     const tmp = self.newTmp();
@@ -554,7 +542,16 @@ pub fn genUndef(undef: okc.Expr.Undef) !okc.Val.Typed {
 
 pub fn genElemExprRef(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Ref {
     const ref = try elem.expr.genRef(self);
-    const index = try elem.index.gen(self);
+    var index_ref = try elem.index.genRef(self);
+    var index: okc.Val.Typed = undefined;
+    if (index_ref.inner_typ.getName()) |_| {
+        index = .{
+            .typ = .{ .prime = .u32 },
+            .bare = .{ .tmp = try index_ref.loadTag(self.loadCtx()) },
+        };
+    } else {
+        index = try index_ref.loadTypVal(self.loadCtx());
+    }
     return self.genElemRef(ref, index);
 }
 

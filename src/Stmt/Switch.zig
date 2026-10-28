@@ -14,8 +14,8 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
         label.* = ctx.counter.next();
         for (branch.variants) |variant| {
             try ctx.buffer.?.appendSlice(ctx.gpa, "\n    ");
-            _ = try variant.genConstField(0, ctx);
-            try ctx.buffer.?.print(ctx.gpa, ", label %l{}", .{label.*});
+            const index = try variant.genInt(ctx);
+            try ctx.buffer.?.print(ctx.gpa, "\n    i32 {}, label %l{}", .{ index, label.* });
         }
     }
     try ctx.buffer.?.print(ctx.gpa, "\n  ]\nl{}:", .{swi_end_label});

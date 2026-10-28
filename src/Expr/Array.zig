@@ -26,6 +26,18 @@ pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {
     };
 }
 
+pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+    var res = okc.Val.Typed{
+        .typ = try self.typ.solve(ctx.arena),
+        .bare = .undef,
+    };
+    for (self.exprs, 0..) |expr, i| {
+        const typ_val = try expr.gen(ctx);
+        try ctx.genIV(&res, typ_val, i);
+    }
+    return res;
+}
+
 pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
     try ctx.buffer.?.print(ctx.gpa, "{f} [", .{okc.Typ.LLPrinter{ .typ = self.typ }});
     if (self.exprs.len != 0) {
@@ -77,6 +89,29 @@ pub const Indexed = struct {
     mtyp: ?okc.Typ,
     assocs: []Assoc,
     typ: okc.Typ = .any,
+
+    pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+        var res = okc.Val.Typed{
+            .typ = try self.typ.solve(ctx.arena),
+            .bare = .undef,
+        };
+        switch (res.typ.array.index) {
+            .len => {},
+            .enumm => |name| {
+                try okc.Item.Const.genNamed(name, ctx);
+                res.typ.array.index =
+                    .{ .len = ctx.typ_decls.get(.{ .name = name }).?.variants.count() };
+            },
+        }
+        for (self.assocs) |assoc| {
+            const val = try assoc.expr.gen(ctx);
+            for (assoc.indices) |index_expr| {
+                const index = try index_expr.genInt(ctx);
+                try ctx.genIV(&res, val, index);
+            }
+        }
+        return res;
+    }
 
     pub fn check(self: *@This(), hint: okc.Typ, location: okc.Location, ctx: okc.Expr.Check) !okc.Expr.Info {
         var inner_typ: okc.Typ = .any;

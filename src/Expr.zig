@@ -88,7 +88,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory 
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!okc.Val.Typed {
     return switch (self.kind) {
-        .i_array => unreachable,
+        .i_array => |array| array.gen(ctx),
         .member => |member| member.gen(ctx),
         .method => |method| method.gen(ctx),
         .deref => |deref| ctx.genDeref(deref.expr),
@@ -97,7 +97,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!o
         .ptr => |ptr| ctx.genPtr(ptr.expr),
         .subslice => |subslice| ctx.genSubslice(subslice.*),
         .sizeof => |typ| ctx.genSizeof(typ),
-        .array => |array| ctx.genArray(array),
+        .array => |array| array.gen(ctx),
         .struc => |struc| ctx.genStructExpr(struc),
         .int => |int| okc.Codegen.genInt(int),
         .str => |str| ctx.genStr(str.bare),
@@ -123,25 +123,19 @@ pub fn genConst(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFaile
     }
 }
 
-pub fn genConstField(self: @This(), index: usize, ctx: *okc.Codegen) !okc.Typ {
+pub fn genInt(self: @This(), ctx: *okc.Codegen) !u64 {
     switch (self.kind) {
         .field => |field| {
             // it is enum
-            std.debug.assert(index == 0);
             const name = field.expr.kind.vari.name;
-            const variant_index = ctx.typ_decls.get(.{ .name = name }).?
+            return ctx.typ_decls.get(.{ .name = name }).?
                 .variants.get(field.vari.name).?;
-            try ctx.buffer.?.print(ctx.gpa, "i32 {}", .{variant_index});
-            return .{ .prime = .i32 };
         },
         .member => |member| {
-            // it is again enum
-            std.debug.assert(index == 0);
+            // it is enum
             const name = member.typ.name;
-            const variant_index = ctx.typ_decls.get(.{ .name = name }).?
+            return ctx.typ_decls.get(.{ .name = name }).?
                 .variants.get(member.vari.name).?;
-            try ctx.buffer.?.print(ctx.gpa, "i32 {}", .{variant_index});
-            return .{ .prime = .i32 };
         },
         else => unreachable,
     }

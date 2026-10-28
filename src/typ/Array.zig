@@ -40,8 +40,8 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
 }
 
 pub const Index = union(enum) {
-    len: u64,
     enumm: []const u8,
+    len: u64,
 
     pub fn getTyp(self: @This()) okc.Typ {
         return switch (self) {
