@@ -28,6 +28,10 @@ pub const Var = @import("Expr/Var.zig");
 location: okc.Location,
 kind: Kind,
 
+pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !@This() {
+    return ctx.parseExprPrior(0, mode);
+}
+
 pub fn parseAtom(
     ctx: *okc.Parser,
     mode: okc.Parser.Mode,

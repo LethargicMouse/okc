@@ -6,6 +6,18 @@ name: []const u8,
 expr: okc.Expr,
 location: okc.Location,
 
+pub fn parse(ctx: *okc.Parser) !@This() {
+    const location = ctx.getLocation();
+    const name = try ctx.parseName(.loud);
+    try ctx.expect(.equ, .loud);
+    const expr: okc.Expr = try .parse(ctx, .loud);
+    return .{
+        .name = name,
+        .expr = expr,
+        .location = location,
+    };
+}
+
 pub fn check(
     self: *@This(),
     struc_typ: okc.Typ,

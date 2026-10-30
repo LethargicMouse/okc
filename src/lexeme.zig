@@ -8,6 +8,7 @@ pub const Lexeme = union(enum) {
     char: u8,
     colon,
     comma,
+    ctx,
     curl,
     curr,
     dot,
@@ -58,6 +59,7 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: @typeInfo(Lexeme).@"union".tag_type.?) []const u8 {
         return switch (lexeme) {
+            .ctx => "`ctx`",
             .case => "`case`",
             .hash => "`#`",
             .bad_builtin => "#<unknown builtin>",

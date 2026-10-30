@@ -47,7 +47,7 @@ pub fn parseStmt(ctx: *okc.Parser) !okc.Stmt {
     const location = ctx.getLocation();
     try ctx.expect(.swi, .quiet);
     try ctx.expect(.parl, .loud);
-    const expr = try ctx.parseExpr(.loud);
+    const expr: okc.Expr = try .parse(ctx, .loud);
     try ctx.expect(.parr, .loud);
     try ctx.expect(.curl, .loud);
     const branches = try ctx.many(Branch.parse, .{});
@@ -67,7 +67,7 @@ pub const Branch = struct {
 
     fn parse(ctx: *okc.Parser) !@This() {
         try ctx.expect(.case, .loud);
-        const variants = try ctx.sep(okc.Parser.parseExpr, .{.loud});
+        const variants = try ctx.sep(okc.Expr.parse, .{.loud});
         const body = try ctx.parseBlock();
         return .{
             .variants = variants,

@@ -166,6 +166,7 @@ fn lexVerbal(self: *@This()) ?Token {
 }
 
 const verbal_list = [_]LexPair{
+    .{ .str = "ctx", .lexeme = .ctx },
     .{ .str = "case", .lexeme = .case },
     .{ .str = "switch", .lexeme = .swi },
     .{ .str = "use", .lexeme = .use },

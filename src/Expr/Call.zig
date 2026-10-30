@@ -2,6 +2,7 @@ const okc = @import("okc");
 
 expr: okc.Expr,
 args: []okc.Expr,
+context: Context,
 
 pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
     const callee = try self.expr.check(.{}, ctx);
@@ -46,3 +47,55 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
         .bare = .{ .tmp = ret_tmp },
     };
 }
+
+pub const Context = struct {
+    fields: []const Field,
+
+    pub fn parse(ctx: *okc.Parser) !@This() {
+        try ctx.expect(.ctx, .quiet);
+        try ctx.expect(.curl, .loud);
+        const fields = try ctx.sep(Field.parse, .{});
+        const prev = ctx.tokens[ctx.cursor - 1].lexeme;
+        const endmode: okc.Parser.Mode = if (prev == .comma or prev == .curl) .quiet else .loud;
+        try ctx.expect(.curr, endmode);
+        return .{ .fields = fields };
+    }
+
+    pub const Field = struct {
+        name: []const u8,
+        expr: okc.Expr,
+        location: okc.Location,
+
+        pub fn parse(ctx: *okc.Parser) !@This() {
+            const location = ctx.getLocation();
+            const name = try ctx.parseName(.quiet);
+            try ctx.expect(.equ, .loud);
+            const expr = try okc.Expr.parse(ctx, .loud);
+            return .{
+                .name = name,
+                .expr = expr,
+                .location = location,
+            };
+        }
+    };
+};
+
+pub const Postfix = struct {
+    args: []okc.Expr,
+    context: okc.Expr.Call.Context,
+
+    pub fn parse(ctx: *okc.Parser) !@This() {
+        try ctx.expect(.parl, .quiet);
+        const args = try ctx.sep(okc.Expr.parse, .{.loud});
+        const location = ctx.getLocation();
+        const prev = ctx.tokens[ctx.cursor - 1].lexeme;
+        const endmode: okc.Parser.Mode = if (prev == .comma or prev == .parl) .quiet else .loud;
+        try ctx.expect(.parr, endmode);
+        const context = try ctx.maybe(Context.parse, .{}) orelse Context{ .fields = &.{} };
+        ctx.tmp_location = location;
+        return .{
+            .args = args,
+            .context = context,
+        };
+    }
+};

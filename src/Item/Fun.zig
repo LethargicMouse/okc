@@ -29,6 +29,22 @@ pub const Header = struct {
     params: []Param,
     ret_typ: okc.Typ,
 
+    pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !okc.Item.Fun.Header {
+        try ctx.expect(.fun, mode);
+        ctx.tmp_location = ctx.getLocation();
+        ctx.tmp_name = try ctx.parseName(.loud);
+        const generics = try ctx.maybe(okc.Parser.parseGenerics, .{}) orelse &.{};
+        try ctx.expect(.parl, .loud);
+        const params = try ctx.sep(okc.Parser.parseParam, .{});
+        try ctx.expect(.parr, .loud);
+        const ret_typ: okc.Typ = try .parse(ctx);
+        return .{
+            .generics = generics,
+            .params = params,
+            .ret_typ = ret_typ,
+        };
+    }
+
     pub fn check(self: *@This(), ctx: okc.Item.Check) !void {
         var generics_checker: okc.Item.Generic.Checker = try .init(ctx.gpa, self.generics);
         defer generics_checker.deinit(ctx.gpa);

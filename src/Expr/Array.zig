@@ -10,7 +10,7 @@ pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {
     const start = ctx.getLocation();
     const mtyp = try ctx.maybe(okc.Parser.parseTypHint, .{});
     try ctx.expect(.bral, .quiet);
-    const exprs = try ctx.sep(okc.Parser.parseExpr, .{.loud});
+    const exprs = try ctx.sep(okc.Expr.parse, .{.loud});
     if (try ctx.maybe(okc.Parser.expect, .{ .equ, .quiet }) != null) {
         return Indexed.parseExpr(ctx, start, exprs);
     }
@@ -157,7 +157,7 @@ pub const Indexed = struct {
     }
 
     pub fn parseExpr(ctx: *okc.Parser, start: okc.Location, first_indices: []okc.Expr) !okc.Expr {
-        const first_expr = try ctx.parseExpr(.loud);
+        const first_expr: okc.Expr = try .parse(ctx, .loud);
         var vec: std.ArrayList(Assoc) = .empty;
         defer vec.deinit(ctx.gpa);
         try vec.append(ctx.gpa, .{
@@ -183,12 +183,12 @@ pub const Indexed = struct {
 
         pub fn parse(ctx: *okc.Parser) !@This() {
             try ctx.expect(.comma, .quiet);
-            const indices = try ctx.sep(okc.Parser.parseExpr, .{.loud});
+            const indices = try ctx.sep(okc.Expr.parse, .{.loud});
             if (indices.len == 0) {
                 return error.ParseFailed;
             }
             try ctx.expect(.equ, .loud);
-            const expr = try ctx.parseExpr(.loud);
+            const expr: okc.Expr = try .parse(ctx, .loud);
             return .{
                 .indices = indices,
                 .expr = expr,

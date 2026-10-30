@@ -163,26 +163,10 @@ pub fn parseFieldDecl(self: *@This()) !okc.Item.TypDecl.Field {
 
 fn parseExtFun(self: *@This()) !okc.Item.Fun.Extern {
     try self.expect(.ext, .quiet);
-    const header = try self.parseHeader(.loud);
+    const header: okc.Item.Fun.Header = try .parse(self, .loud);
     try self.expect(.semi, .loud);
     return .{
         .header = header,
-    };
-}
-
-fn parseHeader(self: *@This(), mode: Mode) !okc.Item.Fun.Header {
-    try self.expect(.fun, mode);
-    self.tmp_location = self.getLocation();
-    self.tmp_name = try self.parseName(.loud);
-    const generics = try self.maybe(parseGenerics, .{}) orelse &.{};
-    try self.expect(.parl, .loud);
-    const params = try self.sep(parseParam, .{});
-    try self.expect(.parr, .loud);
-    const ret_typ: okc.Typ = try .parse(self);
-    return .{
-        .generics = generics,
-        .params = params,
-        .ret_typ = ret_typ,
     };
 }
 
@@ -202,7 +186,7 @@ pub fn sep(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, arg
     return slice;
 }
 
-fn parseParam(self: *@This()) !okc.Item.Fun.Header.Param {
+pub fn parseParam(self: *@This()) !okc.Item.Fun.Header.Param {
     const location = self.getLocation();
     const name = try self.parseName(.loud);
     try self.expect(.colon, .loud);
@@ -303,7 +287,7 @@ pub fn maybe(self: *@This(), parse: anytype, args: anytype) !?ParseRes(parse, ar
 }
 
 fn parseFun(self: *@This()) !okc.Item.Fun {
-    const header = try self.parseHeader(.quiet);
+    const header: okc.Item.Fun.Header = try .parse(self, .quiet);
     const location = self.tmp_location;
     const name = self.tmp_name;
     const body = try self.parseBlock();
@@ -347,7 +331,7 @@ fn parseOpAssignStmtPostfix(
 ) !ExprStmtPostfix {
     const kind = try self.parseOpAssignBinOp();
     try self.expect(.equ, .quiet);
-    const expr = try self.parseExpr(.loud);
+    const expr: okc.Expr = try .parse(self, .loud);
     return .{ .op_assign = .{
         .kind = kind,
         .expr = expr,
@@ -368,7 +352,7 @@ pub fn parseIgnoreStmt(self: *@This()) !okc.Stmt {
     const location = self.getLocation();
     try self.expect(.wild, .quiet);
     try self.expect(.equ, .loud);
-    const expr = try self.parseExpr(.loud);
+    const expr: okc.Expr = try .parse(self, .loud);
     try self.expect(.semi, .loud);
     return .{
         .location = location,
@@ -385,7 +369,7 @@ pub fn parseForStmt(self: *@This()) !okc.Stmt {
     const vari_location = self.getLocation();
     const vari = try self.parseName(.loud);
     try self.expect(.colon, .loud);
-    const expr = try self.parseExpr(.loud);
+    const expr: okc.Expr = try .parse(self, .loud);
     const mend = try self.maybe(parseRangeEnd, .{});
     try self.expect(.parr, .loud);
     const body = try self.parseBlock();
@@ -414,7 +398,7 @@ pub fn parseForStmt(self: *@This()) !okc.Stmt {
 
 fn parseRangeEnd(self: *@This()) !okc.Expr {
     try self.expect(.dot2, .quiet);
-    return self.parseExpr(.loud);
+    return .parse(self, .loud);
 }
 
 pub fn parseWhileStmt(self: *@This()) !okc.Stmt {
@@ -449,7 +433,7 @@ fn parseElseIf(self: *@This()) !okc.Stmt.Branch {
 
 fn parseBranch(self: *@This()) !okc.Stmt.Branch {
     try self.expect(.parl, .loud);
-    const condition = try self.parseExpr(.loud);
+    const condition: okc.Expr = try .parse(self, .loud);
     try self.expect(.parr, .loud);
     const body = try self.parseBlock();
     return .{
@@ -471,7 +455,7 @@ fn parseAssignStmtPostfix(self: *@This()) !ExprStmtPostfix {
 
 fn parseAssignPostfix(self: *@This()) !okc.Expr {
     try self.expect(.equ, .quiet);
-    return self.parseExpr(.loud);
+    return .parse(self, .loud);
 }
 
 pub fn parseDeclareStmt(self: *@This()) !okc.Stmt {
@@ -489,7 +473,7 @@ fn parseDeclare(self: *@This()) !okc.Stmt.Declare.Named {
     const name = try self.parseName(.loud);
     const typ = try self.maybe(parseTypAnnot, .{});
     try self.expect(.equ, .loud);
-    const expr = try self.parseExpr(.loud);
+    const expr: okc.Expr = try .parse(self, .loud);
     try self.expect(.semi, .loud);
     self.tmp_location = location;
     return .{
@@ -514,7 +498,7 @@ fn parseTypAnnot(self: *@This()) !okc.Typ {
 }
 
 pub fn parseExprStmt(self: *@This()) !okc.Stmt {
-    const expr = try self.parseExpr(.quiet);
+    const expr: okc.Expr = try .parse(self, .quiet);
     const postfix = try self.parseExprStmtPostfix();
     try self.expect(.semi, .loud);
     switch (postfix) {
@@ -553,22 +537,17 @@ fn parseExprStmtPostfix(self: *@This()) !ExprStmtPostfix {
 }
 
 fn parseCallPostfix(self: *@This()) !Postfix {
-    try self.expect(.parl, .quiet);
-    const args = try self.sep(parseExpr, .{.loud});
-    const location = self.getLocation();
-    const prev = self.tokens[self.cursor - 1].lexeme;
-    const endmode: Mode = if (prev == .comma or prev == .parl) .quiet else .loud;
-    try self.expect(.parr, endmode);
+    const call: okc.Expr.Call.Postfix = try .parse(self);
     return .{
-        .location = location,
-        .kind = .{ .call = args },
+        .location = self.tmp_location,
+        .kind = .{ .call = call },
     };
 }
 
 pub fn parseRetStmt(self: *@This()) !okc.Stmt {
     const location = self.getLocation();
     try self.expect(.ret, .quiet);
-    const expr = try self.maybe(parseExpr, .{.loud});
+    const expr = try self.maybe(okc.Expr.parse, .{.loud});
     try self.expect(.semi, .loud);
     return .{
         .location = location,
@@ -578,11 +557,7 @@ pub fn parseRetStmt(self: *@This()) !okc.Stmt {
     };
 }
 
-pub fn parseExpr(self: *@This(), mode: Mode) !okc.Expr {
-    return self.parseExprPrior(0, mode);
-}
-
-fn parseExprPrior(self: *@This(), prior: u8, mode: Mode) Error!okc.Expr {
+pub fn parseExprPrior(self: *@This(), prior: u8, mode: Mode) Error!okc.Expr {
     var res = try self.parseExprPosted(mode);
     while (try self.parseBinPostfix(prior)) |bin_postfix| {
         const binary = try self.arena.create(okc.Expr.Binary);
@@ -642,11 +617,12 @@ fn parseExprPosted(self: *@This(), mode: Mode) Error!okc.Expr {
                     .kind = .{ .method = method },
                 };
             },
-            .call => |args| {
+            .call => |call_postfix| {
                 const call = try self.arena.create(okc.Expr.Call);
                 call.* = .{
                     .expr = res,
-                    .args = args,
+                    .args = call_postfix.args,
+                    .context = call_postfix.context,
                 };
                 res = .{
                     .location = res.location.combine(postfix.location),
@@ -706,12 +682,12 @@ fn parseMethodPostfix(self: *@This()) !Postfix {
     try self.expect(.dot, .quiet);
     const location = self.getLocation();
     const name = try self.parseName(.quiet);
-    const call_postfix = try self.parseCallPostfix();
+    const call: okc.Expr.Call.Postfix = try .parse(self);
     return .{
-        .location = call_postfix.location,
+        .location = self.tmp_location,
         .kind = .{ .method = .{
             .vari = .{ .name = name },
-            .args = call_postfix.kind.call,
+            .args = call.args,
             .name_location = location,
         } },
     };
@@ -719,9 +695,9 @@ fn parseMethodPostfix(self: *@This()) !Postfix {
 
 fn parseSubslicePostfix(self: *@This()) !Postfix {
     try self.expect(.bral, .quiet);
-    const start = try self.parseExpr(.quiet);
+    const start: okc.Expr = try .parse(self, .quiet);
     try self.expect(.dot2, .quiet);
-    const end = try self.parseExpr(.loud);
+    const end: okc.Expr = try .parse(self, .loud);
     const location = self.getLocation();
     try self.expect(.brar, .loud);
     return .{
@@ -735,7 +711,7 @@ fn parseSubslicePostfix(self: *@This()) !Postfix {
 
 fn parseElemPostfix(self: *@This()) !Postfix {
     try self.expect(.bral, .quiet);
-    const index = try self.parseExpr(.loud);
+    const index: okc.Expr = try .parse(self, .loud);
     const location = self.getLocation();
     try self.expect(.brar, .loud);
     return .{
@@ -806,7 +782,7 @@ pub fn parseInferStructExpr(self: *@This()) Error!okc.Expr {
 pub fn parseParExpr(self: *@This()) Error!okc.Expr {
     const start = self.getLocation();
     try self.expect(.parl, .quiet);
-    var expr = try self.parseExpr(.loud);
+    var expr: okc.Expr = try .parse(self, .loud);
     const end = self.getLocation();
     try self.expect(.parr, .loud);
     expr.location = start.combine(end);
@@ -828,21 +804,9 @@ pub fn parseStructExpr(self: *@This()) Error!okc.Expr {
 
 fn parseStructExprBody(self: *@This()) ![]okc.Expr.Struct.Field {
     try self.expect(.curl, .quiet);
-    const fields = try self.sep(parseNewField, .{});
+    const fields = try self.sep(okc.Expr.Struct.Field.parse, .{});
     try self.expect(.curr, .loud);
     return fields;
-}
-
-fn parseNewField(self: *@This()) !okc.Expr.Struct.Field {
-    const location = self.getLocation();
-    const name = try self.parseName(.loud);
-    try self.expect(.equ, .loud);
-    const expr = try self.parseExpr(.loud);
-    return .{
-        .name = name,
-        .expr = expr,
-        .location = location,
-    };
 }
 
 pub fn parseVarExpr(self: *@This()) Error!okc.Expr {
@@ -995,7 +959,7 @@ const Postfix = struct {
     location: okc.Location,
 
     const Kind = union(enum) {
-        call: []okc.Expr,
+        call: okc.Expr.Call.Postfix,
         elem: okc.Expr,
         field: okc.Expr.Var,
         method: Method,

@@ -9,7 +9,7 @@ fn main() i32 {
     };
 }
 
-enum Log_Level { no_logs, error, warn, info, debug }
+type Log_Level { no_logs, error, warn, info, debug }
 
 fn launch_rockets() ctx {
     pacifism: bool,
