@@ -66,7 +66,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
         },
         .simple => {
             const ref = try self.genRef(ctx);
-            return ref.loadTypVal(ctx.loadCtx());
+            return ref.loadTypVal(ctx);
         },
     }
 }

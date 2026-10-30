@@ -5,7 +5,7 @@ branches: []const Branch,
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     const expr_ref = try self.expr.genRef(ctx);
-    const tag = try expr_ref.loadTag(ctx.loadCtx());
+    const tag = try expr_ref.loadTag(ctx);
     const swi_end_label = ctx.counter.next();
     try ctx.buffer.?.print(ctx.gpa, "\n  switch i32 %t{}, label %l{} [", .{ tag, swi_end_label });
     const labels = try ctx.gpa.alloc(u32, self.branches.len);

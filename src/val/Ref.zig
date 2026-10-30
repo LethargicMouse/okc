@@ -5,9 +5,9 @@ const okc = @import("okc");
 val: okc.Val,
 inner_typ: okc.Typ,
 
-pub fn genGEPIB(self: @This(), index: okc.Val.Typed, ctx: Load) !u32 {
+pub fn genGEPIB(self: @This(), index: okc.Val.Typed, ctx: *okc.Codegen) !u32 {
     const tmp = ctx.counter.next();
-    try ctx.buffer.print(
+    try ctx.buffer.?.print(
         ctx.gpa,
         "\n  %t{} = getelementptr inbounds {f}, ptr {f}, i32 0, {f}",
         .{ tmp, okc.Typ.LLPrinter{ .typ = self.inner_typ }, self.val, index },
@@ -15,7 +15,7 @@ pub fn genGEPIB(self: @This(), index: okc.Val.Typed, ctx: Load) !u32 {
     return tmp;
 }
 
-pub fn loadTag(self: @This(), ctx: Load) !u32 {
+pub fn loadTag(self: @This(), ctx: *okc.Codegen) !u32 {
     const tag_ptr = try self.genGEPIB(.int(0), ctx);
     const tag_ref: okc.Val.Ref = .{
         .inner_typ = .{ .prime = .i32 },
@@ -24,9 +24,9 @@ pub fn loadTag(self: @This(), ctx: Load) !u32 {
     return tag_ref.load(ctx);
 }
 
-pub fn load(self: @This(), ctx: Load) !u32 {
+pub fn load(self: @This(), ctx: *okc.Codegen) !u32 {
     const res = ctx.counter.next();
-    try ctx.buffer.print(
+    try ctx.buffer.?.print(
         ctx.gpa,
         "\n  %t{} = load {f}, ptr {f}",
         .{ res, okc.Typ.LLPrinter{ .typ = self.inner_typ }, self.val },
@@ -34,7 +34,7 @@ pub fn load(self: @This(), ctx: Load) !u32 {
     return res;
 }
 
-pub fn loadTypVal(self: @This(), ctx: Load) !okc.Val.Typed {
+pub fn loadTypVal(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const tmp = try self.load(ctx);
     return .{
         .typ = self.inner_typ,
@@ -51,9 +51,3 @@ pub fn toPtrTypVal(self: @This(), arena: std.mem.Allocator) !okc.Val.Typed {
         .bare = self.val,
     };
 }
-
-pub const Load = struct {
-    gpa: std.mem.Allocator,
-    buffer: *std.ArrayList(u8),
-    counter: *okc.Counter,
-};

@@ -12,7 +12,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
         return try self.vari.genRefIn(.{ .name = name }, ctx);
     }
     if (vari.inner_typ == .ptr) {
-        const tmp = try vari.load(ctx.loadCtx());
+        const tmp = try vari.load(ctx);
         vari = .{
             .inner_typ = vari.inner_typ.ptr.typ.*,
             .val = .{ .tmp = tmp },
@@ -26,7 +26,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
         });
     }
     const info = vari.inner_typ.getFieldGenInfo(self.vari.name, ctx.typ_decls);
-    const tmp = try vari.genGEPIB(.int(info.index), ctx.loadCtx());
+    const tmp = try vari.genGEPIB(.int(info.index), ctx);
     return .{
         .inner_typ = info.typ,
         .val = .{ .tmp = tmp },
@@ -35,7 +35,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const ref = try self.genRef(ctx);
-    return ref.loadTypVal(ctx.loadCtx());
+    return ref.loadTypVal(ctx);
 }
 
 pub fn check(

@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const okc = @import("okc");
 
 left: okc.Expr,
@@ -36,6 +38,30 @@ pub const Kind = enum {
     rem,
     sub,
 
+    pub fn getRetTyp(self: @This(), child_typ: okc.Typ) okc.Typ {
+        return switch (self.getClass()) {
+            .arith => child_typ,
+            .bool => .{ .prime = .bool },
+        };
+    }
+
+    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+        const str = switch (self) {
+            .moreq => "icmp sge",
+            .orb => "or",
+            .andb => "and",
+            .add => "add",
+            .sub => "sub",
+            .mul => "mul",
+            .div => "sdiv",
+            .rem => "srem",
+            .equ => "icmp eq",
+            .les => "icmp slt",
+            .neq => "icmp ne",
+        };
+        try writer.writeAll(str);
+    }
+
     pub fn getPrior(kind: Kind) u8 {
         switch (kind) {
             .equ, .neq, .les, .moreq => return 0,
@@ -68,9 +94,9 @@ pub const Kind = enum {
             .equ, .neq, .les, .moreq => .bool,
         };
     }
+};
 
-    pub const Class = enum {
-        arith,
-        bool,
-    };
+pub const Class = enum {
+    arith,
+    bool,
 };

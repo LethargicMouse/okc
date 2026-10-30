@@ -259,7 +259,7 @@ pub fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     const cond_label = self.newTmp();
     try self.uncond(cond_label, start_label);
     // i++
-    const ival = try self.vars.get(forr.vari).?.loadTypVal(self.loadCtx());
+    const ival = try self.vars.get(forr.vari).?.loadTypVal(self);
     const inew = try self.genBinary(.add, ival.typ, ival.bare, .{ .int = 1 });
     try self.storeInto(
         self.vars.get(forr.vari).?.val,
@@ -269,7 +269,7 @@ pub fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     // cond:
     try self.uncond(cond_label, cond_label);
     // cond = i != end
-    const ival_ = try self.vars.get(forr.vari).?.loadTypVal(self.loadCtx());
+    const ival_ = try self.vars.get(forr.vari).?.loadTypVal(self);
     const at_end = try self.genBinary(.neq, ival.typ, ival_.bare, end.bare);
     // if cond, body, end
     // body:
@@ -296,14 +296,14 @@ pub fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     const cond_label = self.newTmp();
     try self.uncond(cond_label, start_label);
     // i++
-    const ival = try iref.loadTypVal(self.loadCtx());
+    const ival = try iref.loadTypVal(self);
     const inew = try self.genBinary(.add, ival.typ, ival.bare, .{ .int = 1 });
     try self.storeInto(iref.val, .{ .typ = ival.typ, .bare = .{ .tmp = inew } });
     // goto cond
     // cond:
     try self.uncond(cond_label, cond_label);
     // cond = i < .len
-    const ival_ = try iref.loadTypVal(self.loadCtx());
+    const ival_ = try iref.loadTypVal(self);
     const len_field: okc.Expr.Field = .{
         .expr = forr.expr,
         .vari = .{ .name = "len" },
@@ -519,7 +519,7 @@ pub fn genDerefRef(self: *@This(), expr: okc.Expr) !okc.Val.Ref {
 
 pub fn genDeref(self: *@This(), deref: okc.Expr) !okc.Val.Typed {
     const ref = try self.genDerefRef(deref);
-    return ref.loadTypVal(self.loadCtx());
+    return ref.loadTypVal(self);
 }
 
 pub fn genNotb(self: *@This(), expr: okc.Expr) !okc.Val.Typed {
@@ -548,10 +548,10 @@ pub fn genElemExprRef(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Ref {
     if (index_ref.inner_typ.getName()) |_| {
         index = .{
             .typ = .{ .prime = .u32 },
-            .bare = .{ .tmp = try index_ref.loadTag(self.loadCtx()) },
+            .bare = .{ .tmp = try index_ref.loadTag(self) },
         };
     } else {
-        index = try index_ref.loadTypVal(self.loadCtx());
+        index = try index_ref.loadTypVal(self);
     }
     return self.genElemRef(ref, index);
 }
@@ -559,14 +559,14 @@ pub fn genElemExprRef(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Ref {
 fn genElemRef(self: *@This(), from: okc.Val.Ref, index: okc.Val.Typed) !okc.Val.Ref {
     switch (from.inner_typ) {
         .array => {
-            const tmp = try from.genGEPIB(index, self.loadCtx());
+            const tmp = try from.genGEPIB(index, self);
             return .{
                 .inner_typ = from.inner_typ.array.typ.*,
                 .val = .{ .tmp = tmp },
             };
         },
         .slice => |slice| {
-            const ptrptr = try from.genGEPIB(.int(0), self.loadCtx());
+            const ptrptr = try from.genGEPIB(.int(0), self);
             const ptrref: okc.Val.Ref = .{
                 .inner_typ = .{ .ptr = .{
                     .typ = slice.typ,
@@ -574,7 +574,7 @@ fn genElemRef(self: *@This(), from: okc.Val.Ref, index: okc.Val.Typed) !okc.Val.
                 } },
                 .val = .{ .tmp = ptrptr },
             };
-            const ptr = try ptrref.load(self.loadCtx());
+            const ptr = try ptrref.load(self);
             const tmp = try self.genGEP(slice.typ.*, ptr, index);
             return .{
                 .inner_typ = slice.typ.*,
@@ -596,7 +596,7 @@ fn genGEP(self: *@This(), typ: okc.Typ, ptr: u32, index: okc.Val.Typed) !u32 {
 
 pub fn genElem(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Typed {
     const ref = try self.genElemExprRef(elem);
-    return ref.loadTypVal(self.loadCtx());
+    return ref.loadTypVal(self);
 }
 
 pub fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !okc.Val.Typed {
@@ -708,40 +708,18 @@ pub fn genBinaryExpr(self: *@This(), binary: okc.Expr.Binary) !okc.Val.Typed {
     const right = try binary.right.gen(self);
     const tmp = try self.genBinary(binary.kind, left.typ, left.bare, right.bare);
     return .{
-        .typ = binOpRetTyp(binary.kind, left.typ),
+        .typ = binary.kind.getRetTyp(left.typ),
         .bare = .{ .tmp = tmp },
     };
 }
 
 fn genBinary(self: *@This(), kind: okc.Expr.Binary.Kind, typ: okc.Typ, a: okc.Val, b: okc.Val) !u32 {
     const tmp = self.newTmp();
-    try self.print("\n  %t{} = ", .{tmp});
-    try self.genBinOp(kind);
-    try self.print(" {f} {f}, {f}", .{ okc.Typ.LLPrinter{ .typ = typ }, a, b });
+    try self.print(
+        "\n  %t{} = {f} {f} {f}, {f}",
+        .{ tmp, kind, okc.Typ.LLPrinter{ .typ = typ }, a, b },
+    );
     return tmp;
-}
-
-fn binOpRetTyp(kind: okc.Expr.Binary.Kind, child_typ: okc.Typ) okc.Typ {
-    return switch (kind.getClass()) {
-        .arith => child_typ,
-        .bool => .{ .prime = .bool },
-    };
-}
-
-fn genBinOp(self: *@This(), kind: okc.Expr.Binary.Kind) !void {
-    switch (kind) {
-        .moreq => try self.print("icmp sge", .{}),
-        .orb => try self.print("or", .{}),
-        .andb => try self.print("and", .{}),
-        .add => try self.print("add", .{}),
-        .sub => try self.print("sub", .{}),
-        .mul => try self.print("mul", .{}),
-        .div => try self.print("sdiv", .{}),
-        .rem => try self.print("srem", .{}),
-        .equ => try self.print("icmp eq", .{}),
-        .les => try self.print("icmp slt", .{}),
-        .neq => try self.print("icmp ne", .{}),
-    }
 }
 
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
@@ -750,14 +728,6 @@ fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
     } else {
         try self.writer.interface.print(fmt, args);
     }
-}
-
-pub fn loadCtx(self: *@This()) okc.Val.Ref.Load {
-    return .{
-        .gpa = self.gpa,
-        .buffer = &self.buffer.?,
-        .counter = &self.counter,
-    };
 }
 
 pub fn deinit(self: *@This()) void {

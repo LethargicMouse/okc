@@ -5,7 +5,7 @@ typ: okc.Typ.Name = .{ .name = "<unknown>" },
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const ref = try self.genRef(ctx);
-    return ref.loadTypVal(ctx.loadCtx());
+    return ref.loadTypVal(ctx);
 }
 
 pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
