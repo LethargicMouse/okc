@@ -24,6 +24,26 @@ pub fn check(self: *@This(), ctx: okc.Expr.Check) !okc.Expr.Info {
     };
 }
 
+pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+    const left = try self.left.gen(ctx);
+    const right = try self.right.gen(ctx);
+    const tmp = try okc.Expr.Binary.genOnVals(self.kind, left.typ, left.bare, right.bare, ctx);
+    return .{
+        .typ = self.kind.getRetTyp(left.typ),
+        .bare = .{ .tmp = tmp },
+    };
+}
+
+pub fn genOnVals(kind: Kind, typ: okc.Typ, a: okc.Val, b: okc.Val, ctx: *okc.Codegen) !u32 {
+    const tmp = ctx.newTmp();
+    try ctx.buffer.?.print(
+        ctx.gpa,
+        "\n  %t{} = {f} {f} {f}, {f}",
+        .{ tmp, kind, okc.Typ.LLPrinter{ .typ = typ }, a, b },
+    );
+    return tmp;
+}
+
 pub const Kind = enum {
     add,
     andb,

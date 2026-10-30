@@ -110,7 +110,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!o
         .bool => |boo| okc.Codegen.genBool(boo),
         .undef => |undef| okc.Codegen.genUndef(undef),
         .call => |call| call.gen(ctx),
-        .binary => |binary| ctx.genBinaryExpr(binary.*),
+        .binary => |binary| binary.gen(ctx),
         .field => |field| field.gen(ctx),
         .named_struc => |struc| ctx.genNamedStructExpr(struc),
         .elem => |elem| ctx.genElem(elem.*),

@@ -260,7 +260,7 @@ pub fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     try self.uncond(cond_label, start_label);
     // i++
     const ival = try self.vars.get(forr.vari).?.loadTypVal(self);
-    const inew = try self.genBinary(.add, ival.typ, ival.bare, .{ .int = 1 });
+    const inew = try okc.Expr.Binary.genOnVals(.add, ival.typ, ival.bare, .{ .int = 1 }, self);
     try self.storeInto(
         self.vars.get(forr.vari).?.val,
         .{ .typ = ival.typ, .bare = .{ .tmp = inew } },
@@ -270,7 +270,7 @@ pub fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     try self.uncond(cond_label, cond_label);
     // cond = i != end
     const ival_ = try self.vars.get(forr.vari).?.loadTypVal(self);
-    const at_end = try self.genBinary(.neq, ival.typ, ival_.bare, end.bare);
+    const at_end = try okc.Expr.Binary.genOnVals(.neq, ival.typ, ival_.bare, end.bare, self);
     // if cond, body, end
     // body:
     const body_label = self.newTmp();
@@ -297,7 +297,7 @@ pub fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     try self.uncond(cond_label, start_label);
     // i++
     const ival = try iref.loadTypVal(self);
-    const inew = try self.genBinary(.add, ival.typ, ival.bare, .{ .int = 1 });
+    const inew = try okc.Expr.Binary.genOnVals(.add, ival.typ, ival.bare, .{ .int = 1 }, self);
     try self.storeInto(iref.val, .{ .typ = ival.typ, .bare = .{ .tmp = inew } });
     // goto cond
     // cond:
@@ -309,7 +309,7 @@ pub fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
         .vari = .{ .name = "len" },
     };
     const len = try len_field.gen(self);
-    const less = try self.genBinary(.les, ival.typ, ival_.bare, len.bare);
+    const less = try okc.Expr.Binary.genOnVals(.les, ival.typ, ival_.bare, len.bare, self);
     // if cond, body, end
     // body:
     const body_label = self.newTmp();
@@ -378,11 +378,11 @@ fn genBranch(self: *@This(), branch: okc.Stmt.Branch, end_label: u32, kind: okc.
 
 pub fn genOpAssign(self: *@This(), op_assign: okc.Stmt.OpAssign) !void {
     const vari = try op_assign.left.genRef(self);
-    const typ_val = try self.genBinaryExpr(.{
+    const typ_val = try okc.Expr.Binary.gen(.{
         .left = op_assign.left,
         .kind = op_assign.kind,
         .right = op_assign.right,
-    });
+    }, self);
     try self.storeInto(vari.val, typ_val);
 }
 
@@ -605,7 +605,7 @@ pub fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !okc.Val.Typed {
     const end = try subslice.end.gen(self);
     const ptr_ref = try self.genElemRef(ref, start);
     const ptr = try ptr_ref.toPtrTypVal(self.arena);
-    const len = try self.genBinary(.sub, start.typ, end.bare, start.bare);
+    const len = try okc.Expr.Binary.genOnVals(.sub, start.typ, end.bare, start.bare, self);
     var res = okc.Val.Typed{
         .typ = .{ .slice = .{
             .typ = try okc.Typ.memo.box(ptr_ref.inner_typ, self.arena),
@@ -701,25 +701,6 @@ pub fn genIV(self: *@This(), to: *okc.Val.Typed, typ_val: okc.Val.Typed, index: 
 
 pub fn genNamedStructExpr(self: *@This(), named: okc.Expr.Struct.Named) !okc.Val.Typed {
     return self.genStructExpr(named.bare);
-}
-
-pub fn genBinaryExpr(self: *@This(), binary: okc.Expr.Binary) !okc.Val.Typed {
-    const left = try binary.left.gen(self);
-    const right = try binary.right.gen(self);
-    const tmp = try self.genBinary(binary.kind, left.typ, left.bare, right.bare);
-    return .{
-        .typ = binary.kind.getRetTyp(left.typ),
-        .bare = .{ .tmp = tmp },
-    };
-}
-
-fn genBinary(self: *@This(), kind: okc.Expr.Binary.Kind, typ: okc.Typ, a: okc.Val, b: okc.Val) !u32 {
-    const tmp = self.newTmp();
-    try self.print(
-        "\n  %t{} = {f} {f} {f}, {f}",
-        .{ tmp, kind, okc.Typ.LLPrinter{ .typ = typ }, a, b },
-    );
-    return tmp;
 }
 
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
