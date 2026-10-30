@@ -12,6 +12,12 @@ pub const Named = struct {
     name: []const u8,
     bare: Declare,
 
+    pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
+        const typ_val = try self.bare.expr.gen(ctx);
+        const vari = try typ_val.toStack(ctx);
+        try ctx.vars.put(self.name, vari);
+    }
+
     pub fn check(self: *@This(), location: okc.Location, ctx: *okc.Stmt.Check) !okc.ControlFlow {
         const typ_decl = if (self.bare.typ) |typ| typ else .any;
         const info = try self.bare.expr.check(.{ .typ = typ_decl }, ctx.exprCheckCtx());

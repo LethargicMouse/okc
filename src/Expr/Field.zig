@@ -20,10 +20,10 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
     }
     if (vari.inner_typ == .array) {
         std.debug.assert(std.mem.eql(u8, self.vari.name, "len"));
-        return ctx.toStack(.{
+        return okc.Val.Typed.toStack(.{
             .typ = .{ .prime = .u64 },
             .bare = .{ .int = try vari.inner_typ.array.getLen(ctx) },
-        });
+        }, ctx);
     }
     const info = vari.inner_typ.getFieldGenInfo(self.vari.name, ctx.typ_decls);
     const tmp = try vari.genGEPIB(.int(info.index), ctx);

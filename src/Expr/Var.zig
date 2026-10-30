@@ -25,7 +25,7 @@ pub fn genRefIn(self: @This(), typ: okc.Typ.Name, ctx: *okc.Codegen) !okc.Val.Re
                 .typ = .{ .prime = .i32 },
                 .bare = .{ .int = index },
             }, 0, ctx);
-            return ctx.toStack(res);
+            return res.toStack(ctx);
         },
         .use => {
             const old = ctx.module;
@@ -39,7 +39,10 @@ pub fn genRefIn(self: @This(), typ: okc.Typ.Name, ctx: *okc.Codegen) !okc.Val.Re
 
 pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
     switch (self.kind) {
-        .fun => |fun| return ctx.toStack(try fun.gen(self.name, ctx)),
+        .fun => |fun| {
+            const val = try fun.gen(self.name, ctx);
+            return val.toStack(ctx);
+        },
         .typ => return .{
             .inner_typ = .typ,
             .val = .undef,

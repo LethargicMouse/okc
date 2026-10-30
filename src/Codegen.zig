@@ -201,7 +201,7 @@ fn genFun(
         param_typ_vals[0..fun.header.params.len],
         fun.header.params,
     ) |typ_val, param| {
-        const vari = try self.toStack(typ_val);
+        const vari = try typ_val.toStack(self);
         try self.vars.put(param.name, vari);
     }
     try fun.body.gen(self);
@@ -247,11 +247,14 @@ pub fn genWhile(self: *@This(), whi: okc.Stmt.While) !void {
 
 pub fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     // int i = start
-    try self.genDeclare(forr.vari, .{
-        .expr = forr.start,
-        .typ = null,
-        .mutable = false,
-    });
+    try okc.Stmt.Declare.Named.gen(.{
+        .name = forr.vari,
+        .bare = .{
+            .expr = forr.start,
+            .typ = null,
+            .mutable = false,
+        },
+    }, self);
     const end = try forr.end.gen(self);
     // goto cond
     // start:
@@ -261,9 +264,10 @@ pub fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
     // i++
     const ival = try self.vars.get(forr.vari).?.loadTypVal(self);
     const inew = try okc.Expr.Binary.genOnVals(.add, ival.typ, ival.bare, .{ .int = 1 }, self);
-    try self.storeInto(
-        self.vars.get(forr.vari).?.val,
+    try okc.Val.Typed.store(
         .{ .typ = ival.typ, .bare = .{ .tmp = inew } },
+        self.vars.get(forr.vari).?.val,
+        self,
     );
     // goto cond
     // cond:
@@ -286,10 +290,10 @@ pub fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
 pub fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     const slice = try forr.expr.genRef(self);
     // int i = 0
-    const iref = try self.toStack(.{
+    const iref = try okc.Val.Typed.toStack(.{
         .typ = .{ .prime = .u64 },
         .bare = .{ .int = 0 },
-    });
+    }, self);
     // goto cond
     // start:
     const start_label = self.newTmp();
@@ -298,7 +302,7 @@ pub fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     // i++
     const ival = try iref.loadTypVal(self);
     const inew = try okc.Expr.Binary.genOnVals(.add, ival.typ, ival.bare, .{ .int = 1 }, self);
-    try self.storeInto(iref.val, .{ .typ = ival.typ, .bare = .{ .tmp = inew } });
+    try okc.Val.Typed.store(.{ .typ = ival.typ, .bare = .{ .tmp = inew } }, iref.val, self);
     // goto cond
     // cond:
     try self.uncond(cond_label, cond_label);
@@ -383,47 +387,13 @@ pub fn genOpAssign(self: *@This(), op_assign: okc.Stmt.OpAssign) !void {
         .kind = op_assign.kind,
         .right = op_assign.right,
     }, self);
-    try self.storeInto(vari.val, typ_val);
+    try typ_val.store(vari.val, self);
 }
 
 pub fn genAssign(self: *@This(), assign: okc.Stmt.Assign) !void {
     const vari = try assign.left.genRef(self);
     const typ_val = try assign.expr.gen(self);
-    try self.storeInto(vari.val, typ_val);
-}
-
-pub fn genDeclare(self: *@This(), name: []const u8, declare: okc.Stmt.Declare) !void {
-    const typ_val = try declare.expr.gen(self);
-    const vari = try self.toStack(typ_val);
-    try self.vars.put(name, vari);
-}
-
-pub fn toStack(self: *@This(), typ_val: okc.Val.Typed) !okc.Val.Ref {
-    if (typ_val.typ.getName()) |name| {
-        try okc.Item.TypDecl.genNamed(name, self);
-    }
-    const tmp = self.newTmp();
-    try self.genAlloca(tmp, typ_val.typ);
-    try self.storeInto(.{ .tmp = tmp }, typ_val);
-    return .{
-        .val = .{ .tmp = tmp },
-        .inner_typ = typ_val.typ,
-    };
-}
-
-fn genAlloca(self: *@This(), tmp: u32, typ: okc.Typ) !void {
-    const buffer = self.buffer;
-    // so that all allocs are in entry block
-    self.buffer = self.extra_buffer;
-    defer {
-        self.extra_buffer = self.buffer.?;
-        self.buffer = buffer;
-    }
-    try self.print("\n  %t{} = alloca {f}", .{ tmp, okc.Typ.LLPrinter{ .typ = typ } });
-}
-
-fn storeInto(self: *@This(), val: okc.Val, typ_val: okc.Val.Typed) !void {
-    try self.print("\n  store {f}, ptr {f}", .{ typ_val, val });
+    try typ_val.store(vari.val, self);
 }
 
 fn newTmp(self: *@This()) u32 {

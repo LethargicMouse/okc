@@ -85,7 +85,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory 
         .notb,
         => {
             const typ_val = try self.gen(ctx);
-            return ctx.toStack(typ_val);
+            return typ_val.toStack(ctx);
         },
     }
 }
