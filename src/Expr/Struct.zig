@@ -105,6 +105,7 @@ fn checkSlice(
     }
     self.typ = okc.Typ{ .slice = .{
         .typ = was_ptr.?,
+        .sized = true,
         .mutable = slice.mutable,
     } };
     return .{

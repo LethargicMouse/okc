@@ -14,6 +14,7 @@ pub fn check(self: *@This(), location: okc.Location, ctx: okc.Expr.Check) !okc.E
         .array => |array| return .{
             .typ = .{ .slice = .{
                 .typ = array.typ,
+                .sized = true,
                 .mutable = info.mutable,
             } },
             .mutable = false,
@@ -27,6 +28,7 @@ pub fn check(self: *@This(), location: okc.Location, ctx: okc.Expr.Check) !okc.E
             return .{
                 .typ = .{ .slice = .{
                     .typ = try okc.Typ.memo.box(.err, ctx.arena),
+                    .sized = true,
                     .mutable = true,
                 } },
                 .mutable = false,

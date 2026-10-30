@@ -3,7 +3,28 @@ const std = @import("std");
 const okc = @import("okc");
 
 typ: *const okc.Typ,
+sized: bool,
 mutable: bool,
+
+pub fn parseTyp(ctx: *okc.Parser) !okc.Typ {
+    try ctx.expect(.bral, .quiet);
+    var sized = true;
+    try ctx.maybe(okc.Parser.expect, .{ .star, .quiet }) orelse {
+        sized = false;
+    };
+    try ctx.expect(.brar, .loud);
+    var mutable = true;
+    try ctx.maybe(okc.Parser.expect, .{ .mut, .quiet }) orelse {
+        mutable = false;
+    };
+    const typ: okc.Typ = try .parse(ctx);
+    const ptr = try okc.Typ.memo.box(typ, ctx.arena);
+    return .{ .slice = .{
+        .typ = ptr,
+        .sized = true,
+        .mutable = mutable,
+    } };
+}
 
 pub fn eql(a: @This(), b: @This()) bool {
     return a.typ == b.typ and a.mutable == b.mutable;

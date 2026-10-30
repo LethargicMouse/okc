@@ -34,7 +34,7 @@ pub const Typ = union(enum) {
             okc.Parser.parseVerbalTyp,
             okc.Parser.parsePtrTyp,
             Array.parseTyp,
-            okc.Parser.parseSliceTyp,
+            Slice.parseTyp,
         }) catch |err| {
             try ctx.fail("<type>");
             return err;
@@ -374,6 +374,7 @@ pub const Typ = union(enum) {
                 const new = try @call(.auto, fun, .{slice.typ.*} ++ args);
                 return .{ .slice = .{
                     .typ = try memo.box(new, arena),
+                    .sized = true,
                     .mutable = false,
                 } };
             },

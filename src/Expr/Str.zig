@@ -13,6 +13,7 @@ pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
     );
     return .{ .slice = .{
         .typ = try okc.Typ.memo.box(.{ .prime = .u8 }, ctx.arena),
+        .sized = true,
         .mutable = false,
     } };
 }
@@ -22,6 +23,7 @@ pub fn check(arena: std.mem.Allocator) !okc.Expr.Info {
     return .{
         .typ = .{ .slice = .{
             .typ = ptr,
+            .sized = true,
             .mutable = false,
         } },
         .mutable = false,

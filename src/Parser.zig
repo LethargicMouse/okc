@@ -227,21 +227,6 @@ pub fn parseFunTyp(self: *@This()) Error!okc.Typ {
     } };
 }
 
-pub fn parseSliceTyp(self: *@This()) !okc.Typ {
-    try self.expect(.bral, .quiet);
-    try self.expect(.brar, .loud);
-    var mutable = true;
-    try self.maybe(expect, .{ .mut, .quiet }) orelse {
-        mutable = false;
-    };
-    const typ: okc.Typ = try .parse(self);
-    const ptr = try okc.Typ.memo.box(typ, self.arena);
-    return .{ .slice = .{
-        .typ = ptr,
-        .mutable = mutable,
-    } };
-}
-
 pub fn parseGenericTyp(self: *@This()) Error!okc.Typ {
     const location = self.getLocation();
     const name = try self.parseName(.quiet);

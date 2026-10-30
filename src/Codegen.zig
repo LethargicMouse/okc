@@ -430,6 +430,7 @@ pub fn genArrayToSlice(self: *@This(), array: okc.Typ.Array, val: okc.Val) !okc.
     var res = okc.Val.Typed{
         .typ = .{ .slice = .{
             .typ = array.typ,
+            .sized = true,
             .mutable = false,
         } },
         .bare = .undef,
@@ -608,6 +609,7 @@ pub fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !okc.Val.Typed {
     var res = okc.Val.Typed{
         .typ = .{ .slice = .{
             .typ = try okc.Typ.memo.box(ptr_ref.inner_typ, self.arena),
+            .sized = true,
             .mutable = false,
         } },
         .bare = .undef,
@@ -647,6 +649,7 @@ pub fn genStr(self: *@This(), str: []const u8) !okc.Val.Typed {
     var res = okc.Val.Typed{
         .typ = .{ .slice = .{
             .typ = ptr_u8,
+            .sized = true,
             .mutable = false,
         } },
         .bare = .undef,
