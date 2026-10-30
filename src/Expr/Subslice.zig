@@ -4,6 +4,29 @@ expr: okc.Expr,
 start: okc.Expr,
 end: okc.Expr,
 
+pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+    const ref = try self.expr.genRef(ctx);
+    const start = try self.start.gen(ctx);
+    const end = try self.end.gen(ctx);
+    const ptr_ref = try ref.genElem(start, ctx);
+    const ptr = try ptr_ref.toPtrTypVal(ctx.arena);
+    const len = try okc.Expr.Binary.genOnVals(.sub, start.typ, end.bare, start.bare, ctx);
+    var res = okc.Val.Typed{
+        .typ = .{ .slice = .{
+            .typ = try okc.Typ.memo.box(ptr_ref.inner_typ, ctx.arena),
+            .sized = true,
+            .mutable = false,
+        } },
+        .bare = .undef,
+    };
+    try res.genIV(ptr, 0, ctx);
+    try res.genIV(.{
+        .typ = .{ .prime = .u64 },
+        .bare = .{ .tmp = len },
+    }, 1, ctx);
+    return res;
+}
+
 pub fn check(self: *@This(), location: okc.Location, ctx: okc.Expr.Check) !okc.Expr.Info {
     const info = try self.expr.check(.{}, ctx);
     const start = try self.start.check(.{}, ctx);

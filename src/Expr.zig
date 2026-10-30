@@ -99,21 +99,27 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!o
         .neg => |neg| ctx.genNeg(neg.expr),
         .notb => |notb| ctx.genNotb(notb.expr),
         .ptr => |ptr| ctx.genPtr(ptr.expr),
-        .subslice => |subslice| ctx.genSubslice(subslice.*),
+        .subslice => |subslice| subslice.gen(ctx),
         .sizeof => |typ| ctx.genSizeof(typ),
         .array => |array| array.gen(ctx),
         .struc => |struc| struc.gen(ctx),
-        .int => |int| okc.Codegen.genInt(int),
-        .str => |str| ctx.genStr(str.bare),
+        .int => |int| int.gen(),
+        .str => |str| str.gen(ctx),
         .vari => |vari| vari.gen(ctx),
-        .char => |char| okc.Codegen.genChar(char),
-        .bool => |boo| okc.Codegen.genBool(boo),
+        .char => |char| .{
+            .typ = .{ .prime = .u8 },
+            .bare = .{ .int = char },
+        },
+        .bool => |boo| .{
+            .typ = .{ .prime = .bool },
+            .bare = .{ .int = @intFromBool(boo) },
+        },
         .undef => |undef| okc.Codegen.genUndef(undef),
         .call => |call| call.gen(ctx),
         .binary => |binary| binary.gen(ctx),
         .field => |field| field.gen(ctx),
         .named_struc => |struc| struc.bare.gen(ctx),
-        .elem => |elem| ctx.genElem(elem.*),
+        .elem => |elem| elem.gen(ctx),
     };
 }
 

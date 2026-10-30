@@ -5,6 +5,40 @@ const okc = @import("okc");
 val: okc.Val,
 inner_typ: okc.Typ,
 
+pub fn genElem(self: @This(), index: okc.Val.Typed, ctx: *okc.Codegen) !@This() {
+    switch (self.inner_typ) {
+        .array => {
+            const tmp = try self.genGEPIB(index, ctx);
+            return .{
+                .inner_typ = self.inner_typ.array.typ.*,
+                .val = .{ .tmp = tmp },
+            };
+        },
+        .slice => |slice| {
+            const ptrptr = try self.genGEPIB(.int(0), ctx);
+            const ptrref: okc.Val.Ref = .{
+                .inner_typ = .{ .ptr = .{
+                    .typ = slice.typ,
+                    .mutable = false,
+                } },
+                .val = .{ .tmp = ptrptr },
+            };
+            const ptr = try ptrref.load(ctx);
+            const tmp = ctx.newTmp();
+            try ctx.buffer.?.print(
+                ctx.gpa,
+                "\n  %t{} = getelementptr {f}, ptr %t{}, {f}",
+                .{ tmp, okc.Typ.LLPrinter{ .typ = slice.typ.* }, ptr, index },
+            );
+            return .{
+                .inner_typ = slice.typ.*,
+                .val = .{ .tmp = tmp },
+            };
+        },
+        else => unreachable,
+    }
+}
+
 pub fn genGEPIB(self: @This(), index: okc.Val.Typed, ctx: *okc.Codegen) !u32 {
     const tmp = ctx.counter.next();
     try ctx.buffer.?.print(

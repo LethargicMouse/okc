@@ -316,7 +316,7 @@ pub fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
     const end_label = self.newTmp();
     try self.cond(.{ .tmp = less }, body_label, end_label);
     // var = slice[i]
-    const elem = try self.genElemRef(slice, ival_);
+    const elem = try slice.genElem(ival_, self);
     try self.vars.put(forr.vari, elem);
     // <body>
     try forr.body.gen(self);
@@ -553,119 +553,7 @@ pub fn genElemExprRef(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Ref {
     } else {
         index = try index_ref.loadTypVal(self);
     }
-    return self.genElemRef(ref, index);
-}
-
-fn genElemRef(self: *@This(), from: okc.Val.Ref, index: okc.Val.Typed) !okc.Val.Ref {
-    switch (from.inner_typ) {
-        .array => {
-            const tmp = try from.genGEPIB(index, self);
-            return .{
-                .inner_typ = from.inner_typ.array.typ.*,
-                .val = .{ .tmp = tmp },
-            };
-        },
-        .slice => |slice| {
-            const ptrptr = try from.genGEPIB(.int(0), self);
-            const ptrref: okc.Val.Ref = .{
-                .inner_typ = .{ .ptr = .{
-                    .typ = slice.typ,
-                    .mutable = false,
-                } },
-                .val = .{ .tmp = ptrptr },
-            };
-            const ptr = try ptrref.load(self);
-            const tmp = try self.genGEP(slice.typ.*, ptr, index);
-            return .{
-                .inner_typ = slice.typ.*,
-                .val = .{ .tmp = tmp },
-            };
-        },
-        else => unreachable,
-    }
-}
-
-fn genGEP(self: *@This(), typ: okc.Typ, ptr: u32, index: okc.Val.Typed) !u32 {
-    const tmp = self.newTmp();
-    try self.print(
-        "\n  %t{} = getelementptr {f}, ptr %t{}, {f}",
-        .{ tmp, okc.Typ.LLPrinter{ .typ = typ }, ptr, index },
-    );
-    return tmp;
-}
-
-pub fn genElem(self: *@This(), elem: okc.Expr.Elem) !okc.Val.Typed {
-    const ref = try self.genElemExprRef(elem);
-    return ref.loadTypVal(self);
-}
-
-pub fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !okc.Val.Typed {
-    const ref = try subslice.expr.genRef(self);
-    const start = try subslice.start.gen(self);
-    const end = try subslice.end.gen(self);
-    const ptr_ref = try self.genElemRef(ref, start);
-    const ptr = try ptr_ref.toPtrTypVal(self.arena);
-    const len = try okc.Expr.Binary.genOnVals(.sub, start.typ, end.bare, start.bare, self);
-    var res = okc.Val.Typed{
-        .typ = .{ .slice = .{
-            .typ = try okc.Typ.memo.box(ptr_ref.inner_typ, self.arena),
-            .sized = true,
-            .mutable = false,
-        } },
-        .bare = .undef,
-    };
-    try res.genIV(ptr, 0, self);
-    try res.genIV(.{
-        .typ = .{ .prime = .u64 },
-        .bare = .{ .tmp = len },
-    }, 1, self);
-    return res;
-}
-
-pub fn genInt(int: okc.Expr.Int) okc.Val.Typed {
-    return .{
-        .typ = int.typ.normalise(),
-        .bare = .{ .int = int.val },
-    };
-}
-
-pub fn genChar(char: u8) okc.Val.Typed {
-    return .{
-        .typ = .{ .prime = .u8 },
-        .bare = .{ .int = char },
-    };
-}
-
-pub fn genBool(boo: bool) okc.Val.Typed {
-    return .{
-        .typ = .{ .prime = .bool },
-        .bare = .{ .int = @intFromBool(boo) },
-    };
-}
-
-pub fn genStr(self: *@This(), str: []const u8) !okc.Val.Typed {
-    const info = try self.genStrDecl(str);
-    const ptr_u8 = try okc.Typ.memo.box(.{ .prime = .u8 }, self.arena);
-    var res = okc.Val.Typed{
-        .typ = .{ .slice = .{
-            .typ = ptr_u8,
-            .sized = true,
-            .mutable = false,
-        } },
-        .bare = .undef,
-    };
-    try res.genIV(.{
-        .typ = .{ .ptr = .{
-            .typ = ptr_u8,
-            .mutable = false,
-        } },
-        .bare = .{ .str = info.tmp },
-    }, 0, self);
-    try res.genIV(.{
-        .typ = .{ .prime = .u64 },
-        .bare = .{ .int = info.len },
-    }, 1, self);
-    return res;
+    return ref.genElem(index, self);
 }
 
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
