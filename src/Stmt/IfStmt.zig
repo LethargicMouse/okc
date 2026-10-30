@@ -4,6 +4,16 @@ branch: okc.Stmt.Branch,
 else_ifs: []okc.Stmt.Branch,
 else_block: okc.Stmt.Block,
 
+pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
+    const end_label = ctx.counter.next();
+    try self.branch.gen(end_label, .simple, ctx);
+    for (self.else_ifs) |branch| {
+        try branch.gen(end_label, .simple, ctx);
+    }
+    try self.else_block.gen(ctx);
+    try ctx.uncond(end_label, end_label);
+}
+
 pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
     var res = try self.branch.check(.simple, ctx);
     for (self.else_ifs) |*branch| {

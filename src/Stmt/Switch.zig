@@ -7,18 +7,18 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     const expr_ref = try self.expr.genRef(ctx);
     const tag = try expr_ref.loadTag(ctx);
     const swi_end_label = ctx.counter.next();
-    try ctx.buffer.?.print(ctx.gpa, "\n  switch i32 %t{}, label %l{} [", .{ tag, swi_end_label });
+    try ctx.buffer.print(ctx.gpa, "\n  switch i32 %t{}, label %l{} [", .{ tag, swi_end_label });
     const labels = try ctx.gpa.alloc(u32, self.branches.len);
     defer ctx.gpa.free(labels);
     for (self.branches, labels) |branch, *label| {
         label.* = ctx.counter.next();
         for (branch.variants) |variant| {
-            try ctx.buffer.?.appendSlice(ctx.gpa, "\n    ");
+            try ctx.buffer.appendSlice(ctx.gpa, "\n    ");
             const index = try variant.genInt(ctx);
-            try ctx.buffer.?.print(ctx.gpa, "\n    i32 {}, label %l{}", .{ index, label.* });
+            try ctx.buffer.print(ctx.gpa, "\n    i32 {}, label %l{}", .{ index, label.* });
         }
     }
-    try ctx.buffer.?.print(ctx.gpa, "\n  ]\nl{}:", .{swi_end_label});
+    try ctx.buffer.print(ctx.gpa, "\n  ]\nl{}:", .{swi_end_label});
     const end_label = ctx.counter.next();
     for (self.branches, labels) |branch, label| {
         try ctx.uncond(end_label, label);

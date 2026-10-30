@@ -28,12 +28,8 @@ pub fn gen(self: @This(), name: okc.Typ.Name, ctx: *okc.Codegen) !void {
     if (was.found_existing) {
         return;
     }
-    const buffer = ctx.buffer.?;
-    ctx.buffer = .empty;
-    defer {
-        ctx.buffer.?.deinit(ctx.gpa);
-        ctx.buffer = buffer;
-    }
+    var buffer: std.ArrayList(u8) = .empty;
+    defer buffer.deinit(ctx.gpa);
     var fields: std.StringHashMap(Field.GenInfo) = .init(ctx.gpa);
     errdefer fields.deinit();
     var variants: std.StringHashMap(usize) = .init(ctx.gpa);
@@ -71,14 +67,14 @@ pub fn gen(self: @This(), name: okc.Typ.Name, ctx: *okc.Codegen) !void {
             });
         }
     }
-    try ctx.buffer.?.print(ctx.gpa, "\n%\"{f}\" = type {{", .{name});
+    try buffer.print(ctx.gpa, "\n%\"{f}\" = type {{", .{name});
     if (field_typs.len != 0) {
-        try ctx.buffer.?.print(ctx.gpa, "\n  {f}", .{okc.Typ.LLPrinter{ .typ = field_typs[0] }});
+        try buffer.print(ctx.gpa, "\n  {f}", .{okc.Typ.LLPrinter{ .typ = field_typs[0] }});
         for (field_typs[1..]) |f_typ| {
-            try ctx.buffer.?.print(ctx.gpa, ",\n  {f}", .{okc.Typ.LLPrinter{ .typ = f_typ }});
+            try buffer.print(ctx.gpa, ",\n  {f}", .{okc.Typ.LLPrinter{ .typ = f_typ }});
         }
     }
-    try ctx.writer.interface.print("{s}\n}}", .{ctx.buffer.?.items});
+    try ctx.writer.interface.print("{s}\n}}", .{buffer.items});
     try ctx.typ_decls.put(name, .{
         .fields = fields,
         .variants = variants,

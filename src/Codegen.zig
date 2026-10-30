@@ -7,7 +7,7 @@ gpa: std.mem.Allocator, // expr
 arena: std.mem.Allocator,
 file: std.Io.File,
 writer: std.Io.File.Writer,
-buffer: ?std.ArrayList(u8) = null,
+buffer: std.ArrayList(u8) = .empty,
 extra_buffer: std.ArrayList(u8) = .empty,
 module: *okc.Module.GenInfo,
 consts: std.StringHashMap(okc.Typ),
@@ -59,7 +59,7 @@ pub fn init(
 }
 
 pub fn genAll(self: *@This()) !void {
-    try self.print("target triple = \"x86_64-pc-linux-gnu\"", .{});
+    try self.writer.interface.writeAll("target triple = \"x86_64-pc-linux-gnu\"");
     try self.genSliceDecl();
     try self.genFunNamed(.{
         .module = self.module,
@@ -73,7 +73,7 @@ pub fn genAll(self: *@This()) !void {
         const req = self.fun_queue.pop().?;
         try self.genFunNamed(req);
     }
-    try self.print("\n", .{});
+    try self.writer.interface.print("\n", .{});
 }
 
 fn genFunNamed(self: *@This(), req: FunReq) !void {
@@ -99,35 +99,32 @@ fn genFunNamed(self: *@This(), req: FunReq) !void {
     for (fun.header.generics, req.name.generics) |generic, typ| {
         try self.resolve_map.put(generic.name, typ);
     }
-    try self.genFun(req.name, fun, req.fun);
+    try fun.gen(req.name, req.fun, self);
 }
 
 fn genSliceDecl(self: *@This()) !void {
-    try self.print("\n%\"[]\" = type {{ ptr, i64 }}", .{});
+    try self.writer.interface.writeAll("\n%\"[]\" = type { ptr, i64 }");
 }
 
 fn genExtFun(self: *@This(), name: []const u8, ext_fun: okc.Item.Fun.Extern) !void {
-    try self.print("\ndeclare {f} @{s}(", .{
+    try self.writer.interface.print("\ndeclare {f} @{s}(", .{
         okc.Typ.LLPrinter{ .typ = ext_fun.header.ret_typ },
         name,
     });
     if (ext_fun.header.params.len != 0) {
-        try self.print("{f}", .{okc.Typ.LLPrinter{ .typ = ext_fun.header.params[0].typ }});
+        try self.writer.interface.print("{f}", .{okc.Typ.LLPrinter{ .typ = ext_fun.header.params[0].typ }});
         for (ext_fun.header.params[1..]) |param| {
-            try self.print(", {f}", .{okc.Typ.LLPrinter{ .typ = param.typ }});
+            try self.writer.interface.print(", {f}", .{okc.Typ.LLPrinter{ .typ = param.typ }});
         }
     }
-    try self.print(")", .{});
+    try self.writer.interface.print(")", .{});
 }
 
 pub fn genStrDecl(self: *@This(), str: []const u8) !okc.Expr.Str.GenInfo {
-    const buffer = self.buffer.?;
-    self.buffer = null;
-    defer self.buffer = buffer;
     const unescaped = try unescape(self.gpa, str);
     defer self.gpa.free(unescaped.repr);
-    const tmp = self.newTmp();
-    try self.print("\n@.s{} = private unnamed_addr constant [{} x i8] c\"{s}\\00\", align 1", .{
+    const tmp = self.counter.next();
+    try self.writer.interface.print("\n@.s{} = private unnamed_addr constant [{} x i8] c\"{s}\\00\", align 1", .{
         tmp,
         unescaped.len + 1,
         unescaped.repr,
@@ -171,171 +168,17 @@ fn unescape(gpa: std.mem.Allocator, str: []const u8) !okc.Expr.Str.Unescaped {
     };
 }
 
-fn genFun(
-    self: *@This(),
-    name: okc.Typ.Name,
-    fun: okc.Item.Fun,
-    fun_typ: okc.Typ.Fun,
-) !void {
-    self.buffer = self.extra_buffer;
-    try self.print(
-        "\ndefine {f} @\"{f}\"(",
-        .{ okc.Typ.LLPrinter{ .typ = fun_typ.ret_typ.* }, name },
-    );
-    var param_typ_vals = try self.gpa.alloc(okc.Val.Typed, fun.header.params.len);
-    defer self.gpa.free(param_typ_vals);
-    if (fun.header.params.len != 0) {
-        param_typ_vals[0] = try self.genParam(fun_typ.params[0]);
-        for (param_typ_vals[1..], fun_typ.params[1..]) |*target, param_typ| {
-            try self.print(", ", .{});
-            target.* = try self.genParam(param_typ);
-        }
-    }
-    try self.print(
-        \\) {{
-        \\entry:
-    , .{});
-    self.extra_buffer = self.buffer.?;
-    self.buffer = .empty;
-    for (
-        param_typ_vals[0..fun.header.params.len],
-        fun.header.params,
-    ) |typ_val, param| {
-        const vari = try typ_val.toStack(self);
-        try self.vars.put(param.name, vari);
-    }
-    try fun.body.gen(self);
-    if (fun.header.ret_typ.isVoid()) {
-        try okc.Stmt.Return.gen(.{ .expr = null }, self);
-    } else {
-        try self.genUnreachable();
-    }
-    try self.print("\n}}", .{});
-    var buffer = self.buffer.?;
-    defer buffer.deinit(self.gpa);
-    self.buffer = null;
-    try self.print("{s}{s}", .{ self.extra_buffer.items, buffer.items });
-    self.extra_buffer.clearRetainingCapacity();
-    self.vars.clearRetainingCapacity();
-    self.resolve_map.clearRetainingCapacity();
-}
-
-fn genParam(self: *@This(), typ: okc.Typ) !okc.Val.Typed {
-    const tmp = self.newTmp();
-    try self.print("{f} %t{}", .{ okc.Typ.LLPrinter{ .typ = typ }, tmp });
-    return .{ .typ = typ, .bare = .{ .tmp = tmp } };
-}
-
 pub fn genUnreachable(self: *@This()) !void {
-    try self.print("\n  unreachable", .{});
+    try self.buffer.print(self.gpa, "\n  unreachable", .{});
 }
 
-pub fn genIgnore(self: *@This(), ignore: okc.Stmt.Ignore) !void {
-    _ = try ignore.expr.gen(self);
-}
-
-pub fn genBreak(self: *@This()) !void {
-    const label = self.newTmp();
-    try self.uncond(self.loop_ends.getLast(), label);
-}
-
-pub fn genWhile(self: *@This(), whi: okc.Stmt.While) !void {
-    const condition_label = self.newTmp();
-    try self.uncond(condition_label, condition_label);
-    try self.genBranch(whi.branch, condition_label, .loop);
-}
-
-pub fn genForRange(self: *@This(), forr: okc.Stmt.ForRange) !void {
-    // int i = start
-    try okc.Stmt.Declare.Named.gen(.{
-        .name = forr.vari,
-        .bare = .{
-            .expr = forr.start,
-            .typ = null,
-            .mutable = false,
-        },
-    }, self);
-    const end = try forr.end.gen(self);
-    // goto cond
-    // start:
-    const start_label = self.newTmp();
-    const cond_label = self.newTmp();
-    try self.uncond(cond_label, start_label);
-    // i++
-    const ival = try self.vars.get(forr.vari).?.loadTypVal(self);
-    const inew = try okc.Expr.Binary.genOnVals(.add, ival.typ, ival.bare, .{ .int = 1 }, self);
-    try okc.Val.Typed.store(
-        .{ .typ = ival.typ, .bare = .{ .tmp = inew } },
-        self.vars.get(forr.vari).?.val,
-        self,
-    );
-    // goto cond
-    // cond:
-    try self.uncond(cond_label, cond_label);
-    // cond = i != end
-    const ival_ = try self.vars.get(forr.vari).?.loadTypVal(self);
-    const at_end = try okc.Expr.Binary.genOnVals(.neq, ival.typ, ival_.bare, end.bare, self);
-    // if cond, body, end
-    // body:
-    const body_label = self.newTmp();
-    const end_label = self.newTmp();
-    try self.cond(.{ .tmp = at_end }, body_label, end_label);
-    // <body>
-    try forr.body.gen(self);
-    // goto start
-    // end:
-    try self.uncond(start_label, end_label);
-}
-
-pub fn genFor(self: *@This(), forr: okc.Stmt.For) !void {
-    const slice = try forr.expr.genRef(self);
-    // int i = 0
-    const iref = try okc.Val.Typed.toStack(.{
-        .typ = .{ .prime = .u64 },
-        .bare = .{ .int = 0 },
-    }, self);
-    // goto cond
-    // start:
-    const start_label = self.newTmp();
-    const cond_label = self.newTmp();
-    try self.uncond(cond_label, start_label);
-    // i++
-    const ival = try iref.loadTypVal(self);
-    const inew = try okc.Expr.Binary.genOnVals(.add, ival.typ, ival.bare, .{ .int = 1 }, self);
-    try okc.Val.Typed.store(.{ .typ = ival.typ, .bare = .{ .tmp = inew } }, iref.val, self);
-    // goto cond
-    // cond:
-    try self.uncond(cond_label, cond_label);
-    // cond = i < .len
-    const ival_ = try iref.loadTypVal(self);
-    const len_field: okc.Expr.Field = .{
-        .expr = forr.expr,
-        .vari = .{ .name = "len" },
-    };
-    const len = try len_field.gen(self);
-    const less = try okc.Expr.Binary.genOnVals(.les, ival.typ, ival_.bare, len.bare, self);
-    // if cond, body, end
-    // body:
-    const body_label = self.newTmp();
-    const end_label = self.newTmp();
-    try self.cond(.{ .tmp = less }, body_label, end_label);
-    // var = slice[i]
-    const elem = try slice.genElem(ival_, self);
-    try self.vars.put(forr.vari, elem);
-    // <body>
-    try forr.body.gen(self);
-    // goto start
-    // end:
-    try self.uncond(start_label, end_label);
-}
-
-fn cond(
+pub fn cond(
     self: *@This(),
     condition: okc.Val,
     then_label: u32,
     else_label: u32,
 ) !void {
-    try self.print(
+    try self.buffer.print(self.gpa,
         \\
         \\  br i1 {f}, label %l{}, label %l{}
         \\l{}:
@@ -348,64 +191,11 @@ fn cond(
 }
 
 pub fn uncond(self: *@This(), to: u32, next: u32) !void {
-    try self.print(
+    try self.buffer.print(self.gpa,
         \\
         \\  br label %l{}
         \\l{}:
     , .{ to, next });
-}
-
-pub fn genIf(self: *@This(), iff: okc.Stmt.IfStmt) !void {
-    const end_label = self.newTmp();
-    try self.genBranch(iff.branch, end_label, .simple);
-    for (iff.else_ifs) |branch| {
-        try self.genBranch(branch, end_label, .simple);
-    }
-    try iff.else_block.gen(self);
-    try self.uncond(end_label, end_label);
-}
-
-fn genBranch(self: *@This(), branch: okc.Stmt.Branch, end_label: u32, kind: okc.Stmt.Branch.Kind) !void {
-    const condition = try branch.condition.gen(self);
-    const then_label = self.newTmp();
-    const else_label = self.newTmp();
-    if (kind == .loop) {
-        try self.loop_ends.append(self.gpa, else_label);
-    }
-    try self.cond(condition.bare, then_label, else_label);
-    try branch.body.gen(self);
-    try self.uncond(end_label, else_label);
-    if (kind == .loop) {
-        _ = self.loop_ends.pop();
-    }
-}
-
-pub fn genOpAssign(self: *@This(), op_assign: okc.Stmt.OpAssign) !void {
-    const vari = try op_assign.left.genRef(self);
-    const typ_val = try okc.Expr.Binary.gen(.{
-        .left = op_assign.left,
-        .kind = op_assign.kind,
-        .right = op_assign.right,
-    }, self);
-    try typ_val.store(vari.val, self);
-}
-
-pub fn genAssign(self: *@This(), assign: okc.Stmt.Assign) !void {
-    const vari = try assign.left.genRef(self);
-    const typ_val = try assign.expr.gen(self);
-    try typ_val.store(vari.val, self);
-}
-
-fn newTmp(self: *@This()) u32 {
-    return self.counter.next();
-}
-
-fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
-    if (self.buffer) |*buffer| {
-        try buffer.print(self.gpa, fmt, args);
-    } else {
-        try self.writer.interface.print(fmt, args);
-    }
 }
 
 pub fn deinit(self: *@This()) void {
@@ -428,5 +218,6 @@ pub fn deinit(self: *@This()) void {
     self.resolve_map.deinit();
     self.consts.deinit();
     self.extra_buffer.deinit(self.gpa);
+    self.buffer.deinit(self.gpa);
     self.* = undefined;
 }

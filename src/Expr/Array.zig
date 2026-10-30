@@ -62,16 +62,16 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
 }
 
 pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
-    try ctx.buffer.?.print(ctx.gpa, "{f} [", .{okc.Typ.LLPrinter{ .typ = self.typ }});
+    try ctx.buffer.print(ctx.gpa, "{f} [", .{okc.Typ.LLPrinter{ .typ = self.typ }});
     if (self.exprs.len != 0) {
-        try ctx.buffer.?.print(ctx.gpa, "\n  ", .{});
+        try ctx.buffer.print(ctx.gpa, "\n  ", .{});
         _ = try self.exprs[0].genConst(ctx);
         for (self.exprs[1..]) |expr| {
-            try ctx.buffer.?.print(ctx.gpa, ",\n  ", .{});
+            try ctx.buffer.print(ctx.gpa, ",\n  ", .{});
             _ = try expr.genConst(ctx);
         }
     }
-    try ctx.buffer.?.print(ctx.gpa, "\n]", .{});
+    try ctx.buffer.print(ctx.gpa, "\n]", .{});
     return self.typ;
 }
 

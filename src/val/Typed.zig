@@ -23,12 +23,12 @@ pub fn toStack(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
 }
 
 pub fn store(self: @This(), val: okc.Val, ctx: *okc.Codegen) !void {
-    try ctx.buffer.?.print(ctx.gpa, "\n  store {f}, ptr {f}", .{ self, val });
+    try ctx.buffer.print(ctx.gpa, "\n  store {f}, ptr {f}", .{ self, val });
 }
 
 pub fn genIV(self: *@This(), val: @This(), index: u64, ctx: *okc.Codegen) !void {
     const tmp = ctx.counter.next();
-    try ctx.buffer.?.print(
+    try ctx.buffer.print(
         ctx.gpa,
         "\n  %t{} = insertvalue {f}, {f}, {d}",
         .{ tmp, self, val, index },
@@ -59,21 +59,21 @@ pub fn genCall(
     }
     const ret_tmp = ctx.counter.next();
     if (self.typ.fun.ret_typ.* != .prime or self.typ.fun.ret_typ.prime != .void) {
-        try ctx.buffer.?.print(ctx.gpa, "\n  %t{} = ", .{ret_tmp});
+        try ctx.buffer.print(ctx.gpa, "\n  %t{} = ", .{ret_tmp});
     } else {
-        try ctx.buffer.?.print(ctx.gpa, "\n  ", .{});
+        try ctx.buffer.print(ctx.gpa, "\n  ", .{});
     }
-    try ctx.buffer.?.print(ctx.gpa, "call {f} {f} (", .{
+    try ctx.buffer.print(ctx.gpa, "call {f} {f} (", .{
         okc.Typ.LLPrinter{ .typ = self.typ.fun.ret_typ.* },
         self.bare,
     });
     if (args.len != 0) {
-        try ctx.buffer.?.print(ctx.gpa, "{f}", .{arg_typ_vals[0]});
+        try ctx.buffer.print(ctx.gpa, "{f}", .{arg_typ_vals[0]});
         for (arg_typ_vals[1..]) |val| {
-            try ctx.buffer.?.print(ctx.gpa, ", {f}", .{val});
+            try ctx.buffer.print(ctx.gpa, ", {f}", .{val});
         }
     }
-    try ctx.buffer.?.print(ctx.gpa, ")", .{});
+    try ctx.buffer.print(ctx.gpa, ")", .{});
     return .{
         .typ = self.typ.fun.ret_typ.*,
         .bare = .{ .tmp = ret_tmp },

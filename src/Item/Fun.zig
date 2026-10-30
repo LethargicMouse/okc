@@ -3,6 +3,50 @@ const okc = @import("okc");
 header: Header,
 body: okc.Stmt.Block,
 
+pub fn gen(
+    self: @This(),
+    name: okc.Typ.Name,
+    fun_typ: okc.Typ.Fun,
+    ctx: *okc.Codegen,
+) !void {
+    try ctx.extra_buffer.print(
+        ctx.gpa,
+        "\ndefine {f} @\"{f}\"(",
+        .{ okc.Typ.LLPrinter{ .typ = fun_typ.ret_typ.* }, name },
+    );
+    var param_typ_vals = try ctx.gpa.alloc(okc.Val.Typed, self.header.params.len);
+    defer ctx.gpa.free(param_typ_vals);
+    if (self.header.params.len != 0) {
+        param_typ_vals[0] = try okc.Item.Fun.Header.Param.gen(fun_typ.params[0], ctx);
+        for (param_typ_vals[1..], fun_typ.params[1..]) |*target, param_typ| {
+            try ctx.extra_buffer.print(ctx.gpa, ", ", .{});
+            target.* = try okc.Item.Fun.Header.Param.gen(param_typ, ctx);
+        }
+    }
+    try ctx.extra_buffer.print(ctx.gpa,
+        \\) {{
+        \\entry:
+    , .{});
+    for (
+        param_typ_vals[0..self.header.params.len],
+        self.header.params,
+    ) |typ_val, param| {
+        const vari = try typ_val.toStack(ctx);
+        try ctx.vars.put(param.name, vari);
+    }
+    try self.body.gen(ctx);
+    if (self.header.ret_typ.isVoid()) {
+        try okc.Stmt.Return.gen(.{ .expr = null }, ctx);
+    } else {
+        try ctx.genUnreachable();
+    }
+    try ctx.writer.interface.print("{s}{s}\n}}", .{ ctx.extra_buffer.items, ctx.buffer.items });
+    ctx.extra_buffer.clearRetainingCapacity();
+    ctx.vars.clearRetainingCapacity();
+    ctx.resolve_map.clearRetainingCapacity();
+    ctx.buffer.clearRetainingCapacity();
+}
+
 pub fn check(self: @This(), location: okc.Location, ctx: okc.Item.Check) !void {
     var stmt_check: okc.Stmt.Check = ctx.checkStmt(self.header.ret_typ);
     defer stmt_check.deinit();
@@ -60,5 +104,15 @@ pub const Header = struct {
         name: []const u8,
         typ: okc.Typ,
         location: okc.Location,
+
+        pub fn gen(typ: okc.Typ, ctx: *okc.Codegen) !okc.Val.Typed {
+            const tmp = ctx.counter.next();
+            try ctx.extra_buffer.print(
+                ctx.gpa,
+                "{f} %t{}",
+                .{ okc.Typ.LLPrinter{ .typ = typ }, tmp },
+            );
+            return .{ .typ = typ, .bare = .{ .tmp = tmp } };
+        }
     };
 };

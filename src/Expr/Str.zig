@@ -31,7 +31,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
 
 pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
     const info = try ctx.genStrDecl(self.bare);
-    try ctx.buffer.?.print(
+    try ctx.buffer.print(
         ctx.gpa,
         "%\"[]\" {{ ptr @.s{d}, i64 {d} }}",
         .{ info.tmp, info.len },

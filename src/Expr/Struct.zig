@@ -35,7 +35,7 @@ pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
     if (self.typ.getName()) |name| {
         try okc.Item.TypDecl.genNamed(name, ctx);
     }
-    try ctx.buffer.?.print(ctx.gpa, "{f} {{", .{okc.Typ.LLPrinter{ .typ = self.typ }});
+    try ctx.buffer.print(ctx.gpa, "{f} {{", .{okc.Typ.LLPrinter{ .typ = self.typ }});
     if (self.fields.len != 0) {
         const fields = try ctx.gpa.alloc(okc.Expr, self.fields.len);
         defer ctx.gpa.free(fields);
@@ -48,14 +48,14 @@ pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
             const info = self.typ.getFieldGenInfo(field.name, ctx.typ_decls);
             fields[info.index] = field.expr;
         }
-        try ctx.buffer.?.print(ctx.gpa, "\n  ", .{});
+        try ctx.buffer.print(ctx.gpa, "\n  ", .{});
         _ = try fields[0].genConst(ctx);
         for (fields[1..]) |expr| {
-            try ctx.buffer.?.print(ctx.gpa, ",\n  ", .{});
+            try ctx.buffer.print(ctx.gpa, ",\n  ", .{});
             _ = try expr.genConst(ctx);
         }
     }
-    try ctx.buffer.?.print(ctx.gpa, "\n}}", .{});
+    try ctx.buffer.print(ctx.gpa, "\n}}", .{});
     return self.typ;
 }
 

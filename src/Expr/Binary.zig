@@ -36,7 +36,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
 
 pub fn genOnVals(kind: Kind, typ: okc.Typ, a: okc.Val, b: okc.Val, ctx: *okc.Codegen) !u32 {
     const tmp = ctx.counter.next();
-    try ctx.buffer.?.print(
+    try ctx.buffer.print(
         ctx.gpa,
         "\n  %t{} = {f} {f} {f}, {f}",
         .{ tmp, kind, okc.Typ.LLPrinter{ .typ = typ }, a, b },

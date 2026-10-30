@@ -5,7 +5,7 @@ expr: okc.Expr,
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const typ_val = try self.expr.gen(ctx);
     const tmp = ctx.counter.next();
-    try ctx.buffer.?.print(ctx.gpa, "\n  %t{d} = xor {f}, -1", .{ tmp, typ_val });
+    try ctx.buffer.print(ctx.gpa, "\n  %t{d} = xor {f}, -1", .{ tmp, typ_val });
     return .{
         .typ = typ_val.typ,
         .bare = .{ .tmp = tmp },

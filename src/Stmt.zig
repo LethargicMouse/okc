@@ -22,18 +22,18 @@ kind: Kind,
 pub fn gen(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!void {
     switch (self.kind) {
         .swi => |swi| try swi.gen(ctx),
-        .for_range => |forr| try ctx.genForRange(forr),
-        .forr => |forr| try ctx.genFor(forr),
-        .op_assign => |op_assign| try ctx.genOpAssign(op_assign),
+        .for_range => |forr| try forr.gen(ctx),
+        .forr => |forr| try forr.gen(ctx),
+        .op_assign => |op_assign| try op_assign.gen(ctx),
         .unre => try ctx.genUnreachable(),
         .ret => |ret| try ret.gen(ctx),
         .expr => |expr| _ = try expr.expr.gen(ctx),
         .declare => |declare| try declare.gen(ctx),
-        .assign => |assign| try ctx.genAssign(assign),
-        .iff => |iff| try ctx.genIf(iff),
-        .whi => |whi| try ctx.genWhile(whi),
-        .ignore => |ignore| try ctx.genIgnore(ignore),
-        .brek => try ctx.genBreak(),
+        .assign => |assign| try assign.gen(ctx),
+        .iff => |iff| try iff.gen(ctx),
+        .whi => |whi| try whi.gen(ctx),
+        .ignore => |ignore| _ = try ignore.expr.gen(ctx),
+        .brek => try brek.gen(ctx),
     }
 }
 

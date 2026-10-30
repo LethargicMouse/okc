@@ -25,7 +25,7 @@ pub fn genElem(self: @This(), index: okc.Val.Typed, ctx: *okc.Codegen) !@This() 
             };
             const ptr = try ptrref.load(ctx);
             const tmp = ctx.counter.next();
-            try ctx.buffer.?.print(
+            try ctx.buffer.print(
                 ctx.gpa,
                 "\n  %t{} = getelementptr {f}, ptr %t{}, {f}",
                 .{ tmp, okc.Typ.LLPrinter{ .typ = slice.typ.* }, ptr, index },
@@ -41,7 +41,7 @@ pub fn genElem(self: @This(), index: okc.Val.Typed, ctx: *okc.Codegen) !@This() 
 
 pub fn genGEPIB(self: @This(), index: okc.Val.Typed, ctx: *okc.Codegen) !u32 {
     const tmp = ctx.counter.next();
-    try ctx.buffer.?.print(
+    try ctx.buffer.print(
         ctx.gpa,
         "\n  %t{} = getelementptr inbounds {f}, ptr {f}, i32 0, {f}",
         .{ tmp, okc.Typ.LLPrinter{ .typ = self.inner_typ }, self.val, index },
@@ -60,7 +60,7 @@ pub fn loadTag(self: @This(), ctx: *okc.Codegen) !u32 {
 
 pub fn load(self: @This(), ctx: *okc.Codegen) !u32 {
     const res = ctx.counter.next();
-    try ctx.buffer.?.print(
+    try ctx.buffer.print(
         ctx.gpa,
         "\n  %t{} = load {f}, ptr {f}",
         .{ res, okc.Typ.LLPrinter{ .typ = self.inner_typ }, self.val },

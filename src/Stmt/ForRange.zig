@@ -6,6 +6,48 @@ end: okc.Expr,
 body: okc.Stmt.Block,
 vari_location: okc.Location,
 
+pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
+    // int i = start
+    try okc.Stmt.Declare.Named.gen(.{
+        .name = self.vari,
+        .bare = .{
+            .expr = self.start,
+            .typ = null,
+            .mutable = false,
+        },
+    }, ctx);
+    const end = try self.end.gen(ctx);
+    // goto cond
+    // start:
+    const start_label = ctx.counter.next();
+    const cond_label = ctx.counter.next();
+    try ctx.uncond(cond_label, start_label);
+    // i++
+    const ival = try ctx.vars.get(self.vari).?.loadTypVal(ctx);
+    const inew = try okc.Expr.Binary.genOnVals(.add, ival.typ, ival.bare, .{ .int = 1 }, ctx);
+    try okc.Val.Typed.store(
+        .{ .typ = ival.typ, .bare = .{ .tmp = inew } },
+        ctx.vars.get(self.vari).?.val,
+        ctx,
+    );
+    // goto cond
+    // cond:
+    try ctx.uncond(cond_label, cond_label);
+    // cond = i != end
+    const ival_ = try ctx.vars.get(self.vari).?.loadTypVal(ctx);
+    const at_end = try okc.Expr.Binary.genOnVals(.neq, ival.typ, ival_.bare, end.bare, ctx);
+    // if cond, body, end
+    // body:
+    const body_label = ctx.counter.next();
+    const end_label = ctx.counter.next();
+    try ctx.cond(.{ .tmp = at_end }, body_label, end_label);
+    // <body>
+    try self.body.gen(ctx);
+    // goto start
+    // end:
+    try ctx.uncond(start_label, end_label);
+}
+
 pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
     var start = try self.start.check(.{}, ctx.exprCheckCtx());
     if (!start.typ.isNumber()) {
