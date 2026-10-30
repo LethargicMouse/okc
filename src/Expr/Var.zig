@@ -21,10 +21,10 @@ pub fn genRefIn(self: @This(), typ: okc.Typ.Name, ctx: *okc.Codegen) !okc.Val.Re
                 .typ = .{ .name = typ },
                 .bare = .undef,
             };
-            try ctx.genIV(&res, .{
+            try res.genIV(.{
                 .typ = .{ .prime = .i32 },
                 .bare = .{ .int = index },
-            }, 0);
+            }, 0, ctx);
             return ctx.toStack(res);
         },
         .use => {

@@ -20,13 +20,13 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     if (self.typ.getName()) |typ_name| {
         for (ctx.typ_decls.get(typ_name).?.default_fields) |field| {
             const typ_val = try field.expr.gen(ctx);
-            try ctx.genIV(&res, typ_val, field.index);
+            try res.genIV(typ_val, field.index, ctx);
         }
     }
     for (self.fields) |field| {
         const typ_val = try field.expr.gen(ctx);
         const info = self.typ.getFieldGenInfo(field.name, ctx.typ_decls);
-        try ctx.genIV(&res, typ_val, info.index);
+        try res.genIV(typ_val, info.index, ctx);
     }
     return res;
 }

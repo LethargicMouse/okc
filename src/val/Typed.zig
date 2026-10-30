@@ -5,6 +5,16 @@ const okc = @import("okc");
 bare: okc.Val,
 typ: okc.Typ,
 
+pub fn genIV(self: *@This(), val: @This(), index: u64, ctx: *okc.Codegen) !void {
+    const tmp = ctx.newTmp();
+    try ctx.buffer.?.print(
+        ctx.gpa,
+        "\n  %t{} = insertvalue {f}, {f}, {d}",
+        .{ tmp, self, val, index },
+    );
+    self.bare = .{ .tmp = tmp };
+}
+
 pub fn genCall(
     self: @This(),
     first: ?okc.Val.Typed,

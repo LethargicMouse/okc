@@ -33,7 +33,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     };
     for (self.exprs, 0..) |expr, i| {
         const typ_val = try expr.gen(ctx);
-        try ctx.genIV(&res, typ_val, i);
+        try res.genIV(typ_val, i, ctx);
     }
     return res;
 }
@@ -107,7 +107,7 @@ pub const Indexed = struct {
             const val = try assoc.expr.gen(ctx);
             for (assoc.indices) |index_expr| {
                 const index = try index_expr.genInt(ctx);
-                try ctx.genIV(&res, val, index);
+                try res.genIV(val, index, ctx);
             }
         }
         return res;

@@ -435,17 +435,17 @@ pub fn genArrayToSlice(self: *@This(), array: okc.Typ.Array, val: okc.Val) !okc.
         } },
         .bare = .undef,
     };
-    try self.genIV(&res, .{
+    try res.genIV(.{
         .typ = .{ .ptr = .{
             .typ = array.typ,
             .mutable = false,
         } },
         .bare = val,
-    }, 0);
-    try self.genIV(&res, .{
+    }, 0, self);
+    try res.genIV(.{
         .typ = .{ .prime = .u64 },
         .bare = .{ .int = try array.getLen(self) },
-    }, 1);
+    }, 1, self);
     return res;
 }
 
@@ -614,11 +614,11 @@ pub fn genSubslice(self: *@This(), subslice: okc.Expr.Subslice) !okc.Val.Typed {
         } },
         .bare = .undef,
     };
-    try self.genIV(&res, ptr, 0);
-    try self.genIV(&res, .{
+    try res.genIV(ptr, 0, self);
+    try res.genIV(.{
         .typ = .{ .prime = .u64 },
         .bare = .{ .tmp = len },
-    }, 1);
+    }, 1, self);
     return res;
 }
 
@@ -654,27 +654,18 @@ pub fn genStr(self: *@This(), str: []const u8) !okc.Val.Typed {
         } },
         .bare = .undef,
     };
-    try self.genIV(&res, .{
+    try res.genIV(.{
         .typ = .{ .ptr = .{
             .typ = ptr_u8,
             .mutable = false,
         } },
         .bare = .{ .str = info.tmp },
-    }, 0);
-    try self.genIV(&res, .{
+    }, 0, self);
+    try res.genIV(.{
         .typ = .{ .prime = .u64 },
         .bare = .{ .int = info.len },
-    }, 1);
+    }, 1, self);
     return res;
-}
-
-pub fn genIV(self: *@This(), to: *okc.Val.Typed, typ_val: okc.Val.Typed, index: u64) !void {
-    const tmp = self.newTmp();
-    try self.print(
-        "\n  %t{} = insertvalue {f}, {f}, {d}",
-        .{ tmp, to, typ_val, index },
-    );
-    to.bare = .{ .tmp = tmp };
 }
 
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
