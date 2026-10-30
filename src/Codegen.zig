@@ -426,29 +426,6 @@ fn storeInto(self: *@This(), val: okc.Val, typ_val: okc.Val.Typed) !void {
     try self.print("\n  store {f}, ptr {f}", .{ typ_val, val });
 }
 
-pub fn genArrayToSlice(self: *@This(), array: okc.Typ.Array, val: okc.Val) !okc.Val.Typed {
-    var res = okc.Val.Typed{
-        .typ = .{ .slice = .{
-            .typ = array.typ,
-            .sized = true,
-            .mutable = false,
-        } },
-        .bare = .undef,
-    };
-    try res.genIV(.{
-        .typ = .{ .ptr = .{
-            .typ = array.typ,
-            .mutable = false,
-        } },
-        .bare = val,
-    }, 0, self);
-    try res.genIV(.{
-        .typ = .{ .prime = .u64 },
-        .bare = .{ .int = try array.getLen(self) },
-    }, 1, self);
-    return res;
-}
-
 fn newTmp(self: *@This()) u32 {
     return self.counter.next();
 }

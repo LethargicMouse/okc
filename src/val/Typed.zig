@@ -33,7 +33,7 @@ pub fn genCall(
     for (arg_typ_vals_to_fill, args, params) |*target, arg, param| {
         target.* = try arg.gen(ctx);
         if (param == .slice and target.typ == .ptr) {
-            target.* = try ctx.genArrayToSlice(target.typ.ptr.typ.array, target.bare);
+            target.* = try okc.Expr.Array.castToSlice(target.typ.ptr.typ.array, target.bare, ctx);
         }
     }
     const ret_tmp = ctx.counter.next();

@@ -6,6 +6,29 @@ mtyp: ?okc.Typ,
 exprs: []okc.Expr,
 typ: okc.Typ = .any,
 
+pub fn castToSlice(typ: okc.Typ.Array, val: okc.Val, ctx: *okc.Codegen) !okc.Val.Typed {
+    var res = okc.Val.Typed{
+        .typ = .{ .slice = .{
+            .typ = typ.typ,
+            .sized = true,
+            .mutable = false,
+        } },
+        .bare = .undef,
+    };
+    try res.genIV(.{
+        .typ = .{ .ptr = .{
+            .typ = typ.typ,
+            .mutable = false,
+        } },
+        .bare = val,
+    }, 0, ctx);
+    try res.genIV(.{
+        .typ = .{ .prime = .u64 },
+        .bare = .{ .int = try typ.getLen(ctx) },
+    }, 1, ctx);
+    return res;
+}
+
 pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {
     const start = ctx.getLocation();
     const mtyp = try ctx.maybe(okc.Parser.parseTypHint, .{});
