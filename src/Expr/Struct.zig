@@ -9,6 +9,28 @@ const Typed = @import("Struct/Typed.zig");
 fields: []Field,
 typ: okc.Typ = .any,
 
+pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+    if (self.typ.getName()) |name| {
+        try okc.Item.TypDecl.genNamed(name, ctx);
+    }
+    var res = okc.Val.Typed{
+        .typ = self.typ,
+        .bare = .undef,
+    };
+    if (self.typ.getName()) |typ_name| {
+        for (ctx.typ_decls.get(typ_name).?.default_fields) |field| {
+            const typ_val = try field.expr.gen(ctx);
+            try ctx.genIV(&res, typ_val, field.index);
+        }
+    }
+    for (self.fields) |field| {
+        const typ_val = try field.expr.gen(ctx);
+        const info = self.typ.getFieldGenInfo(field.name, ctx.typ_decls);
+        try ctx.genIV(&res, typ_val, info.index);
+    }
+    return res;
+}
+
 pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
     if (self.typ.getName()) |name| {
         try okc.Item.TypDecl.genNamed(name, ctx);

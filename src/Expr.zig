@@ -102,7 +102,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!o
         .subslice => |subslice| ctx.genSubslice(subslice.*),
         .sizeof => |typ| ctx.genSizeof(typ),
         .array => |array| array.gen(ctx),
-        .struc => |struc| ctx.genStructExpr(struc),
+        .struc => |struc| struc.gen(ctx),
         .int => |int| okc.Codegen.genInt(int),
         .str => |str| ctx.genStr(str.bare),
         .vari => |vari| vari.gen(ctx),
@@ -112,7 +112,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!o
         .call => |call| call.gen(ctx),
         .binary => |binary| binary.gen(ctx),
         .field => |field| field.gen(ctx),
-        .named_struc => |struc| ctx.genNamedStructExpr(struc),
+        .named_struc => |struc| struc.bare.gen(ctx),
         .elem => |elem| ctx.genElem(elem.*),
     };
 }

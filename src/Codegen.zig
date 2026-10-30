@@ -668,28 +668,6 @@ pub fn genStr(self: *@This(), str: []const u8) !okc.Val.Typed {
     return res;
 }
 
-pub fn genStructExpr(self: *@This(), struc: okc.Expr.Struct) !okc.Val.Typed {
-    if (struc.typ.getName()) |name| {
-        try okc.Item.TypDecl.genNamed(name, self);
-    }
-    var res = okc.Val.Typed{
-        .typ = struc.typ,
-        .bare = .undef,
-    };
-    if (struc.typ.getName()) |typ_name| {
-        for (self.typ_decls.get(typ_name).?.default_fields) |field| {
-            const typ_val = try field.expr.gen(self);
-            try self.genIV(&res, typ_val, field.index);
-        }
-    }
-    for (struc.fields) |field| {
-        const typ_val = try field.expr.gen(self);
-        const info = struc.typ.getFieldGenInfo(field.name, self.typ_decls);
-        try self.genIV(&res, typ_val, info.index);
-    }
-    return res;
-}
-
 pub fn genIV(self: *@This(), to: *okc.Val.Typed, typ_val: okc.Val.Typed, index: u64) !void {
     const tmp = self.newTmp();
     try self.print(
@@ -697,10 +675,6 @@ pub fn genIV(self: *@This(), to: *okc.Val.Typed, typ_val: okc.Val.Typed, index: 
         .{ tmp, to, typ_val, index },
     );
     to.bare = .{ .tmp = tmp };
-}
-
-pub fn genNamedStructExpr(self: *@This(), named: okc.Expr.Struct.Named) !okc.Val.Typed {
-    return self.genStructExpr(named.bare);
 }
 
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
