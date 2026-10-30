@@ -2,6 +2,19 @@ const okc = @import("okc");
 
 expr: okc.Expr,
 
+pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
+    const val = try self.expr.gen(ctx);
+    return .{
+        .inner_typ = val.typ.ptr.typ.*,
+        .val = val.bare,
+    };
+}
+
+pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+    const ref = try self.genRef(ctx);
+    return ref.loadTypVal(ctx);
+}
+
 pub fn check(self: *@This(), location: okc.Location, ctx: okc.Expr.Check) !okc.Expr.Info {
     const info = try self.expr.check(.{}, ctx);
     const norm = info.typ.normalise();

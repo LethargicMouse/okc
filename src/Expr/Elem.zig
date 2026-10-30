@@ -3,8 +3,23 @@ const okc = @import("okc");
 expr: okc.Expr,
 index: okc.Expr,
 
+pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
+    const ref = try self.expr.genRef(ctx);
+    var index_ref = try self.index.genRef(ctx);
+    var index: okc.Val.Typed = undefined;
+    if (index_ref.inner_typ.getName()) |_| {
+        index = .{
+            .typ = .{ .prime = .u32 },
+            .bare = .{ .tmp = try index_ref.loadTag(ctx) },
+        };
+    } else {
+        index = try index_ref.loadTypVal(ctx);
+    }
+    return ref.genElem(index, ctx);
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
-    const ref = try ctx.genElemExprRef(self);
+    const ref = try self.genRef(ctx);
     return ref.loadTypVal(ctx);
 }
 

@@ -31,8 +31,8 @@ pub fn checkTyp(self: @This(), generics_checker: *okc.Item.Generic.Checker) okc.
         .arena = self.arena,
         .items = self.items.*,
         .failer = self.failer,
-        .generics_checker = generics_checker,
         .mod_typ = self.mod_typ,
+        .generics_checker = generics_checker,
     };
 }
 

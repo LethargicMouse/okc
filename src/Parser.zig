@@ -743,7 +743,7 @@ pub fn parseSizeofExpr(self: *@This()) Error!okc.Expr {
     try self.expect(.mor, .loud);
     return .{
         .location = start.combine(end),
-        .kind = .{ .sizeof = typ },
+        .kind = .{ .sizeof = .{ .typ = typ } },
     };
 }
 

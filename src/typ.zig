@@ -27,6 +27,31 @@ pub const Typ = union(enum) {
 
     pub var memo: okc.Memo(@This()) = undefined;
 
+    pub fn getLayout(self: @This(), ctx: *okc.Codegen) !okc.Layout {
+        switch (self) {
+            .prime => |prime| return prime.getLayout(),
+            .array => |array| {
+                const inner = try array.typ.getLayout(ctx);
+                const cnt = try array.getLen(ctx);
+                return .{
+                    .size = inner.size * cnt,
+                    .alig = inner.alig,
+                };
+            },
+            .fun, .ptr => return .new(8, 8),
+            .slice => return .new(16, 8),
+            .name => |name| {
+                try okc.Item.TypDecl.genNamed(name, ctx);
+                return ctx.typ_decls.get(name).?.layout;
+            },
+            .loc_name => |name| {
+                try okc.Item.TypDecl.genNamed(name.bare, ctx);
+                return ctx.typ_decls.get(name.bare).?.layout;
+            },
+            .any, .err, .int, .lazy, .typ => unreachable,
+        }
+    }
+
     pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!okc.Typ {
         return ctx.either(.{
             okc.Parser.parseFunTyp,
