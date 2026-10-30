@@ -200,3 +200,7 @@ test "EnumInfer.ok" {
 test "EnumArray.ok" {
     try testFile("EnumArray", "go");
 }
+
+test "Context.ok" {
+    try testFile("Context", "can't launch rockets cuz I'm not evil");
+}
