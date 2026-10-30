@@ -744,27 +744,6 @@ fn genBinOp(self: *@This(), kind: okc.Expr.Binary.Kind) !void {
     }
 }
 
-pub fn genFunPtr(self: *@This(), fun_name: []const u8, fun_meta: okc.Expr.FunMeta) !okc.Val.Typed {
-    var name = okc.Typ.Name{
-        .name = fun_name,
-        .generics = fun_meta.generics,
-    };
-    if (self.module.items.get(fun_name).? == .ext_fun) {
-        name.generics = &.{};
-    }
-    const typ: okc.Typ = .{ .fun = fun_meta.typ.fun };
-    const solved = try typ.solve(self.arena);
-    try self.fun_queue.append(self.gpa, .{
-        .module = self.module,
-        .name = name,
-        .fun = solved.fun,
-    });
-    return .{
-        .typ = solved,
-        .bare = .{ .global = name },
-    };
-}
-
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
     if (self.buffer) |*buffer| {
         try buffer.print(self.gpa, fmt, args);
@@ -779,16 +758,6 @@ pub fn loadCtx(self: *@This()) okc.Val.Ref.Load {
         .buffer = &self.buffer.?,
         .counter = &self.counter,
     };
-}
-
-pub fn getModule(self: *@This(), name: []const u8) !*okc.Module.GenInfo {
-    if (self.modules.get(name)) |mod| {
-        return mod;
-    }
-    std.log.debug("new gen mod `{s}`", .{name});
-    const new = try self.ast_modules.get(name).?.makeGenInfo(self.gpa, name);
-    try self.modules.put(name, new);
-    return new;
 }
 
 pub fn deinit(self: *@This()) void {

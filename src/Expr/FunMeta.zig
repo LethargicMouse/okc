@@ -5,6 +5,27 @@ const okc = @import("okc");
 generics: []okc.Typ,
 typ: okc.Typ,
 
+pub fn gen(self: @This(), fun_name: []const u8, ctx: *okc.Codegen) !okc.Val.Typed {
+    var name = okc.Typ.Name{
+        .name = fun_name,
+        .generics = self.generics,
+    };
+    if (ctx.module.items.get(fun_name).? == .ext_fun) {
+        name.generics = &.{};
+    }
+    const typ: okc.Typ = .{ .fun = self.typ.fun };
+    const solved = try typ.solve(ctx.arena);
+    try ctx.fun_queue.append(ctx.gpa, .{
+        .module = ctx.module,
+        .name = name,
+        .fun = solved.fun,
+    });
+    return .{
+        .typ = solved,
+        .bare = .{ .global = name },
+    };
+}
+
 pub fn fillFromHeader(
     self: *@This(),
     gpa: std.mem.Allocator,

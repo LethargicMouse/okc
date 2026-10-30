@@ -12,8 +12,15 @@ variants: []const Variant,
 
 pub fn genNamed(name_typ: okc.Typ.Name, ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!void {
     std.log.debug("gen typ decl `{f}` in mod `{s}`", .{ name_typ, ctx.module.name });
-    const self = try ctx.module.items.get(name_typ.name).?.getTypDecl(name_typ.name, ctx);
-    try self.gen(name_typ, ctx);
+    const item = ctx.module.items.get(name_typ.name).?;
+    switch (item) {
+        .typ_decl => |decl| try decl.gen(name_typ, ctx),
+        .use => {
+            const module: *okc.Module.GenInfo = try .get(name_typ.name, ctx);
+            try module.items.get(name_typ.name).?.typ_decl.gen(name_typ, ctx);
+        },
+        else => unreachable,
+    }
 }
 
 pub fn gen(self: @This(), name: okc.Typ.Name, ctx: *okc.Codegen) !void {

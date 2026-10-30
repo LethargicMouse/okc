@@ -53,17 +53,6 @@ pub const Kind = union(enum) {
     typ_alias: TypAlias,
     typ_decl: TypDecl,
     use,
-
-    pub fn getTypDecl(self: @This(), name: []const u8, ctx: *okc.Codegen) !TypDecl {
-        switch (self) {
-            .typ_decl => |typ| return typ,
-            .use => {
-                const module = try ctx.getModule(name);
-                return module.items.get(name).?.typ_decl;
-            },
-            else => unreachable,
-        }
-    }
 };
 
 pub const TypAlias = struct {
