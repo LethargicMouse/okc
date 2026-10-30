@@ -24,7 +24,7 @@ pub fn genElem(self: @This(), index: okc.Val.Typed, ctx: *okc.Codegen) !@This() 
                 .val = .{ .tmp = ptrptr },
             };
             const ptr = try ptrref.load(ctx);
-            const tmp = ctx.newTmp();
+            const tmp = ctx.counter.next();
             try ctx.buffer.?.print(
                 ctx.gpa,
                 "\n  %t{} = getelementptr {f}, ptr %t{}, {f}",

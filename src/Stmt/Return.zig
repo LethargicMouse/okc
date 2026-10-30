@@ -2,6 +2,15 @@ const okc = @import("okc");
 
 expr: ?okc.Expr,
 
+pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
+    if (self.expr) |expr| {
+        const val = try expr.gen(ctx);
+        try ctx.buffer.?.print(ctx.gpa, "\n  ret {f}", .{val});
+    } else {
+        try ctx.buffer.?.print(ctx.gpa, "\n  ret void", .{});
+    }
+}
+
 pub fn check(
     ret: *@This(),
     location: okc.Location,

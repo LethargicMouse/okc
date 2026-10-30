@@ -26,7 +26,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!v
         .forr => |forr| try ctx.genFor(forr),
         .op_assign => |op_assign| try ctx.genOpAssign(op_assign),
         .unre => try ctx.genUnreachable(),
-        .ret => |ret| try ctx.genRet(ret),
+        .ret => |ret| try ret.gen(ctx),
         .expr => |expr| _ = try expr.expr.gen(ctx),
         .declare => |named| try ctx.genDeclare(named.name, named.bare),
         .assign => |assign| try ctx.genAssign(assign),

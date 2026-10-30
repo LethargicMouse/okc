@@ -206,7 +206,7 @@ fn genFun(
     }
     try fun.body.gen(self);
     if (fun.header.ret_typ.isVoid()) {
-        try self.genRet(.{ .expr = null });
+        try okc.Stmt.Return.gen(.{ .expr = null }, self);
     } else {
         try self.genUnreachable();
     }
@@ -449,17 +449,8 @@ pub fn genArrayToSlice(self: *@This(), array: okc.Typ.Array, val: okc.Val) !okc.
     return res;
 }
 
-pub fn newTmp(self: *@This()) u32 {
+fn newTmp(self: *@This()) u32 {
     return self.counter.next();
-}
-
-pub fn genRet(self: *@This(), ret: okc.Stmt.Return) !void {
-    if (ret.expr) |expr| {
-        const val = try expr.gen(self);
-        try self.print("\n  ret {f}", .{val});
-    } else {
-        try self.print("\n  ret void", .{});
-    }
 }
 
 fn print(self: *@This(), comptime fmt: []const u8, args: anytype) !void {

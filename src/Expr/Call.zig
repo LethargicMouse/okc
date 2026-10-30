@@ -28,7 +28,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
             target.* = try ctx.genArrayToSlice(target.typ.ptr.typ.array, target.bare);
         }
     }
-    const ret_tmp = ctx.newTmp();
+    const ret_tmp = ctx.counter.next();
     if (callee.typ.fun.ret_typ.* != .prime or callee.typ.fun.ret_typ.prime != .void) {
         try ctx.buffer.?.print(ctx.gpa, "\n  %t{} = ", .{ret_tmp});
     } else {

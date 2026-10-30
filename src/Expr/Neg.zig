@@ -4,7 +4,7 @@ expr: okc.Expr,
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const val = try self.expr.gen(ctx);
-    const tmp = ctx.newTmp();
+    const tmp = ctx.counter.next();
     try ctx.buffer.?.print(
         ctx.gpa,
         "\n  %t{d} = sub {f} 0, {f}",
