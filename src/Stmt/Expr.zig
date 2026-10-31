@@ -37,7 +37,10 @@ pub fn parseStmt(ctx: *okc.Parser) !okc.Stmt {
 pub fn check(self: *@This(), ctx: okc.Expr.Check) !okc.ControlFlow {
     // no type hints to disallow `undefined;`
     const info = try self.expr.check(.{}, ctx);
-    _ = info.typ.unify(.{ .prime = .void }, self.expr.location, ctx.failer);
+    const typ = info.typ.unify(.{ .prime = .void }, self.expr.location, ctx.failer);
+    if (typ == .never) {
+        return .ret;
+    }
     return .cont;
 }
 

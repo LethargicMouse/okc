@@ -16,9 +16,5 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
 }
 
 pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
-    const control_flow = try self.branch.check(.loop, ctx);
-    switch (control_flow) {
-        .cont, .brek => return .cont,
-        .ret => return .ret,
-    }
+    return try self.branch.check(.loop, ctx);
 }

@@ -14,7 +14,7 @@ pub fn getElem(self: @This(), location: okc.Location, failer: *okc.Failer) ?@Thi
             .mutable = slice.mutable,
         },
         .err => return null,
-        .prime, .name, .loc_name, .ptr, .any, .fun, .int, .typ => {
+        .prime, .name, .loc_name, .ptr, .any, .fun, .int, .typ, .never => {
             failer.fail(location, "type `{f}` does not support indexing", .{self.typ});
             return null;
         },

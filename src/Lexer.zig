@@ -198,6 +198,7 @@ fn lexByList(self: *@This()) ?Token {
 }
 
 const lex_list = [_]LexPair{
+    .{ .str = "!", .lexeme = .bang },
     .{ .str = ">=", .lexeme = .moreq },
     .{ .str = ">", .lexeme = .mor },
     .{ .str = "|", .lexeme = .pipe },

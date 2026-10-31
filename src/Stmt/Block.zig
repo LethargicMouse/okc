@@ -22,8 +22,8 @@ pub fn checkLoop(self: @This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
     const res = try self.check(ctx);
     ctx.loops_nested -= 1;
     switch (res) {
-        .ret => return .ret,
         .brek, .cont => return .cont,
+        else => return res,
     }
 }
 
@@ -37,7 +37,7 @@ pub fn check(self: @This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
                 res = control_flow;
             }
             if (i + 1 != self.stmts.len) {
-                ctx.failer.fail(self.stmts[i + 1].location, "Stmt is unreachable", .{});
+                ctx.failer.fail(self.stmts[i + 1].location, "statement is unreachable", .{});
             }
         }
     }

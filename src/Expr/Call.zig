@@ -16,6 +16,9 @@ pub fn parsePostfix(ctx: *okc.Parser) !okc.Expr.Postfix {
 }
 
 pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
+    for (self.context.fields) |*field| {
+        _ = try field.expr.check(.{}, ctx);
+    }
     const callee = try self.expr.check(.{}, ctx);
     const info_call: okc.Expr.Info.Call = .{
         .args = self.args,

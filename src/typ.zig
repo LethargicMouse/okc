@@ -15,6 +15,7 @@ pub const Typ = union(enum) {
     ptr: Ptr,
     slice: Slice,
     typ,
+    never,
 
     pub const Array = @import("typ/Array.zig");
     pub const Fun = @import("typ/Fun.zig");
@@ -54,12 +55,13 @@ pub const Typ = union(enum) {
                 try okc.Item.TypDecl.genNamed(name.bare, ctx);
                 return ctx.typ_decls.get(name.bare).?.layout;
             },
-            .any, .err, .int, .lazy, .typ => unreachable,
+            .any, .err, .int, .lazy, .typ, .never => unreachable,
         }
     }
 
     pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!okc.Typ {
         return ctx.either(.{
+            parseNever,
             Fun.parseTyp,
             Name.parseGenericTyp,
             okc.Typ.parseVerbal,
@@ -70,6 +72,11 @@ pub const Typ = union(enum) {
             try ctx.fail("<type>");
             return err;
         };
+    }
+
+    fn parseNever(ctx: *okc.Parser) !okc.Typ {
+        try ctx.expect(.bang, .quiet);
+        return .never;
     }
 
     pub fn getFieldGenInfo(
@@ -172,7 +179,7 @@ pub const Typ = union(enum) {
             .ptr => |aptr| aptr.eql(b.ptr),
             .array => |arr| arr.eql(b.array),
             .lazy => |alazy| alazy.typ == b.lazy.typ,
-            .any, .err, .int, .typ => true,
+            .any, .err, .int, .typ, .never => true,
         };
     }
 
@@ -187,7 +194,7 @@ pub const Typ = union(enum) {
             .array => |array| array.hashIn(hasher),
             .lazy => |inner| hasher.update(std.mem.asBytes(&inner)),
             .slice => |slice| slice.hashIn(hasher),
-            .any, .err, .int, .typ => {},
+            .any, .err, .int, .typ, .never => {},
         }
     }
 
@@ -205,6 +212,7 @@ pub const Typ = union(enum) {
             .any => try writer.writeAll("_"),
             .int => try writer.writeAll("<int>"),
             .typ => try writer.writeAll("type"),
+            .never => try writer.writeAll("!"),
         }
     }
 
@@ -359,7 +367,7 @@ pub const Typ = union(enum) {
                 }
                 return a;
             },
-            .lazy, .any, .err, .int, .loc_name, .name, .typ => unreachable,
+            .lazy, .any, .err, .int, .loc_name, .name, .typ, .never => unreachable,
         }
     }
 
@@ -409,7 +417,7 @@ pub const Typ = union(enum) {
                     .mutable = false,
                 } };
             },
-            .any, .err, .prime, .int, .lazy, .typ => return self,
+            .any, .err, .prime, .int, .lazy, .typ, .never => return self,
         }
     }
 

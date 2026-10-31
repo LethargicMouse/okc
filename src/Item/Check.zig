@@ -26,7 +26,7 @@ pub fn loadCtx(self: @This()) okc.Module.Info.Load {
     };
 }
 
-pub fn checkTyp(self: @This(), generics_checker: *okc.Item.Generic.Checker) okc.Typ.Check {
+pub fn typCheckCtx(self: @This(), generics_checker: *okc.Item.Generic.Checker) okc.Typ.Check {
     return .{
         .arena = self.arena,
         .items = self.items.*,

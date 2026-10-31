@@ -1,4 +1,4 @@
-extern fn exit(code: int) noreturn;
+extern fn exit(code: int) !;
 extern fn printf(fmt: [*]u8, s: [*]u8) void;
 
 fn main() i32 {
@@ -23,7 +23,7 @@ fn launch_rockets() ctx {
 fn log_fatal(msg: str) ctx {
     log_level: Log_Level,
     exit_callback: fn(i32) noreturn
-} noreturn {
+} ! {
     if (log_level < .error) {
         return;
     }

@@ -1,6 +1,6 @@
 const okc = @import("okc");
 
-fields: []const Field,
+fields: []Field,
 
 pub fn parse(ctx: *okc.Parser) !@This() {
     try ctx.expect(.ctx, .quiet);

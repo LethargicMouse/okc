@@ -162,6 +162,7 @@ pub const ControlFlow = enum(u2) {
     cont = 0,
     brek = 1,
     ret = 2,
+    never = 3,
 };
 
 test {
