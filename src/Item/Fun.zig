@@ -111,6 +111,7 @@ pub const Extern = struct {
 pub const Header = struct {
     generics: []const okc.Item.Generic,
     params: []Param,
+    context: []Param,
     ret_typ: okc.Typ,
 
     pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !okc.Item.Fun.Header {
@@ -119,14 +120,26 @@ pub const Header = struct {
         ctx.tmp_name = try ctx.parseName(.loud);
         const generics = try ctx.maybe(okc.Item.parseGenerics, .{}) orelse &.{};
         try ctx.expect(.parl, .loud);
-        const params = try ctx.sep(okc.Item.Fun.Header.Param.parse, .{});
+        const params = try ctx.sep(Param.parse, .{});
         try ctx.expect(.parr, .loud);
+        const context = try ctx.maybe(parseContext, .{}) orelse @constCast(&.{});
         const ret_typ: okc.Typ = try .parse(ctx);
         return .{
             .generics = generics,
             .params = params,
+            .context = context,
             .ret_typ = ret_typ,
         };
+    }
+
+    fn parseContext(ctx: *okc.Parser) ![]Param {
+        try ctx.expect(.ctx, .quiet);
+        try ctx.expect(.curl, .loud);
+        const params = try ctx.sep(Param.parse, .{});
+        const prev = ctx.tokens[ctx.cursor - 1].lexeme;
+        const endmode: okc.Parser.Mode = if (prev == .comma or prev == .curl) .quiet else .loud;
+        try ctx.expect(.curr, endmode);
+        return params;
     }
 
     pub fn check(self: *@This(), ctx: okc.Item.Check) !void {
@@ -139,6 +152,10 @@ pub const Header = struct {
         self.ret_typ = try self.ret_typ.check(typ_check);
         generics_checker.checkUsage(ctx.failer);
     }
+
+    pub const Context = struct {
+        name: []const u8,
+    };
 
     pub const Param = struct {
         name: []const u8,
