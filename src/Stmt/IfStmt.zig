@@ -11,7 +11,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
         try branch.gen(end_label, .simple, ctx);
     }
     try self.else_block.gen(ctx);
-    try ctx.uncond(end_label, end_label);
+    try okc.Stmt.Branch.uncond(end_label, end_label, ctx);
 }
 
 pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {

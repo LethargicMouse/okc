@@ -16,14 +16,14 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     // start:
     const start_label = ctx.counter.next();
     const cond_label = ctx.counter.next();
-    try ctx.uncond(cond_label, start_label);
+    try okc.Stmt.Branch.uncond(cond_label, start_label, ctx);
     // i++
     const ival = try iref.loadTypVal(ctx);
     const inew = try okc.Expr.Binary.genOnVals(.add, ival.typ, ival.bare, .{ .int = 1 }, ctx);
     try okc.Val.Typed.store(.{ .typ = ival.typ, .bare = .{ .tmp = inew } }, iref.val, ctx);
     // goto cond
     // cond:
-    try ctx.uncond(cond_label, cond_label);
+    try okc.Stmt.Branch.uncond(cond_label, cond_label, ctx);
     // cond = i < .len
     const ival_ = try iref.loadTypVal(ctx);
     const len_field: okc.Expr.Field = .{
@@ -36,7 +36,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     // body:
     const body_label = ctx.counter.next();
     const end_label = ctx.counter.next();
-    try ctx.cond(.{ .tmp = less }, body_label, end_label);
+    try okc.Stmt.Branch.cond(.{ .tmp = less }, body_label, end_label, ctx);
     // var = slice[i]
     const elem = try slice.genElem(ival_, ctx);
     try ctx.vars.put(self.vari, elem);
@@ -44,7 +44,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     try self.body.gen(ctx);
     // goto start
     // end:
-    try ctx.uncond(start_label, end_label);
+    try okc.Stmt.Branch.uncond(start_label, end_label, ctx);
 }
 
 pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {

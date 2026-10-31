@@ -14,6 +14,7 @@ pub const Ignore = @import("Stmt/Ignore.zig");
 pub const OpAssign = @import("Stmt/OpAssign.zig");
 pub const Return = @import("Stmt/Return.zig");
 pub const Switch = @import("Stmt/Switch.zig");
+pub const unre = @import("Stmt/unre.zig");
 pub const While = @import("Stmt/While.zig");
 
 location: okc.Location,
@@ -25,7 +26,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!v
         .for_range => |forr| try forr.gen(ctx),
         .forr => |forr| try forr.gen(ctx),
         .op_assign => |op_assign| try op_assign.gen(ctx),
-        .unre => try ctx.genUnreachable(),
+        .unre => try unre.gen(ctx),
         .ret => |ret| try ret.gen(ctx),
         .expr => |expr| _ = try expr.expr.gen(ctx),
         .declare => |declare| try declare.gen(ctx),

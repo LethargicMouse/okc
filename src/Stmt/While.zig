@@ -4,7 +4,7 @@ branch: okc.Stmt.Branch,
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     const condition_label = ctx.counter.next();
-    try ctx.uncond(condition_label, condition_label);
+    try okc.Stmt.Branch.uncond(condition_label, condition_label, ctx);
     try self.branch.gen(condition_label, .loop, ctx);
 }
 

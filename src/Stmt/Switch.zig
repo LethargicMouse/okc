@@ -21,10 +21,10 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     try ctx.buffer.print(ctx.gpa, "\n  ]\nl{}:", .{swi_end_label});
     const end_label = ctx.counter.next();
     for (self.branches, labels) |branch, label| {
-        try ctx.uncond(end_label, label);
+        try okc.Stmt.Branch.uncond(end_label, label, ctx);
         try branch.body.gen(ctx);
     }
-    try ctx.uncond(end_label, end_label);
+    try okc.Stmt.Branch.uncond(end_label, end_label, ctx);
 }
 
 pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {

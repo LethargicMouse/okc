@@ -10,6 +10,10 @@ generics: []const okc.Item.Generic,
 fields: []Field,
 variants: []const Variant,
 
+pub fn genSlice(ctx: *okc.Codegen) !void {
+    try ctx.writer.interface.writeAll("\n%\"[]\" = type { ptr, i64 }");
+}
+
 pub fn genNamed(name_typ: okc.Typ.Name, ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!void {
     std.log.debug("gen typ decl `{f}` in mod `{s}`", .{ name_typ, ctx.module.name });
     const item = ctx.module.items.get(name_typ.name).?;

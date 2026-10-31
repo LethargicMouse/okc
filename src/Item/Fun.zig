@@ -38,7 +38,7 @@ pub fn gen(
     if (self.header.ret_typ.isVoid()) {
         try okc.Stmt.Return.gen(.{ .expr = null }, ctx);
     } else {
-        try ctx.genUnreachable();
+        try okc.Stmt.unre.gen(ctx);
     }
     try ctx.writer.interface.print("{s}{s}\n}}", .{ ctx.extra_buffer.items, ctx.buffer.items });
     ctx.extra_buffer.clearRetainingCapacity();
@@ -66,6 +66,20 @@ pub fn check(self: @This(), location: okc.Location, ctx: okc.Item.Check) !void {
 
 pub const Extern = struct {
     header: Header,
+
+    pub fn gen(self: @This(), name: []const u8, ctx: *okc.Codegen) !void {
+        try ctx.writer.interface.print("\ndeclare {f} @{s}(", .{
+            okc.Typ.LLPrinter{ .typ = self.header.ret_typ },
+            name,
+        });
+        if (self.header.params.len != 0) {
+            try ctx.writer.interface.print("{f}", .{okc.Typ.LLPrinter{ .typ = self.header.params[0].typ }});
+            for (self.header.params[1..]) |param| {
+                try ctx.writer.interface.print(", {f}", .{okc.Typ.LLPrinter{ .typ = param.typ }});
+            }
+        }
+        try ctx.writer.interface.print(")", .{});
+    }
 };
 
 pub const Header = struct {
@@ -115,4 +129,36 @@ pub const Header = struct {
             return .{ .typ = typ, .bare = .{ .tmp = tmp } };
         }
     };
+};
+
+pub const GenReq = struct {
+    module: *okc.Module.GenInfo,
+    name: okc.Typ.Name,
+    fun: okc.Typ.Fun,
+
+    pub fn handle(req: okc.Item.Fun.GenReq, ctx: *okc.Codegen) !void {
+        ctx.module = req.module;
+        const item = ctx.module.items.get(req.name.name).?;
+        const fun = switch (item) {
+            .typ_alias, .use => unreachable,
+            .ext_fun => |ext_fun| {
+                const was = try ctx.generated.getOrPut(req.name);
+                if (was.found_existing) {
+                    return;
+                }
+                try ext_fun.gen(req.name.name, ctx);
+                return;
+            },
+            .fun => |fun| fun,
+            .constant, .typ_decl => unreachable,
+        };
+        const was = try ctx.generated.getOrPut(req.name);
+        if (was.found_existing) {
+            return;
+        }
+        for (fun.header.generics, req.name.generics) |generic, typ| {
+            try ctx.resolve_map.put(generic.name, typ);
+        }
+        try fun.gen(req.name, req.fun, ctx);
+    }
 };

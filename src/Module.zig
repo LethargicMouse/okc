@@ -13,7 +13,21 @@ pub fn gen(self: @This(), name: []const u8, ctx: *okc.Codegen) error{ WriteFaile
     const info = try self.makeGenInfo(ctx.gpa, name);
     try ctx.modules.put(name, info);
     ctx.module = info;
-    try ctx.genAll();
+    try ctx.writer.interface.writeAll("target triple = \"x86_64-pc-linux-gnu\"");
+    try okc.Item.TypDecl.genSlice(ctx);
+    try okc.Item.Fun.GenReq.handle(.{
+        .module = ctx.module,
+        .name = .{ .name = "main" },
+        .fun = .{
+            .params = &.{},
+            .ret_typ = try okc.Typ.memo.box(.{ .prime = .i32 }, ctx.arena),
+        },
+    }, ctx);
+    while (ctx.fun_queue.items.len != 0) {
+        const req = ctx.fun_queue.pop().?;
+        try req.handle(ctx);
+    }
+    try ctx.writer.interface.print("\n", .{});
     try ctx.writer.interface.flush();
 }
 

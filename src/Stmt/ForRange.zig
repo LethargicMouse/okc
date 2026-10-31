@@ -21,7 +21,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     // start:
     const start_label = ctx.counter.next();
     const cond_label = ctx.counter.next();
-    try ctx.uncond(cond_label, start_label);
+    try okc.Stmt.Branch.uncond(cond_label, start_label, ctx);
     // i++
     const ival = try ctx.vars.get(self.vari).?.loadTypVal(ctx);
     const inew = try okc.Expr.Binary.genOnVals(.add, ival.typ, ival.bare, .{ .int = 1 }, ctx);
@@ -32,7 +32,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     );
     // goto cond
     // cond:
-    try ctx.uncond(cond_label, cond_label);
+    try okc.Stmt.Branch.uncond(cond_label, cond_label, ctx);
     // cond = i != end
     const ival_ = try ctx.vars.get(self.vari).?.loadTypVal(ctx);
     const at_end = try okc.Expr.Binary.genOnVals(.neq, ival.typ, ival_.bare, end.bare, ctx);
@@ -40,12 +40,12 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     // body:
     const body_label = ctx.counter.next();
     const end_label = ctx.counter.next();
-    try ctx.cond(.{ .tmp = at_end }, body_label, end_label);
+    try okc.Stmt.Branch.cond(.{ .tmp = at_end }, body_label, end_label, ctx);
     // <body>
     try self.body.gen(ctx);
     // goto start
     // end:
-    try ctx.uncond(start_label, end_label);
+    try okc.Stmt.Branch.uncond(start_label, end_label, ctx);
 }
 
 pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {

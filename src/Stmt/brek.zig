@@ -2,7 +2,7 @@ const okc = @import("okc");
 
 pub fn gen(ctx: *okc.Codegen) !void {
     const label = ctx.counter.next();
-    try ctx.uncond(ctx.loop_ends.getLast(), label);
+    try okc.Stmt.Branch.uncond(ctx.loop_ends.getLast(), label, ctx);
 }
 
 pub fn check(location: okc.Location, ctx: okc.Stmt.Check) error{OutOfMemory}!okc.ControlFlow {
