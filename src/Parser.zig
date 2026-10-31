@@ -23,36 +23,6 @@ pub fn init(
     };
 }
 
-pub fn run(self: *@This()) error{ OutOfMemory, Handled }!okc.Module {
-    defer self.deinit();
-    const module = try self.maybe(parseModule, .{}) orelse {
-        std.log.err("failed to parse {f}\n{f}\n        found  {s}", .{
-            self.tokens[self.err_cursor].location,
-            ErrMsgsPrinter{ .msgs = self.err_msgs.items },
-            okc.Lexeme.describe(self.tokens[self.err_cursor].lexeme),
-        });
-        if (self.err_cursor != 0) {
-            const before = self.tokens[self.err_cursor - 1];
-            if (before.lexeme == .name and std.mem.eql(u8, before.lexeme.name, "else")) {
-                std.log.info("use `or` instead of `else`", .{});
-            }
-        }
-        return error.Handled;
-    };
-    return module;
-}
-
-fn parseModule(self: *@This()) !okc.Module {
-    const items = try self.many(okc.Item.parse, .{});
-    const location = self.getLocation();
-    std.debug.assert(location.start.line == location.end.line);
-    try self.expect(.eof, .quiet);
-    return .{
-        .items = items,
-        .location = location,
-    };
-}
-
 pub fn sep(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, args) {
     var vec = std.ArrayList(ParseRes(parse, args)).empty;
     defer vec.deinit(self.gpa);
@@ -138,7 +108,7 @@ fn parseLexeme(
     return error.ParseFailed;
 }
 
-fn deinit(self: *@This()) void {
+pub fn deinit(self: *@This()) void {
     self.gpa.free(self.tokens);
     self.err_msgs.deinit(self.gpa);
     self.* = undefined;
@@ -171,7 +141,7 @@ pub fn fail(self: *@This(), msg: []const u8) !void {
 
 const Error = error{ ParseFailed, OutOfMemory };
 
-const ErrMsgsPrinter = struct {
+pub const ErrMsgsPrinter = struct {
     msgs: []const []const u8,
 
     pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {

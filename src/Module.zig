@@ -9,6 +9,35 @@ pub const Info = @import("Module/Info.zig");
 items: []okc.Item,
 location: okc.Location,
 
+fn parseOrDie(ctx: *okc.Parser) error{ OutOfMemory, Handled }!okc.Module {
+    const module = try ctx.maybe(okc.Module.parse, .{}) orelse {
+        std.log.err("failed to parse {f}\n{f}\n        found  {s}", .{
+            ctx.tokens[ctx.err_cursor].location,
+            okc.Parser.ErrMsgsPrinter{ .msgs = ctx.err_msgs.items },
+            okc.Lexeme.describe(ctx.tokens[ctx.err_cursor].lexeme),
+        });
+        if (ctx.err_cursor != 0) {
+            const before = ctx.tokens[ctx.err_cursor - 1];
+            if (before.lexeme == .name and std.mem.eql(u8, before.lexeme.name, "else")) {
+                std.log.info("use `or` instead of `else`", .{});
+            }
+        }
+        return error.Handled;
+    };
+    return module;
+}
+
+fn parse(ctx: *okc.Parser) !@This() {
+    const items = try ctx.many(okc.Item.parse, .{});
+    const location = ctx.getLocation();
+    std.debug.assert(location.start.line == location.end.line);
+    try ctx.expect(.eof, .quiet);
+    return .{
+        .items = items,
+        .location = location,
+    };
+}
+
 pub fn gen(self: @This(), name: []const u8, ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!void {
     const info = try self.makeGenInfo(ctx.gpa, name);
     try ctx.modules.put(name, info);
@@ -61,7 +90,8 @@ pub fn read(
     var lexer: okc.Lexer = try .init(gpa, source);
     const tokens = try lexer.lex(gpa);
     var parser: okc.Parser = .init(gpa, arena, tokens);
-    return parser.run();
+    defer parser.deinit();
+    return .parseOrDie(&parser);
 }
 
 pub fn check(self: @This(), info: *Info, kind: Kind, ctx: Check) !void {
