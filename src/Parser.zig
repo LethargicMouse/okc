@@ -600,7 +600,7 @@ fn parseBinOp(self: *@This(), prior: u8) ?okc.Expr.Binary.Kind {
     return res;
 }
 
-fn parseExprPosted(self: *@This(), mode: Mode) Error!okc.Expr {
+pub fn parseExprPosted(self: *@This(), mode: Mode) Error!okc.Expr {
     var res: okc.Expr = try .parseAtom(self, mode);
     while (try self.maybe(parsePostfix, .{})) |postfix| {
         switch (postfix.kind) {
@@ -732,36 +732,6 @@ fn parseFieldPostfix(self: *@This()) !okc.Expr.Postfix {
 
 pub fn getLocation(self: @This()) okc.Location {
     return self.tokens[self.cursor].location;
-}
-
-pub fn parseSizeofExpr(self: *@This()) Error!okc.Expr {
-    const start = self.getLocation();
-    try self.expect(.sizeof, .quiet);
-    try self.expect(.les, .loud);
-    const typ: okc.Typ = try .parse(self);
-    const end = self.getLocation();
-    try self.expect(.mor, .loud);
-    return .{
-        .location = start.combine(end),
-        .kind = .{ .sizeof = .{ .typ = typ } },
-    };
-}
-
-pub fn parseTypHint(self: *@This()) !okc.Typ {
-    try self.expect(.les, .quiet);
-    const typ: okc.Typ = try .parse(self);
-    try self.expect(.mor, .loud);
-    return typ;
-}
-
-pub fn parseUnaryExpr(self: *@This()) Error!okc.Expr {
-    const start = self.getLocation();
-    const unary: okc.Expr.Unary = try .parse(self);
-    const expr = try self.parseExprPosted(.loud);
-    return .{
-        .location = start.combine(expr.location),
-        .kind = try .makeUnary(unary, expr, self.arena),
-    };
 }
 
 pub fn parseName(self: *@This(), mode: Mode) ![]const u8 {

@@ -31,7 +31,7 @@ pub fn castToSlice(typ: okc.Typ.Array, val: okc.Val, ctx: *okc.Codegen) !okc.Val
 
 pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {
     const start = ctx.getLocation();
-    const mtyp = try ctx.maybe(okc.Parser.parseTypHint, .{});
+    const mtyp = try ctx.maybe(parseTypHint, .{});
     try ctx.expect(.bral, .quiet);
     const exprs = try ctx.sep(okc.Expr.parse, .{.loud});
     if (try ctx.maybe(okc.Parser.expect, .{ .equ, .quiet }) != null) {
@@ -47,6 +47,13 @@ pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {
             .typ = undefined,
         } },
     };
+}
+
+fn parseTypHint(ctx: *okc.Parser) !okc.Typ {
+    try ctx.expect(.les, .quiet);
+    const typ: okc.Typ = try .parse(ctx);
+    try ctx.expect(.mor, .loud);
+    return typ;
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {

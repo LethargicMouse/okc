@@ -48,13 +48,13 @@ pub fn parseAtom(
     mode: okc.Parser.Mode,
 ) error{ ParseFailed, OutOfMemory }!okc.Expr {
     return ctx.either(.{
-        okc.Parser.parseSizeofExpr,
+        Sizeof.parseExpr,
         Member.parseExpr,
-        parsePar,
         Array.parseExpr,
-        okc.Parser.parseUnaryExpr,
+        Unary.parseExpr,
         Struct.parseExpr,
         Struct.Named.parseExpr,
+        parsePar,
         parseLiteral,
     }) catch |err| {
         if (mode == .loud) {

@@ -2,6 +2,19 @@ const okc = @import("okc");
 
 typ: okc.Typ,
 
+pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {
+    const start = ctx.getLocation();
+    try ctx.expect(.sizeof, .quiet);
+    try ctx.expect(.les, .loud);
+    const typ: okc.Typ = try .parse(ctx);
+    const end = ctx.getLocation();
+    try ctx.expect(.mor, .loud);
+    return .{
+        .location = start.combine(end),
+        .kind = .{ .sizeof = .{ .typ = typ } },
+    };
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const resolved = try self.typ.resolve(ctx.resolve_map, ctx.arena);
     const layout = try resolved.getLayout(ctx);
