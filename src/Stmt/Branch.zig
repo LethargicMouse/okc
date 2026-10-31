@@ -3,6 +3,17 @@ const okc = @import("okc");
 condition: okc.Expr,
 body: okc.Stmt.Block,
 
+pub fn parse(ctx: *okc.Parser) !okc.Stmt.Branch {
+    try ctx.expect(.parl, .loud);
+    const condition: okc.Expr = try .parse(ctx, .loud);
+    try ctx.expect(.parr, .loud);
+    const body = try ctx.parseBlock();
+    return .{
+        .condition = condition,
+        .body = body,
+    };
+}
+
 pub fn cond(
     condition: okc.Val,
     then_label: u32,

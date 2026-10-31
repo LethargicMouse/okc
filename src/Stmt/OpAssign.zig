@@ -6,6 +6,16 @@ left: okc.Expr,
 kind: okc.Expr.Binary.Kind,
 right: okc.Expr,
 
+pub fn parsePostfix(ctx: *okc.Parser) !okc.Stmt.Expr.Postfix {
+    const kind: okc.Expr.Binary.Kind = try .parseOpAssign(ctx);
+    try ctx.expect(.equ, .quiet);
+    const expr: okc.Expr = try .parse(ctx, .loud);
+    return .{ .op_assign = .{
+        .kind = kind,
+        .expr = expr,
+    } };
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     const vari = try self.left.genRef(ctx);
     const typ_val = try okc.Expr.Binary.gen(.{

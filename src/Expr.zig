@@ -29,6 +29,94 @@ pub const Var = @import("Expr/Var.zig");
 location: okc.Location,
 kind: Kind,
 
+pub fn parsePosted(ctx: *okc.Parser, mode: okc.Parser.Mode) error{ OutOfMemory, ParseFailed }!@This() {
+    var res = try parseAtom(ctx, mode);
+    while (try ctx.maybe(Postfix.parse, .{})) |postfix| {
+        switch (postfix.kind) {
+            .method => |method_postfix| {
+                const method = try ctx.arena.create(Method);
+                method.* = .{
+                    .expr = res,
+                    .vari = method_postfix.vari,
+                    .args = method_postfix.args,
+                    .name_location = method_postfix.name_location,
+                };
+                res = .{
+                    .location = res.location.combine(postfix.location),
+                    .kind = .{ .method = method },
+                };
+            },
+            .call => |call_postfix| {
+                const call = try ctx.arena.create(Call);
+                call.* = .{
+                    .expr = res,
+                    .args = call_postfix.args,
+                    .context = call_postfix.context,
+                };
+                res = .{
+                    .location = res.location.combine(postfix.location),
+                    .kind = .{ .call = call },
+                };
+            },
+            .field => |name| {
+                const field = try ctx.arena.create(Field);
+                field.* = .{
+                    .expr = res,
+                    .vari = name,
+                };
+                res = .{
+                    .location = res.location.combine(postfix.location),
+                    .kind = .{ .field = field },
+                };
+            },
+            .elem => |index| {
+                const elem = try ctx.arena.create(Elem);
+                elem.* = .{
+                    .expr = res,
+                    .index = index,
+                };
+                res = .{
+                    .location = res.location.combine(postfix.location),
+                    .kind = .{ .elem = elem },
+                };
+            },
+            .subslice => |subslice_postfix| {
+                const subslice = try ctx.arena.create(Subslice);
+                subslice.* = .{
+                    .expr = res,
+                    .start = subslice_postfix.start,
+                    .end = subslice_postfix.end,
+                };
+                res = .{
+                    .location = res.location.combine(postfix.location),
+                    .kind = .{ .subslice = subslice },
+                };
+            },
+        }
+    }
+    return res;
+}
+
+pub fn parsePrior(ctx: *okc.Parser, prior: u8, mode: okc.Parser.Mode) error{
+    OutOfMemory,
+    ParseFailed,
+}!okc.Expr {
+    var res = try parsePosted(ctx, mode);
+    while (try Binary.Postfix.parse(ctx, prior)) |bin_postfix| {
+        const binary = try ctx.arena.create(okc.Expr.Binary);
+        binary.* = .{
+            .left = res,
+            .kind = bin_postfix.kind,
+            .right = bin_postfix.expr,
+        };
+        res = .{
+            .location = res.location.combine(bin_postfix.expr.location),
+            .kind = .{ .binary = binary },
+        };
+    }
+    return res;
+}
+
 fn parsePar(ctx: *okc.Parser) !okc.Expr {
     const start = ctx.getLocation();
     try ctx.expect(.parl, .quiet);
@@ -40,7 +128,7 @@ fn parsePar(ctx: *okc.Parser) !okc.Expr {
 }
 
 pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !@This() {
-    return ctx.parseExprPrior(0, mode);
+    return parsePrior(ctx, 0, mode);
 }
 
 pub fn parseAtom(

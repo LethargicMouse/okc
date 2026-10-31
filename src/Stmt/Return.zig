@@ -2,6 +2,19 @@ const okc = @import("okc");
 
 expr: ?okc.Expr,
 
+pub fn parseStmt(ctx: *okc.Parser) !okc.Stmt {
+    const location = ctx.getLocation();
+    try ctx.expect(.ret, .quiet);
+    const expr = try ctx.maybe(okc.Expr.parse, .{.loud});
+    try ctx.expect(.semi, .loud);
+    return .{
+        .location = location,
+        .kind = .{ .ret = .{
+            .expr = expr,
+        } },
+    };
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     if (self.expr) |expr| {
         const val = try expr.gen(ctx);

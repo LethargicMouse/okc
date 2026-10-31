@@ -7,17 +7,16 @@ const Kind = union(enum) {
     call: okc.Expr.Call.Postfix,
     elem: okc.Expr,
     field: okc.Expr.Var,
-    method: Method,
-    subslice: Subslice,
+    method: okc.Expr.Method.Postfix,
+    subslice: okc.Expr.Subslice.Postfix,
 };
 
-const Method = struct {
-    vari: okc.Expr.Var,
-    args: []okc.Expr,
-    name_location: okc.Location,
-};
-
-const Subslice = struct {
-    start: okc.Expr,
-    end: okc.Expr,
-};
+pub fn parse(ctx: *okc.Parser) !okc.Expr.Postfix {
+    return ctx.either(.{
+        okc.Expr.Method.parsePostfix,
+        okc.Expr.Call.parsePostfix,
+        okc.Expr.Field.parsePostfix,
+        okc.Expr.Subslice.parsePostfix,
+        okc.Expr.Elem.parsePostfix,
+    });
+}

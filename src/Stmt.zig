@@ -43,13 +43,13 @@ pub fn parse(ctx: *okc.Parser) !@This() {
         Switch.parseStmt,
         okc.Parser.parseUnreachableStmt,
         okc.Parser.parseBreakStmt,
-        okc.Parser.parseRetStmt,
-        okc.Parser.parseDeclareStmt,
-        okc.Parser.parseIfStmt,
-        okc.Parser.parseForStmt,
-        okc.Parser.parseWhileStmt,
-        okc.Parser.parseIgnoreStmt,
-        okc.Parser.parseExprStmt,
+        Return.parseStmt,
+        Declare.parseStmt,
+        IfStmt.parseStmt,
+        For.parseStmt,
+        While.parseStmt,
+        Ignore.parseStmt,
+        Expr.parseStmt,
     }) catch |err| {
         try ctx.fail("<statement>");
         return err;

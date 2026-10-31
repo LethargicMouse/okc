@@ -5,6 +5,16 @@ const okc = @import("okc");
 expr: okc.Expr,
 vari: okc.Expr.Var,
 
+pub fn parsePostfix(ctx: *okc.Parser) !okc.Expr.Postfix {
+    try ctx.expect(.dot, .quiet);
+    const location = ctx.getLocation();
+    const vari: okc.Expr.Var = try .parse(ctx, .loud);
+    return .{
+        .location = location,
+        .kind = .{ .field = vari },
+    };
+}
+
 pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
     var vari = try self.expr.genRef(ctx);
     if (vari.inner_typ == .typ) {

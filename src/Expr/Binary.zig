@@ -58,6 +58,26 @@ pub const Kind = enum {
     rem,
     sub,
 
+    pub fn parseOpAssign(ctx: *okc.Parser) !@This() {
+        const res = okc.Expr.Binary.Kind.fromLexeme(ctx.tokens[ctx.cursor].lexeme) orelse
+            return error.ParseFailed;
+        if (res.getClass() != .arith) {
+            return error.ParseFailed;
+        }
+        ctx.cursor += 1;
+        return res;
+    }
+
+    pub fn parse(ctx: *okc.Parser, prior: u8) ?@This() {
+        const res = okc.Expr.Binary.Kind.fromLexeme(ctx.tokens[ctx.cursor].lexeme) orelse
+            return null;
+        if (res.getPrior() < prior) {
+            return null;
+        }
+        ctx.cursor += 1;
+        return res;
+    }
+
     pub fn getRetTyp(self: @This(), child_typ: okc.Typ) okc.Typ {
         return switch (self.getClass()) {
             .arith => child_typ,
@@ -124,4 +144,20 @@ pub const Class = enum {
 pub const Postfix = struct {
     kind: Kind,
     expr: okc.Expr,
+
+    pub fn parse(ctx: *okc.Parser, prior: u8) !?@This() {
+        const cursor_before = ctx.cursor;
+        const kind = Kind.parse(ctx, prior) orelse return null;
+        const expr = okc.Expr.parsePrior(ctx, kind.getPrior() + 1, .loud) catch |err| switch (err) {
+            error.ParseFailed => {
+                ctx.cursor = cursor_before;
+                return null;
+            },
+            error.OutOfMemory => return error.OutOfMemory,
+        };
+        return .{
+            .kind = kind,
+            .expr = expr,
+        };
+    }
 };

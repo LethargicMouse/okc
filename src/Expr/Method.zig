@@ -6,6 +6,21 @@ args: []okc.Expr,
 name_location: okc.Location,
 caller: okc.Typ.Name = .{ .name = "<unknown>" },
 
+pub fn parsePostfix(ctx: *okc.Parser) !okc.Expr.Postfix {
+    try ctx.expect(.dot, .quiet);
+    const location = ctx.getLocation();
+    const name = try ctx.parseName(.quiet);
+    const call: okc.Expr.Call.Postfix = try .parse(ctx);
+    return .{
+        .location = ctx.tmp_location,
+        .kind = .{ .method = .{
+            .vari = .{ .name = name },
+            .args = call.args,
+            .name_location = location,
+        } },
+    };
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const old = ctx.module;
     ctx.module = try .get(self.caller.name, ctx);
@@ -58,3 +73,9 @@ pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info 
     };
     return info_call.check(hint, ctx);
 }
+
+pub const Postfix = struct {
+    vari: okc.Expr.Var,
+    args: []okc.Expr,
+    name_location: okc.Location,
+};

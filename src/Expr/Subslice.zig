@@ -4,6 +4,22 @@ expr: okc.Expr,
 start: okc.Expr,
 end: okc.Expr,
 
+pub fn parsePostfix(ctx: *okc.Parser) !okc.Expr.Postfix {
+    try ctx.expect(.bral, .quiet);
+    const start: okc.Expr = try .parse(ctx, .quiet);
+    try ctx.expect(.dot2, .quiet);
+    const end: okc.Expr = try .parse(ctx, .loud);
+    const location = ctx.getLocation();
+    try ctx.expect(.brar, .loud);
+    return .{
+        .location = location,
+        .kind = .{ .subslice = .{
+            .start = start,
+            .end = end,
+        } },
+    };
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const ref = try self.expr.genRef(ctx);
     const start = try self.start.gen(ctx);
@@ -59,3 +75,8 @@ pub fn check(self: *@This(), location: okc.Location, ctx: okc.Expr.Check) !okc.E
         },
     }
 }
+
+pub const Postfix = struct {
+    start: okc.Expr,
+    end: okc.Expr,
+};

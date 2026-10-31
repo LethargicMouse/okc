@@ -8,9 +8,46 @@ mutable: bool,
 
 const Declare = @This();
 
+pub fn parseStmt(ctx: *okc.Parser) !okc.Stmt {
+    const declare: Named = try .parse(ctx);
+    return .{
+        .location = ctx.tmp_location,
+        .kind = .{ .declare = declare },
+    };
+}
+
 pub const Named = struct {
     name: []const u8,
     bare: Declare,
+
+    pub fn parse(ctx: *okc.Parser) !@This() {
+        try ctx.expect(.let, .quiet);
+        var mutable = true;
+        try ctx.maybe(okc.Parser.expect, .{ .mut, .quiet }) orelse {
+            mutable = false;
+        };
+        const location = ctx.getLocation();
+        const name = try ctx.parseName(.loud);
+        const typ = try ctx.maybe(parseTypAnnot, .{});
+        try ctx.expect(.equ, .loud);
+        const expr: okc.Expr = try .parse(ctx, .loud);
+        try ctx.expect(.semi, .loud);
+        ctx.tmp_location = location;
+        return .{
+            .name = name,
+            .bare = .{
+                .typ = typ,
+                .expr = expr,
+                .mutable = mutable,
+            },
+        };
+    }
+
+    fn parseTypAnnot(ctx: *okc.Parser) !okc.Typ {
+        try ctx.expect(.colon, .loud);
+        const typ: okc.Typ = try .parse(ctx);
+        return typ;
+    }
 
     pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
         const typ_val = try self.bare.expr.gen(ctx);

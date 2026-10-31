@@ -2,6 +2,13 @@ const okc = @import("okc");
 
 branch: okc.Stmt.Branch,
 
+pub fn parseStmt(ctx: *okc.Parser) !okc.Stmt {
+    const location = ctx.getLocation();
+    try ctx.expect(.whi, .quiet);
+    const branch: okc.Stmt.Branch = try .parse(ctx);
+    return .{ .location = location, .kind = .{ .whi = .{ .branch = branch } } };
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     const condition_label = ctx.counter.next();
     try okc.Stmt.Branch.uncond(condition_label, condition_label, ctx);

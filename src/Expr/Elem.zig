@@ -3,6 +3,17 @@ const okc = @import("okc");
 expr: okc.Expr,
 index: okc.Expr,
 
+pub fn parsePostfix(ctx: *okc.Parser) !okc.Expr.Postfix {
+    try ctx.expect(.bral, .quiet);
+    const index: okc.Expr = try .parse(ctx, .loud);
+    const location = ctx.getLocation();
+    try ctx.expect(.brar, .loud);
+    return .{
+        .location = location,
+        .kind = .{ .elem = index },
+    };
+}
+
 pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
     const ref = try self.expr.genRef(ctx);
     var index_ref = try self.index.genRef(ctx);

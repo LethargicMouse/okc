@@ -5,6 +5,45 @@ expr: okc.Expr,
 body: okc.Stmt.Block,
 vari_location: okc.Location,
 
+pub fn parseStmt(ctx: *okc.Parser) !okc.Stmt {
+    const location = ctx.getLocation();
+    try ctx.expect(.whi, .quiet);
+    try ctx.expect(.parl, .loud);
+    const vari_location = ctx.getLocation();
+    const vari = try ctx.parseName(.loud);
+    try ctx.expect(.colon, .loud);
+    const expr: okc.Expr = try .parse(ctx, .loud);
+    const mend = try ctx.maybe(parseRangeEnd, .{});
+    try ctx.expect(.parr, .loud);
+    const body = try ctx.parseBlock();
+    if (mend) |end| {
+        return .{
+            .location = location,
+            .kind = .{ .for_range = .{
+                .vari = vari,
+                .start = expr,
+                .end = end,
+                .body = body,
+                .vari_location = vari_location,
+            } },
+        };
+    }
+    return .{
+        .location = location,
+        .kind = .{ .forr = .{
+            .vari = vari,
+            .expr = expr,
+            .body = body,
+            .vari_location = vari_location,
+        } },
+    };
+}
+
+fn parseRangeEnd(ctx: *okc.Parser) !okc.Expr {
+    try ctx.expect(.dot2, .quiet);
+    return .parse(ctx, .loud);
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     const slice = try self.expr.genRef(ctx);
     // int i = 0

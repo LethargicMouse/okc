@@ -6,16 +6,16 @@ pub const Unary = enum {
     notb,
     ptr,
 
-    pub fn parseExpr(self: *okc.Parser) error{
+    pub fn parseExpr(ctx: *okc.Parser) error{
         OutOfMemory,
         ParseFailed,
     }!okc.Expr {
-        const start = self.getLocation();
-        const unary: okc.Expr.Unary = try .parse(self);
-        const expr = try self.parseExprPosted(.loud);
+        const start = ctx.getLocation();
+        const unary: okc.Expr.Unary = try .parse(ctx);
+        const expr: okc.Expr = try .parsePosted(ctx, .loud);
         return .{
             .location = start.combine(expr.location),
-            .kind = try .makeUnary(unary, expr, self.arena),
+            .kind = try .makeUnary(unary, expr, ctx.arena),
         };
     }
 

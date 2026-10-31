@@ -3,6 +3,16 @@ const okc = @import("okc");
 left: okc.Expr,
 expr: okc.Expr,
 
+pub fn parseStmtPostfix(ctx: *okc.Parser) !okc.Stmt.Expr.Postfix {
+    const expr = try parsePostfix(ctx);
+    return .{ .assign = expr };
+}
+
+pub fn parsePostfix(ctx: *okc.Parser) !okc.Expr {
+    try ctx.expect(.equ, .quiet);
+    return .parse(ctx, .loud);
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     const vari = try self.left.genRef(ctx);
     const typ_val = try self.expr.gen(ctx);
