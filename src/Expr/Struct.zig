@@ -9,6 +9,23 @@ const Typed = @import("Struct/Typed.zig");
 fields: []Field,
 typ: okc.Typ = .any,
 
+pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {
+    const location = ctx.getLocation();
+    try ctx.expect(.dot, .quiet);
+    const fields = try okc.Expr.Struct.parseBody(ctx);
+    return .{
+        .location = location,
+        .kind = .{ .struc = .{ .fields = fields } },
+    };
+}
+
+pub fn parseBody(ctx: *okc.Parser) ![]Field {
+    try ctx.expect(.curl, .quiet);
+    const fields = try ctx.sep(okc.Expr.Struct.Field.parse, .{});
+    try ctx.expect(.curr, .loud);
+    return fields;
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     if (self.typ.getName()) |name| {
         try okc.Item.TypDecl.genNamed(name, ctx);

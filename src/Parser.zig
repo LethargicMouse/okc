@@ -756,57 +756,12 @@ pub fn parseTypHint(self: *@This()) !okc.Typ {
 
 pub fn parseUnaryExpr(self: *@This()) Error!okc.Expr {
     const start = self.getLocation();
-    const unary = try self.parseUnaryOp();
+    const unary: okc.Expr.Unary = try .parse(self);
     const expr = try self.parseExprPosted(.loud);
     return .{
         .location = start.combine(expr.location),
         .kind = try .makeUnary(unary, expr, self.arena),
     };
-}
-
-fn parseUnaryOp(self: *@This()) !okc.Expr.Unary {
-    self.cursor += 1;
-    return okc.Expr.Unary.fromLexeme(self.tokens[self.cursor - 1].lexeme) orelse error.ParseFailed;
-}
-
-pub fn parseInferStructExpr(self: *@This()) Error!okc.Expr {
-    const location = self.getLocation();
-    try self.expect(.dot, .quiet);
-    const fields = try self.parseStructExprBody();
-    return .{
-        .location = location,
-        .kind = .{ .struc = .{ .fields = fields } },
-    };
-}
-
-pub fn parseParExpr(self: *@This()) Error!okc.Expr {
-    const start = self.getLocation();
-    try self.expect(.parl, .quiet);
-    var expr: okc.Expr = try .parse(self, .loud);
-    const end = self.getLocation();
-    try self.expect(.parr, .loud);
-    expr.location = start.combine(end);
-    return expr;
-}
-
-pub fn parseStructExpr(self: *@This()) Error!okc.Expr {
-    const location = self.getLocation();
-    const name = try self.parseName(.quiet);
-    const fields = try self.parseStructExprBody();
-    return .{
-        .location = location,
-        .kind = .{ .named_struc = .{
-            .name = name,
-            .bare = .{ .fields = fields },
-        } },
-    };
-}
-
-fn parseStructExprBody(self: *@This()) ![]okc.Expr.Struct.Field {
-    try self.expect(.curl, .quiet);
-    const fields = try self.sep(okc.Expr.Struct.Field.parse, .{});
-    try self.expect(.curr, .loud);
-    return fields;
 }
 
 pub fn parseName(self: *@This(), mode: Mode) ![]const u8 {
@@ -820,14 +775,6 @@ pub fn parseName(self: *@This(), mode: Mode) ![]const u8 {
 
 pub fn parseInt(self: *@This()) !u64 {
     return self.parseLexeme(.int);
-}
-
-pub fn parseChar(self: *@This()) !u8 {
-    return self.parseLexeme(.char);
-}
-
-fn parseStr(self: *@This()) ![]const u8 {
-    return self.parseLexeme(.str);
 }
 
 fn parseLexeme(

@@ -29,6 +29,16 @@ pub const Var = @import("Expr/Var.zig");
 location: okc.Location,
 kind: Kind,
 
+fn parsePar(ctx: *okc.Parser) !okc.Expr {
+    const start = ctx.getLocation();
+    try ctx.expect(.parl, .quiet);
+    var expr: okc.Expr = try .parse(ctx, .loud);
+    const end = ctx.getLocation();
+    try ctx.expect(.parr, .loud);
+    expr.location = start.combine(end);
+    return expr;
+}
+
 pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !@This() {
     return ctx.parseExprPrior(0, mode);
 }
@@ -40,11 +50,11 @@ pub fn parseAtom(
     return ctx.either(.{
         okc.Parser.parseSizeofExpr,
         Member.parseExpr,
-        okc.Parser.parseParExpr,
+        parsePar,
         Array.parseExpr,
         okc.Parser.parseUnaryExpr,
-        okc.Parser.parseInferStructExpr,
-        okc.Parser.parseStructExpr,
+        Struct.parseExpr,
+        Struct.Named.parseExpr,
         parseLiteral,
     }) catch |err| {
         if (mode == .loud) {

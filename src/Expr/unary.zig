@@ -6,7 +6,12 @@ pub const Unary = enum {
     notb,
     ptr,
 
-    pub fn fromLexeme(lexeme: okc.Lexeme) ?@This() {
+    pub fn parse(ctx: *okc.Parser) !@This() {
+        ctx.cursor += 1;
+        return fromLexeme(ctx.tokens[ctx.cursor - 1].lexeme) orelse error.ParseFailed;
+    }
+
+    fn fromLexeme(lexeme: okc.Lexeme) ?@This() {
         return switch (lexeme) {
             .amp => .ptr,
             .star => .deref,
