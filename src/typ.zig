@@ -27,6 +27,12 @@ pub const Typ = union(enum) {
 
     pub var memo: okc.Memo(@This()) = undefined;
 
+    pub fn parseVerbal(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!okc.Typ {
+        const location = ctx.getLocation();
+        const name = try ctx.parseName(.quiet);
+        return okc.Typ.fromName(name, location);
+    }
+
     pub fn getLayout(self: @This(), ctx: *okc.Codegen) !okc.Layout {
         switch (self) {
             .prime => |prime| return prime.getLayout(),
@@ -54,10 +60,10 @@ pub const Typ = union(enum) {
 
     pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!okc.Typ {
         return ctx.either(.{
-            okc.Parser.parseFunTyp,
-            okc.Parser.parseGenericTyp,
-            okc.Parser.parseVerbalTyp,
-            okc.Parser.parsePtrTyp,
+            Fun.parseTyp,
+            Name.parseGenericTyp,
+            okc.Typ.parseVerbal,
+            Ptr.parseTyp,
             Array.parseTyp,
             Slice.parseTyp,
         }) catch |err| {

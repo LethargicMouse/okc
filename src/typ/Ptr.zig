@@ -5,6 +5,20 @@ const okc = @import("okc");
 typ: *const okc.Typ,
 mutable: bool,
 
+pub fn parseTyp(ctx: *okc.Parser) !okc.Typ {
+    try ctx.expect(.amp, .quiet);
+    var mutable = false;
+    if (try ctx.maybe(okc.Parser.expect, .{ .mut, .quiet })) |_| {
+        mutable = true;
+    }
+    const typ: okc.Typ = try .parse(ctx);
+    const ptr = try okc.Typ.memo.box(typ, ctx.arena);
+    return .{ .ptr = .{
+        .typ = ptr,
+        .mutable = mutable,
+    } };
+}
+
 pub fn eql(a: @This(), b: @This()) bool {
     return a.typ == b.typ and a.mutable == b.mutable;
 }

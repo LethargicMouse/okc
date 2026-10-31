@@ -5,6 +5,19 @@ const okc = @import("okc");
 params: []const okc.Typ,
 ret_typ: *const okc.Typ,
 
+pub fn parseTyp(ctx: *okc.Parser) !okc.Typ {
+    try ctx.expect(.fun, .quiet);
+    try ctx.expect(.parl, .loud);
+    const params = try ctx.sep(okc.Typ.parse, .{});
+    try ctx.expect(.parr, .loud);
+    const ret_typ: okc.Typ = try .parse(ctx);
+    const ptr = try okc.Typ.memo.box(ret_typ, ctx.arena);
+    return .{ .fun = .{
+        .params = params,
+        .ret_typ = ptr,
+    } };
+}
+
 pub fn eql(a: @This(), b: @This()) bool {
     if (a.ret_typ != b.ret_typ) {
         return false;

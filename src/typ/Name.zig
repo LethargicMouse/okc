@@ -5,6 +5,21 @@ const okc = @import("okc");
 name: []const u8,
 generics: []const okc.Typ = &.{},
 
+pub fn parseGenericTyp(ctx: *okc.Parser) !okc.Typ {
+    const location = ctx.getLocation();
+    const name = try ctx.parseName(.quiet);
+    try ctx.expect(.les, .quiet);
+    const generics = try ctx.sep(okc.Typ.parse, .{});
+    try ctx.expect(.mor, .loud);
+    return .{ .loc_name = .{
+        .bare = .{
+            .name = name,
+            .generics = generics,
+        },
+        .location = location,
+    } };
+}
+
 pub fn getItems(self: @This(), items: std.StringHashMap(okc.Item.Info)) ?std.StringHashMap(okc.Item.Info) {
     const item = items.get(self.name).?;
     switch (item.kind) {

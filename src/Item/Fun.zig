@@ -3,6 +3,21 @@ const okc = @import("okc");
 header: Header,
 body: okc.Stmt.Block,
 
+pub fn parseItem(ctx: *okc.Parser) !okc.Item {
+    const header: Header = try .parse(ctx, .quiet);
+    const location = ctx.tmp_location;
+    const name = ctx.tmp_name;
+    const body: okc.Stmt.Block = try .parse(ctx);
+    return .{
+        .name = name,
+        .location = location,
+        .kind = .{ .fun = .{
+            .header = header,
+            .body = body,
+        } },
+    };
+}
+
 pub fn gen(
     self: @This(),
     name: okc.Typ.Name,
@@ -67,6 +82,17 @@ pub fn check(self: @This(), location: okc.Location, ctx: okc.Item.Check) !void {
 pub const Extern = struct {
     header: Header,
 
+    pub fn parseItem(ctx: *okc.Parser) !okc.Item {
+        try ctx.expect(.ext, .quiet);
+        const header: okc.Item.Fun.Header = try .parse(ctx, .loud);
+        try ctx.expect(.semi, .loud);
+        return .{
+            .name = ctx.tmp_name,
+            .location = ctx.tmp_location,
+            .kind = .{ .ext_fun = .{ .header = header } },
+        };
+    }
+
     pub fn gen(self: @This(), name: []const u8, ctx: *okc.Codegen) !void {
         try ctx.writer.interface.print("\ndeclare {f} @{s}(", .{
             okc.Typ.LLPrinter{ .typ = self.header.ret_typ },
@@ -91,9 +117,9 @@ pub const Header = struct {
         try ctx.expect(.fun, mode);
         ctx.tmp_location = ctx.getLocation();
         ctx.tmp_name = try ctx.parseName(.loud);
-        const generics = try ctx.maybe(okc.Parser.parseGenerics, .{}) orelse &.{};
+        const generics = try ctx.maybe(okc.Item.parseGenerics, .{}) orelse &.{};
         try ctx.expect(.parl, .loud);
-        const params = try ctx.sep(okc.Parser.parseParam, .{});
+        const params = try ctx.sep(okc.Item.Fun.Header.Param.parse, .{});
         try ctx.expect(.parr, .loud);
         const ret_typ: okc.Typ = try .parse(ctx);
         return .{
@@ -118,6 +144,18 @@ pub const Header = struct {
         name: []const u8,
         typ: okc.Typ,
         location: okc.Location,
+
+        pub fn parse(ctx: *okc.Parser) !@This() {
+            const location = ctx.getLocation();
+            const name = try ctx.parseName(.loud);
+            try ctx.expect(.colon, .loud);
+            const typ: okc.Typ = try .parse(ctx);
+            return .{
+                .name = name,
+                .typ = typ,
+                .location = location,
+            };
+        }
 
         pub fn gen(typ: okc.Typ, ctx: *okc.Codegen) !okc.Val.Typed {
             const tmp = ctx.counter.next();

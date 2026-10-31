@@ -9,7 +9,7 @@ pub const Declare = @import("Stmt/Declare.zig");
 pub const Expr = @import("Stmt/Expr.zig");
 pub const For = @import("Stmt/For.zig");
 pub const ForRange = @import("Stmt/ForRange.zig");
-pub const IfStmt = @import("Stmt/IfStmt.zig");
+pub const If = @import("Stmt/If.zig");
 pub const Ignore = @import("Stmt/Ignore.zig");
 pub const OpAssign = @import("Stmt/OpAssign.zig");
 pub const Return = @import("Stmt/Return.zig");
@@ -41,11 +41,11 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!v
 pub fn parse(ctx: *okc.Parser) !@This() {
     return ctx.either(.{
         Switch.parseStmt,
-        okc.Parser.parseUnreachableStmt,
-        okc.Parser.parseBreakStmt,
+        unre.parseStmt,
+        brek.parseStmt,
         Return.parseStmt,
         Declare.parseStmt,
-        IfStmt.parseStmt,
+        If.parseStmt,
         For.parseStmt,
         While.parseStmt,
         Ignore.parseStmt,
@@ -81,7 +81,7 @@ pub const Kind = union(enum) {
     expr: Expr,
     for_range: ForRange,
     forr: For,
-    iff: IfStmt,
+    iff: If,
     ignore: Ignore,
     op_assign: OpAssign,
     ret: Return,

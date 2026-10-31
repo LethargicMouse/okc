@@ -68,7 +68,7 @@ pub const Branch = struct {
     fn parse(ctx: *okc.Parser) !@This() {
         try ctx.expect(.case, .loud);
         const variants = try ctx.sep(okc.Expr.parse, .{.loud});
-        const body = try ctx.parseBlock();
+        const body: okc.Stmt.Block = try .parse(ctx);
         return .{
             .variants = variants,
             .body = body,

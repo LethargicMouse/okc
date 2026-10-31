@@ -10,6 +10,30 @@ generics: []const okc.Item.Generic,
 fields: []Field,
 variants: []const Variant,
 
+pub fn parseItem(ctx: *okc.Parser) !okc.Item {
+    try ctx.expect(.typ, .quiet);
+    const location = ctx.getLocation();
+    const name = try ctx.parseName(.loud);
+    const generics = try ctx.maybe(okc.Item.parseGenerics, .{}) orelse &.{};
+    try ctx.expect(.curl, .loud);
+    const fields = try ctx.sep(Field.parse, .{});
+    var variants: []const Variant = &.{};
+    const prev = ctx.tokens[ctx.cursor - 1].lexeme;
+    if (prev == .comma or prev == .curl) {
+        variants = try ctx.sep(Variant.parse, .{});
+    }
+    try ctx.expect(.curr, .loud);
+    return .{
+        .name = name,
+        .location = location,
+        .kind = .{ .typ_decl = .{
+            .generics = generics,
+            .fields = fields,
+            .variants = variants,
+        } },
+    };
+}
+
 pub fn genSlice(ctx: *okc.Codegen) !void {
     try ctx.writer.interface.writeAll("\n%\"[]\" = type { ptr, i64 }");
 }
@@ -87,28 +111,6 @@ pub fn gen(self: @This(), name: okc.Typ.Name, ctx: *okc.Codegen) !void {
     });
 }
 
-pub fn parse(ctx: *okc.Parser) !@This() {
-    try ctx.expect(.typ, .quiet);
-    const location = ctx.getLocation();
-    const name = try ctx.parseName(.loud);
-    const generics = try ctx.maybe(okc.Parser.parseGenerics, .{}) orelse &.{};
-    try ctx.expect(.curl, .loud);
-    const fields = try ctx.sep(okc.Parser.parseFieldDecl, .{});
-    var variants: []const Variant = &.{};
-    const prev = ctx.tokens[ctx.cursor - 1].lexeme;
-    if (prev == .comma or prev == .curl) {
-        variants = try ctx.sep(Variant.parse, .{});
-    }
-    try ctx.expect(.curr, .loud);
-    ctx.tmp_location = location;
-    ctx.tmp_name = name;
-    return .{
-        .generics = generics,
-        .fields = fields,
-        .variants = variants,
-    };
-}
-
 pub fn makeInfo(self: @This(), ctx: okc.Item.Check) !Info {
     try ctx.checkGenericsRedeclare(self.generics);
     var res = Info{
@@ -149,6 +151,20 @@ pub const Field = struct {
     typ: okc.Typ,
     default: ?okc.Expr,
     location: okc.Location,
+
+    pub fn parse(ctx: *okc.Parser) !@This() {
+        const location = ctx.getLocation();
+        const name = try ctx.parseName(.loud);
+        try ctx.expect(.colon, .loud);
+        const typ: okc.Typ = try .parse(ctx);
+        const default = try ctx.maybe(okc.Stmt.Assign.parsePostfix, .{});
+        return .{
+            .name = name,
+            .typ = typ,
+            .location = location,
+            .default = default,
+        };
+    }
 
     pub const Info = struct {
         location: okc.Location,

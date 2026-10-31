@@ -13,6 +13,39 @@ name: []const u8,
 kind: Kind,
 location: okc.Location,
 
+pub fn parseGenerics(ctx: *okc.Parser) ![]const okc.Item.Generic {
+    try ctx.expect(.les, .quiet);
+    const res = try ctx.sep(okc.Item.Generic.parse, .{});
+    try ctx.expect(.mor, .loud);
+    return res;
+}
+
+fn parseUse(ctx: *okc.Parser) !@This() {
+    try ctx.expect(.use, .quiet);
+    const location = ctx.getLocation();
+    const name = try ctx.parseName(.loud);
+    try ctx.expect(.semi, .loud);
+    return .{
+        .location = location,
+        .name = name,
+        .kind = .use,
+    };
+}
+
+pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!@This() {
+    return ctx.either(.{
+        Fun.parseItem,
+        TypDecl.parseItem,
+        Fun.Extern.parseItem,
+        Const.parseItem,
+        TypAlias.parseItem,
+        parseUse,
+    }) catch |err| {
+        try ctx.fail("<item>");
+        return err;
+    };
+}
+
 pub fn reg(self: *@This(), ctx: Check) !void {
     const kind: okc.Item.Info.Kind = switch (self.kind) {
         .typ_alias => |alias| .{ .alias = alias },
@@ -57,4 +90,20 @@ pub const Kind = union(enum) {
 
 pub const TypAlias = struct {
     typ: okc.Typ,
+
+    pub fn parseItem(ctx: *okc.Parser) !okc.Item {
+        try ctx.expect(.typ, .quiet);
+        const location = ctx.getLocation();
+        const name = try ctx.parseName(.loud);
+        try ctx.expect(.equ, .loud);
+        const typ: okc.Typ = try .parse(ctx);
+        try ctx.expect(.semi, .loud);
+        return .{
+            .name = name,
+            .location = location,
+            .kind = .{ .typ_alias = .{
+                .typ = typ,
+            } },
+        };
+    }
 };

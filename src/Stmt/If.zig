@@ -28,7 +28,7 @@ fn parseElseIf(ctx: *okc.Parser) !okc.Stmt.Branch {
 
 fn parseElse(ctx: *okc.Parser) !okc.Stmt.Block {
     try ctx.expect(.els, .loud);
-    return ctx.parseBlock();
+    return .parse(ctx);
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {

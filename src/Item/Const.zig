@@ -4,6 +4,15 @@ const okc = @import("okc");
 
 declare: okc.Stmt.Declare,
 
+pub fn parseItem(ctx: *okc.Parser) !okc.Item {
+    const declare: okc.Stmt.Declare.Named = try .parse(ctx);
+    return .{
+        .name = declare.name,
+        .location = ctx.tmp_location,
+        .kind = .{ .constant = .{ .declare = declare.bare } },
+    };
+}
+
 pub fn genNamed(name: []const u8, ctx: *okc.Codegen) !void {
     const was = try ctx.generated.getOrPut(.{ .name = name });
     if (was.found_existing) {

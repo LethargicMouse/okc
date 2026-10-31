@@ -15,7 +15,7 @@ pub fn parseStmt(ctx: *okc.Parser) !okc.Stmt {
     const expr: okc.Expr = try .parse(ctx, .loud);
     const mend = try ctx.maybe(parseRangeEnd, .{});
     try ctx.expect(.parr, .loud);
-    const body = try ctx.parseBlock();
+    const body: okc.Stmt.Block = try .parse(ctx);
     if (mend) |end| {
         return .{
             .location = location,

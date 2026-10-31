@@ -4,6 +4,13 @@ stmts: []okc.Stmt,
 
 pub const empty = @This(){ .stmts = @constCast(&.{}) };
 
+pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!okc.Stmt.Block {
+    try ctx.expect(.curl, .loud);
+    const stmts = try ctx.many(okc.Stmt.parse, .{});
+    try ctx.expect(.curr, .quiet);
+    return .{ .stmts = stmts };
+}
+
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     for (self.stmts) |stmt| {
         try stmt.gen(ctx);

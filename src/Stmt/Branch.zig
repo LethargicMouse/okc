@@ -7,7 +7,7 @@ pub fn parse(ctx: *okc.Parser) !okc.Stmt.Branch {
     try ctx.expect(.parl, .loud);
     const condition: okc.Expr = try .parse(ctx, .loud);
     try ctx.expect(.parr, .loud);
-    const body = try ctx.parseBlock();
+    const body: okc.Stmt.Block = try .parse(ctx);
     return .{
         .condition = condition,
         .body = body,
