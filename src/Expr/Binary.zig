@@ -120,3 +120,8 @@ pub const Class = enum {
     arith,
     bool,
 };
+
+pub const Postfix = struct {
+    kind: Kind,
+    expr: okc.Expr,
+};

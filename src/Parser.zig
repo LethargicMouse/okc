@@ -328,7 +328,7 @@ pub fn parseBreakStmt(self: *@This()) !okc.Stmt {
 
 fn parseOpAssignStmtPostfix(
     self: *@This(),
-) !ExprStmtPostfix {
+) !okc.Stmt.Expr.Postfix {
     const kind = try self.parseOpAssignBinOp();
     try self.expect(.equ, .quiet);
     const expr: okc.Expr = try .parse(self, .loud);
@@ -448,7 +448,7 @@ fn parseElse(self: *@This()) !okc.Stmt.Block {
     return body;
 }
 
-fn parseAssignStmtPostfix(self: *@This()) !ExprStmtPostfix {
+fn parseAssignStmtPostfix(self: *@This()) !okc.Stmt.Expr.Postfix {
     const expr = try self.parseAssignPostfix();
     return .{ .assign = expr };
 }
@@ -529,14 +529,14 @@ pub fn parseExprStmt(self: *@This()) !okc.Stmt {
     }
 }
 
-fn parseExprStmtPostfix(self: *@This()) !ExprStmtPostfix {
+fn parseExprStmtPostfix(self: *@This()) !okc.Stmt.Expr.Postfix {
     return self.either(.{
         parseAssignStmtPostfix,
         parseOpAssignStmtPostfix,
     }) catch .none;
 }
 
-fn parseCallPostfix(self: *@This()) !Postfix {
+fn parseCallPostfix(self: *@This()) !okc.Expr.Postfix {
     const call: okc.Expr.Call.Postfix = try .parse(self);
     return .{
         .location = self.tmp_location,
@@ -574,7 +574,7 @@ pub fn parseExprPrior(self: *@This(), prior: u8, mode: Mode) Error!okc.Expr {
     return res;
 }
 
-fn parseBinPostfix(self: *@This(), prior: u8) !?BinPostfix {
+fn parseBinPostfix(self: *@This(), prior: u8) !?okc.Expr.Binary.Postfix {
     const cursor_before = self.cursor;
     const kind = self.parseBinOp(prior) orelse return null;
     const expr = self.parseExprPrior(kind.getPrior() + 1, .loud) catch |err| switch (err) {
@@ -668,7 +668,7 @@ fn parseExprPosted(self: *@This(), mode: Mode) Error!okc.Expr {
     return res;
 }
 
-fn parsePostfix(self: *@This()) !Postfix {
+fn parsePostfix(self: *@This()) !okc.Expr.Postfix {
     return self.either(.{
         parseMethodPostfix,
         parseCallPostfix,
@@ -678,7 +678,7 @@ fn parsePostfix(self: *@This()) !Postfix {
     });
 }
 
-fn parseMethodPostfix(self: *@This()) !Postfix {
+fn parseMethodPostfix(self: *@This()) !okc.Expr.Postfix {
     try self.expect(.dot, .quiet);
     const location = self.getLocation();
     const name = try self.parseName(.quiet);
@@ -693,7 +693,7 @@ fn parseMethodPostfix(self: *@This()) !Postfix {
     };
 }
 
-fn parseSubslicePostfix(self: *@This()) !Postfix {
+fn parseSubslicePostfix(self: *@This()) !okc.Expr.Postfix {
     try self.expect(.bral, .quiet);
     const start: okc.Expr = try .parse(self, .quiet);
     try self.expect(.dot2, .quiet);
@@ -709,7 +709,7 @@ fn parseSubslicePostfix(self: *@This()) !Postfix {
     };
 }
 
-fn parseElemPostfix(self: *@This()) !Postfix {
+fn parseElemPostfix(self: *@This()) !okc.Expr.Postfix {
     try self.expect(.bral, .quiet);
     const index: okc.Expr = try .parse(self, .loud);
     const location = self.getLocation();
@@ -720,7 +720,7 @@ fn parseElemPostfix(self: *@This()) !Postfix {
     };
 }
 
-fn parseFieldPostfix(self: *@This()) !Postfix {
+fn parseFieldPostfix(self: *@This()) !okc.Expr.Postfix {
     try self.expect(.dot, .quiet);
     const location = self.getLocation();
     const vari: okc.Expr.Var = try .parse(self, .loud);
@@ -809,69 +809,6 @@ fn parseStructExprBody(self: *@This()) ![]okc.Expr.Struct.Field {
     return fields;
 }
 
-pub fn parseVarExpr(self: *@This()) Error!okc.Expr {
-    const location = self.getLocation();
-    const vari: okc.Expr.Var = try .parse(self, .quiet);
-    return .{
-        .location = location,
-        .kind = .{ .vari = vari },
-    };
-}
-
-pub fn parseStrExpr(self: *@This()) Error!okc.Expr {
-    const location = self.getLocation();
-    const str = try self.parseStr();
-    return .{
-        .location = location,
-        .kind = .{ .str = .{ .bare = str } },
-    };
-}
-
-pub fn parseUndefinedExpr(self: *@This()) Error!okc.Expr {
-    const location = self.getLocation();
-    try self.expect(.undef, .quiet);
-    return .{
-        .location = location,
-        .kind = .{ .undef = .{} },
-    };
-}
-
-pub fn parseTrueExpr(self: *@This()) Error!okc.Expr {
-    const location = self.getLocation();
-    try self.expect(.tru, .quiet);
-    return .{
-        .location = location,
-        .kind = .{ .bool = true },
-    };
-}
-
-pub fn parseFalseExpr(self: *@This()) Error!okc.Expr {
-    const location = self.getLocation();
-    try self.expect(.fals, .quiet);
-    return .{
-        .location = location,
-        .kind = .{ .bool = false },
-    };
-}
-
-pub fn parseCharExpr(self: *@This()) Error!okc.Expr {
-    const location = self.getLocation();
-    const char = try self.parseChar();
-    return .{
-        .location = location,
-        .kind = .{ .char = char },
-    };
-}
-
-pub fn parseIntExpr(self: *@This()) Error!okc.Expr {
-    const location = self.getLocation();
-    const val = try self.parseInt();
-    return .{
-        .location = location,
-        .kind = .{ .int = .{ .val = val } },
-    };
-}
-
 pub fn parseName(self: *@This(), mode: Mode) ![]const u8 {
     return try self.maybe(parseLexeme, .{.name}) orelse {
         if (mode == .loud) {
@@ -885,7 +822,7 @@ pub fn parseInt(self: *@This()) !u64 {
     return self.parseLexeme(.int);
 }
 
-fn parseChar(self: *@This()) !u8 {
+pub fn parseChar(self: *@This()) !u8 {
     return self.parseLexeme(.char);
 }
 
@@ -937,46 +874,6 @@ pub fn fail(self: *@This(), msg: []const u8) !void {
 }
 
 const Error = error{ ParseFailed, OutOfMemory };
-
-const ExprStmtPostfix = union(enum) {
-    assign: okc.Expr,
-    none,
-    op_assign: OpAssignPostfix,
-};
-
-const OpAssignPostfix = struct {
-    kind: okc.Expr.Binary.Kind,
-    expr: okc.Expr,
-};
-
-const BinPostfix = struct {
-    kind: okc.Expr.Binary.Kind,
-    expr: okc.Expr,
-};
-
-const Postfix = struct {
-    kind: Kind,
-    location: okc.Location,
-
-    const Kind = union(enum) {
-        call: okc.Expr.Call.Postfix,
-        elem: okc.Expr,
-        field: okc.Expr.Var,
-        method: Method,
-        subslice: Subslice,
-    };
-
-    const Method = struct {
-        vari: okc.Expr.Var,
-        args: []okc.Expr,
-        name_location: okc.Location,
-    };
-
-    const Subslice = struct {
-        start: okc.Expr,
-        end: okc.Expr,
-    };
-};
 
 const ErrMsgsPrinter = struct {
     msgs: []const []const u8,

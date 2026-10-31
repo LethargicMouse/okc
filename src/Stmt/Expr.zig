@@ -8,3 +8,9 @@ pub fn check(self: *@This(), ctx: okc.Expr.Check) !okc.ControlFlow {
     _ = info.typ.unify(.{ .prime = .void }, self.expr.location, ctx.failer);
     return .cont;
 }
+
+pub const Postfix = union(enum) {
+    assign: okc.Expr,
+    op_assign: okc.Stmt.OpAssign.Postfix,
+    none,
+};

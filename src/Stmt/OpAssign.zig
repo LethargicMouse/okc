@@ -30,3 +30,8 @@ pub fn check(self: *@This(), ctx: okc.Expr.Check) !okc.ControlFlow {
     _ = right.typ.unify(left.typ, self.right.location, ctx.failer);
     return .cont;
 }
+
+pub const Postfix = struct {
+    kind: okc.Expr.Binary.Kind,
+    expr: okc.Expr,
+};

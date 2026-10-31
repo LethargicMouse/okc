@@ -16,6 +16,7 @@ pub const Member = @import("Expr/Member.zig");
 pub const Method = @import("Expr/Method.zig");
 pub const Neg = @import("Expr/Neg.zig");
 pub const Notb = @import("Expr/Notb.zig");
+pub const Postfix = @import("Expr/Postfix.zig");
 pub const Ptr = @import("Expr/Ptr.zig");
 pub const Sizeof = @import("Expr/Sizeof.zig");
 pub const Str = @import("Expr/Str.zig");
@@ -44,19 +45,29 @@ pub fn parseAtom(
         okc.Parser.parseUnaryExpr,
         okc.Parser.parseInferStructExpr,
         okc.Parser.parseStructExpr,
-        okc.Parser.parseIntExpr,
-        okc.Parser.parseStrExpr,
-        okc.Parser.parseCharExpr,
-        okc.Parser.parseVarExpr,
-        okc.Parser.parseUndefinedExpr,
-        okc.Parser.parseTrueExpr,
-        okc.Parser.parseFalseExpr,
+        parseLiteral,
     }) catch |err| {
         if (mode == .loud) {
             try ctx.fail("<expr>");
         }
         return err;
     };
+}
+
+fn parseLiteral(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!@This() {
+    const location = ctx.getLocation();
+    const kind: Kind = switch (ctx.tokens[ctx.cursor].lexeme) {
+        .name => |name| .{ .vari = .{ .name = name } },
+        .str => |str| .{ .str = .{ .bare = str } },
+        .int => |val| .{ .int = .{ .val = val } },
+        .tru => .{ .bool = true },
+        .fals => .{ .bool = false },
+        .char => |c| .{ .char = c },
+        .undef => .{ .undef = .{} },
+        else => return error.ParseFailed,
+    };
+    ctx.cursor += 1;
+    return .{ .location = location, .kind = kind };
 }
 
 pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!okc.Val.Ref {
