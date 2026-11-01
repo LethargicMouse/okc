@@ -49,6 +49,7 @@ pub fn gen(self: @This(), name: []const u8, ctx: *okc.Codegen) error{ WriteFaile
         .name = .{ .name = "main" },
         .fun = .{
             .params = &.{},
+            .context = &.{},
             .ret_typ = try okc.Typ.memo.box(.{ .prime = .i32 }, ctx.arena),
         },
     }, ctx);

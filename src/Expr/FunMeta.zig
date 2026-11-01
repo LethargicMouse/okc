@@ -44,9 +44,15 @@ pub fn fillFromHeader(
     for (header.params, params) |param, *target| {
         target.* = try param.typ.resolve(resolve_map, arena);
     }
+    const context = try gpa.alloc(okc.Typ, header.context.len);
+    defer gpa.free(context);
+    for (header.context, context) |param, *target| {
+        target.* = try param.typ.resolve(resolve_map, arena);
+    }
     const ret_typ = try header.ret_typ.resolve(resolve_map, arena);
     self.typ = .{ .fun = .{
         .params = try okc.Typ.memo.save(params, arena),
+        .context = try okc.Typ.memo.save(context, arena),
         .ret_typ = try okc.Typ.memo.box(ret_typ, arena),
     } };
     return .{

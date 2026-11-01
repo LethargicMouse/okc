@@ -61,7 +61,7 @@ pub fn check(self: *@This(), ctx: *Check) error{OutOfMemory}!okc.ControlFlow {
         .swi => |*swi| swi.check(ctx),
         .for_range => |*forr| forr.check(ctx),
         .forr => |*forr| forr.check(ctx),
-        .unre => .ret,
+        .unre => .never,
         .brek => brek.check(self.location, ctx.*),
         .ret => |*ret| ret.check(self.location, ctx.ret_typ, ctx.exprCheckCtx()),
         .expr => |*expr| Expr.check(expr, ctx.exprCheckCtx()),

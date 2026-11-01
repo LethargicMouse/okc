@@ -23,7 +23,7 @@ pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !okc.Item.Fun.Header {
     };
 }
 
-fn parseContext(ctx: *okc.Parser) ![]Param {
+pub fn parseContext(ctx: *okc.Parser) ![]Param {
     try ctx.expect(.ctx, .quiet);
     try ctx.expect(.curl, .loud);
     const params = try ctx.sep(Param.parse, .{});
@@ -46,10 +46,6 @@ pub fn check(self: *@This(), ctx: okc.Item.Check) !void {
     self.ret_typ = try self.ret_typ.check(typ_check);
     generics_checker.checkUsage(ctx.failer);
 }
-
-pub const Context = struct {
-    name: []const u8,
-};
 
 pub const Param = struct {
     name: []const u8,

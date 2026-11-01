@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const okc = @import("okc");
 
 header: Header,
@@ -32,14 +34,24 @@ pub fn gen(
         "\ndefine {f} @\"{f}\"(",
         .{ okc.Typ.LLPrinter{ .typ = fun_typ.ret_typ.* }, name },
     );
-    var param_typ_vals = try ctx.gpa.alloc(okc.Val.Typed, self.header.params.len);
+    var param_typ_vals = try ctx.gpa.alloc(
+        okc.Val.Typed,
+        self.header.params.len + self.header.context.len,
+    );
     defer ctx.gpa.free(param_typ_vals);
     if (self.header.params.len != 0) {
         param_typ_vals[0] = try okc.Item.Fun.Header.Param.gen(fun_typ.params[0], ctx);
         for (param_typ_vals[1..], fun_typ.params[1..]) |*target, param_typ| {
-            try ctx.extra_buffer.print(ctx.gpa, ", ", .{});
-            target.* = try okc.Item.Fun.Header.Param.gen(param_typ, ctx);
+            try ctx.extra_buffer.appendSlice(ctx.gpa, ", ");
+            target.* = try Header.Param.gen(param_typ, ctx);
         }
+    }
+    for (
+        param_typ_vals[self.header.params.len..],
+        fun_typ.context,
+    ) |*target, param_typ| {
+        try ctx.extra_buffer.appendSlice(ctx.gpa, ", ");
+        target.* = try Header.Param.gen(param_typ, ctx);
     }
     try ctx.extra_buffer.print(ctx.gpa,
         \\) {{
@@ -66,7 +78,8 @@ pub fn gen(
 }
 
 pub fn check(self: @This(), location: okc.Location, ctx: okc.Item.Check) !void {
-    var stmt_check: okc.Stmt.Check = ctx.checkStmt(self.header.ret_typ);
+    std.log.debug("check fun in {f}\n", .{location});
+    var stmt_check = ctx.stmtCheckCtx(self.header.ret_typ);
     defer stmt_check.deinit();
     for (self.header.params) |param| {
         try stmt_check.declare(param.name, param.location, .{
@@ -75,8 +88,15 @@ pub fn check(self: @This(), location: okc.Location, ctx: okc.Item.Check) !void {
             .can_be_mutable = false,
         }, ctx.failer);
     }
+    for (self.header.context) |param| {
+        try stmt_check.declare(param.name, param.location, .{
+            .typ = param.typ,
+            .mutable = false,
+            .can_be_mutable = false,
+        }, ctx.failer);
+    }
     const control_flow = try self.body.check(&stmt_check);
-    if (control_flow != .ret and
+    if (@backingInt(control_flow) < @backingInt(okc.ControlFlow.ret) and
         !self.header.ret_typ.isVoid() and
         self.header.ret_typ != .never)
     {

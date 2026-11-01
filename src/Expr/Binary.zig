@@ -8,11 +8,11 @@ right: okc.Expr,
 
 pub fn check(self: *@This(), ctx: okc.Expr.Check) !okc.Expr.Info {
     var left = try self.left.check(.{}, ctx);
-    if (!left.typ.isNumber()) {
+    if (self.kind.getClass() == .arith and !left.typ.isNumber()) {
         ctx.failer.wrongTyp(self.left.location, .int, left.typ);
         left.typ = .err;
     }
-    const right = try self.right.check(.{}, ctx);
+    const right = try self.right.check(.{ .typ = left.typ }, ctx);
     const unityp = right.typ.unify(left.typ, self.right.location, ctx.failer);
     const typ = switch (self.kind.getClass()) {
         .arith => unityp,
