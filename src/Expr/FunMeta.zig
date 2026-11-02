@@ -52,8 +52,8 @@ pub fn fillFromHeader(
     const ret_typ = try header.ret_typ.resolve(resolve_map, arena);
     self.typ = .{ .fun = .{
         .params = try okc.Typ.memo.save(params, arena),
-        .context = try okc.Typ.memo.save(context, arena),
         .ret_typ = try okc.Typ.memo.box(ret_typ, arena),
+        .context = header.context,
     } };
     return .{
         .typ = self.typ,

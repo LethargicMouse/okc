@@ -3,6 +3,7 @@ const std = @import("std");
 const okc = @import("okc");
 
 params: []const okc.Typ,
+context: []okc.Item.Fun.Header.Param = &.{},
 ret_typ: *const okc.Typ,
 
 pub fn parseTyp(ctx: *okc.Parser) !okc.Typ {

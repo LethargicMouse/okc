@@ -40,8 +40,8 @@ pub fn gen(
     );
     defer ctx.gpa.free(param_typ_vals);
     if (self.header.params.len != 0) {
-        param_typ_vals[0] = try okc.Item.Fun.Header.Param.gen(fun_typ.params[0], ctx);
-        for (param_typ_vals[1..], fun_typ.params[1..]) |*target, param_typ| {
+        param_typ_vals[0] = try Header.Param.gen(fun_typ.params[0], ctx);
+        for (param_typ_vals[1..fun_typ.params.len], fun_typ.params[1..]) |*target, param_typ| {
             try ctx.extra_buffer.appendSlice(ctx.gpa, ", ");
             target.* = try Header.Param.gen(param_typ, ctx);
         }
@@ -49,9 +49,9 @@ pub fn gen(
     for (
         param_typ_vals[self.header.params.len..],
         fun_typ.context,
-    ) |*target, param_typ| {
+    ) |*target, param| {
         try ctx.extra_buffer.appendSlice(ctx.gpa, ", ");
-        target.* = try Header.Param.gen(param_typ, ctx);
+        target.* = try Header.Param.gen(param.typ, ctx);
     }
     try ctx.extra_buffer.print(ctx.gpa,
         \\) {{
@@ -60,6 +60,13 @@ pub fn gen(
     for (
         param_typ_vals[0..self.header.params.len],
         self.header.params,
+    ) |typ_val, param| {
+        const vari = try typ_val.toStack(ctx);
+        try ctx.vars.put(param.name, vari);
+    }
+    for (
+        param_typ_vals[self.header.params.len..],
+        self.header.context,
     ) |typ_val, param| {
         const vari = try typ_val.toStack(ctx);
         try ctx.vars.put(param.name, vari);

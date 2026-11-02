@@ -58,10 +58,10 @@ pub fn genCall(
         }
     }
     const ret_tmp = ctx.counter.next();
-    if (self.typ.fun.ret_typ.* != .prime or self.typ.fun.ret_typ.prime != .void) {
-        try ctx.buffer.print(ctx.gpa, "\n  %t{} = ", .{ret_tmp});
-    } else {
+    if (self.typ.fun.ret_typ.isVoid() or self.typ.fun.ret_typ.* == .never) {
         try ctx.buffer.print(ctx.gpa, "\n  ", .{});
+    } else {
+        try ctx.buffer.print(ctx.gpa, "\n  %t{} = ", .{ret_tmp});
     }
     try ctx.buffer.print(ctx.gpa, "call {f} {f} (", .{
         okc.Typ.LLPrinter{ .typ = self.typ.fun.ret_typ.* },

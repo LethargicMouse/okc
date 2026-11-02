@@ -62,7 +62,7 @@ pub const Typ = union(enum) {
     pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!okc.Typ {
         return ctx.either(.{
             parseNever,
-            Fun.WithContext.parseTyp,
+            Fun.parseTyp,
             Name.parseGenericTyp,
             okc.Typ.parseVerbal,
             Ptr.parseTyp,
@@ -394,16 +394,11 @@ pub const Typ = union(enum) {
                 for (params, fun_typ.params) |*target, param| {
                     target.* = try @call(.auto, fun, .{param} ++ args);
                 }
-                const context = try arena.alloc(Typ, fun_typ.context.len);
-                defer arena.free(context);
-                for (context, fun_typ.context) |*target, param| {
-                    target.* = try @call(.auto, fun, .{param} ++ args);
-                }
                 const new = try @call(.auto, fun, .{fun_typ.ret_typ.*} ++ args);
                 return .{ .fun = .{
                     .params = try memo.save(params, arena),
-                    .context = try memo.save(context, arena),
                     .ret_typ = try memo.box(new, arena),
+                    .context = fun_typ.context,
                 } };
             },
             .name => |name| return .{ .name = try name.updateGenerics(fun, args, arena) },
