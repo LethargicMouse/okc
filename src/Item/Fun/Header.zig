@@ -1,8 +1,8 @@
 const okc = @import("okc");
 
 generics: []const okc.Item.Generic,
-params: []Param,
-context: []Param,
+params: []okc.Item.Fun.Param,
+context: []okc.Item.Fun.Param,
 ret_typ: okc.Typ,
 
 pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !okc.Item.Fun.Header {
@@ -11,7 +11,7 @@ pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !okc.Item.Fun.Header {
     ctx.tmp_name = try ctx.parseName(.loud);
     const generics = try ctx.maybe(okc.Item.parseGenerics, .{}) orelse &.{};
     try ctx.expect(.parl, .loud);
-    const params = try ctx.sep(Param.parse, .{});
+    const params = try ctx.sep(okc.Item.Fun.Param.parse, .{});
     try ctx.expect(.parr, .loud);
     const context = try ctx.maybe(parseContext, .{}) orelse @constCast(&.{});
     const ret_typ: okc.Typ = try .parse(ctx);
@@ -23,10 +23,10 @@ pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !okc.Item.Fun.Header {
     };
 }
 
-pub fn parseContext(ctx: *okc.Parser) ![]Param {
+pub fn parseContext(ctx: *okc.Parser) ![]okc.Item.Fun.Param {
     try ctx.expect(.ctx, .quiet);
     try ctx.expect(.curl, .loud);
-    const params = try ctx.sep(Param.parse, .{});
+    const params = try ctx.sep(okc.Item.Fun.Param.parse, .{});
     const prev = ctx.tokens[ctx.cursor - 1].lexeme;
     const endmode: okc.Parser.Mode = if (prev == .comma or prev == .curl) .quiet else .loud;
     try ctx.expect(.curr, endmode);
@@ -46,31 +46,3 @@ pub fn check(self: *@This(), ctx: okc.Item.Check) !void {
     self.ret_typ = try self.ret_typ.check(typ_check);
     generics_checker.checkUsage(ctx.failer);
 }
-
-pub const Param = struct {
-    name: []const u8,
-    typ: okc.Typ,
-    location: okc.Location,
-
-    pub fn parse(ctx: *okc.Parser) !@This() {
-        const location = ctx.getLocation();
-        const name = try ctx.parseName(.loud);
-        try ctx.expect(.colon, .loud);
-        const typ: okc.Typ = try .parse(ctx);
-        return .{
-            .name = name,
-            .typ = typ,
-            .location = location,
-        };
-    }
-
-    pub fn gen(typ: okc.Typ, ctx: *okc.Codegen) !okc.Val.Typed {
-        const tmp = ctx.counter.next();
-        try ctx.extra_buffer.print(
-            ctx.gpa,
-            "{f} %t{}",
-            .{ okc.Typ.LLPrinter{ .typ = typ }, tmp },
-        );
-        return .{ .typ = typ, .bare = .{ .tmp = tmp } };
-    }
-};
