@@ -171,7 +171,7 @@ fn parseLiteral(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!@This() {
 pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!okc.Val.Ref {
     switch (self.kind) {
         .i_array => unreachable,
-        .member => unreachable,
+        .member => |member| return member.genRef(ctx),
         .vari => |vari| return vari.genRef(ctx),
         .field => |field| return field.genRef(ctx),
         .elem => |elem| return elem.genRef(ctx),
