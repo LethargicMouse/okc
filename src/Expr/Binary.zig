@@ -25,8 +25,23 @@ pub fn check(self: *@This(), ctx: okc.Expr.Check) !okc.Expr.Info {
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
-    const left = try self.left.gen(ctx);
-    const right = try self.right.gen(ctx);
+    const left_ref = try self.left.genRef(ctx);
+    const right_ref = try self.right.genRef(ctx);
+    var left: okc.Val.Typed = undefined;
+    var right: okc.Val.Typed = undefined;
+    if (left_ref.inner_typ.isNumber()) {
+        left = try left_ref.loadTypVal(ctx);
+        right = try right_ref.loadTypVal(ctx);
+    } else {
+        left = .{
+            .typ = .{ .prime = .i32 },
+            .bare = .{ .tmp = try left_ref.loadTag(ctx) },
+        };
+        right = .{
+            .typ = .{ .prime = .i32 },
+            .bare = .{ .tmp = try right_ref.loadTag(ctx) },
+        };
+    }
     const tmp = try okc.Expr.Binary.genOnVals(self.kind, left.typ, left.bare, right.bare, ctx);
     return .{
         .typ = self.kind.getRetTyp(left.typ),
