@@ -51,7 +51,7 @@ pub fn check(
             }
         }
         if (not_init) {
-            ctx.failer.notInit(location, entry.key_ptr.*);
+            ctx.failer.notInit(location, entry.key_ptr.*, self.typ.name);
         }
     }
     self.bare.typ = okc.Typ{ .name = .{

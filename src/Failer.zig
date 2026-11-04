@@ -61,8 +61,8 @@ pub fn newFieldSecond(self: *@This(), location: okc.Location, name: []const u8) 
     self.fail(location, "field `{s}` is already initialized", .{name});
 }
 
-pub fn notInit(self: *@This(), location: okc.Location, name: []const u8) void {
-    self.fail(location, "field `{s}` is not initialized", .{name});
+pub fn notInit(self: *@This(), location: okc.Location, name: []const u8, struc_name: []const u8) void {
+    self.fail(location, "field `{s}` of `{s}` is not initialized", .{ name, struc_name });
 }
 
 pub fn noField(

@@ -137,10 +137,10 @@ fn checkSlice(
         }
     }
     if (!was_len) {
-        ctx.failer.notInit(location, "len");
+        ctx.failer.notInit(location, "len", "[]");
     }
     if (was_ptr == null) {
-        ctx.failer.notInit(location, "ptr");
+        ctx.failer.notInit(location, "ptr", "[]");
     }
     self.typ = okc.Typ{ .slice = .{
         .typ = was_ptr.?,

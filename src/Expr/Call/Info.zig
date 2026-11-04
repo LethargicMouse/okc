@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const okc = @import("okc");
 
 typ: okc.Typ,
@@ -27,8 +29,29 @@ pub fn check(self: @This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
         const info = try arg.check(.{ .typ = param }, ctx);
         _ = info.typ.unify(param, arg.location, ctx.failer);
     }
+    var defined: std.StringHashMap(okc.Location) = .init(ctx.gpa);
+    defer defined.deinit();
     for (self.context.fields) |*field| {
-        _ = try field.expr.check(.{}, ctx);
+        for (fun.context) |param| {
+            if (std.mem.eql(u8, field.name, param.name)) {
+                const info = try field.expr.check(.{ .typ = param.typ }, ctx);
+                _ = info.typ.unify(param.typ, field.expr.location, ctx.failer);
+                if (defined.get(param.name)) |prev| {
+                    ctx.failer.alreadyDeclared(field.location, param.name, prev);
+                } else {
+                    try defined.put(param.name, field.location);
+                }
+                break;
+            }
+        } else {
+            _ = try field.expr.check(.{}, ctx);
+            ctx.failer.fail(field.location, "unused context", .{});
+        }
+    }
+    for (fun.context) |param| {
+        if (!defined.contains(param.name)) {
+            ctx.failer.notInit(self.location, param.name, "ctx");
+        }
     }
     return .{
         .typ = fun.ret_typ.*,
