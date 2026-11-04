@@ -39,6 +39,7 @@ pub fn parsePosted(ctx: *okc.Parser, mode: okc.Parser.Mode) error{ OutOfMemory, 
                     .expr = res,
                     .vari = method_postfix.vari,
                     .args = method_postfix.args,
+                    .context = method_postfix.context,
                     .name_location = method_postfix.name_location,
                 };
                 res = .{

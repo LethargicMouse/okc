@@ -22,40 +22,6 @@ pub fn getElem(self: @This(), location: okc.Location, failer: *okc.Failer) ?@Thi
     }
 }
 
-pub const Call = struct {
-    typ: okc.Typ,
-    args: []okc.Expr,
-    maybe_first: ?okc.Expr.Info.Located,
-    location: okc.Location,
-
-    pub fn check(self: @This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
-        const fun = self.typ.getFun(self.location, ctx.failer) orelse {
-            for (self.args) |*arg| {
-                _ = try arg.check(.{}, ctx);
-            }
-            return .{
-                .typ = .err,
-                .mutable = false,
-            };
-        };
-        // to propagate hint to generics
-        _ = fun.ret_typ.unifyOrNull(hint, .active);
-        var params = fun.params;
-        if (self.maybe_first) |first| {
-            params = fun.params[1..];
-            _ = first.bare.typ.unify(fun.params[0], self.location, ctx.failer);
-        }
-        for (self.args, params) |*arg, param| {
-            const info = try arg.check(.{ .typ = param }, ctx);
-            _ = info.typ.unify(param, arg.location, ctx.failer);
-        }
-        return .{
-            .typ = fun.ret_typ.*,
-            .mutable = false,
-        };
-    }
-};
-
 pub const Located = struct {
     bare: okc.Expr.Info,
     location: okc.Location,

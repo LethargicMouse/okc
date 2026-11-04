@@ -5,6 +5,7 @@ args: []okc.Expr,
 context: Context,
 
 pub const Context = @import("Call/Context.zig");
+pub const Info = @import("Call/Info.zig");
 pub const Postfix = @import("Call/Postfix.zig");
 
 pub fn parsePostfix(ctx: *okc.Parser) !okc.Expr.Postfix {
@@ -16,17 +17,15 @@ pub fn parsePostfix(ctx: *okc.Parser) !okc.Expr.Postfix {
 }
 
 pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
-    for (self.context.fields) |*field| {
-        _ = try field.expr.check(.{}, ctx);
-    }
     const callee = try self.expr.check(.{}, ctx);
-    const info_call: okc.Expr.Info.Call = .{
+    const info: Info = .{
         .args = self.args,
+        .context = self.context,
         .location = self.expr.location,
         .maybe_first = null,
         .typ = callee.typ,
     };
-    return info_call.check(hint, ctx);
+    return info.check(hint, ctx);
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {

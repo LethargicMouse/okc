@@ -3,6 +3,7 @@ const okc = @import("okc");
 expr: okc.Expr,
 vari: okc.Expr.Var,
 args: []okc.Expr,
+context: okc.Expr.Call.Context,
 name_location: okc.Location,
 caller: okc.Typ.Name = .{ .name = "<unknown>" },
 
@@ -16,6 +17,7 @@ pub fn parsePostfix(ctx: *okc.Parser) !okc.Expr.Postfix {
         .kind = .{ .method = .{
             .vari = .{ .name = name },
             .args = call.args,
+            .context = call.context,
             .name_location = location,
         } },
     };
@@ -65,10 +67,11 @@ pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info 
     };
     const callee = try self.vari.check(self.name_location, .constant, inner_ctx);
     self.caller = caller.typ.getName().?;
-    const info_call: okc.Expr.Info.Call = .{
+    const info_call: okc.Expr.Call.Info = .{
         .location = self.name_location,
         .typ = callee.typ,
         .args = self.args,
+        .context = self.context,
         .maybe_first = first,
     };
     return info_call.check(hint, ctx);
@@ -77,5 +80,6 @@ pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info 
 pub const Postfix = struct {
     vari: okc.Expr.Var,
     args: []okc.Expr,
+    context: okc.Expr.Call.Context,
     name_location: okc.Location,
 };
