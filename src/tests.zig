@@ -209,5 +209,5 @@ test "Context.ok" {
 }
 
 test "Std.ok" {
-    try testFile("../StdMain", "");
+    try testFile("../Std_Test", "");
 }

@@ -15,20 +15,25 @@ pub fn checkMain(self: @This(), location: okc.Location, ctx: okc.Module.Check) v
     item.used = true;
 }
 
-pub fn load(name: []const u8, location: okc.Location, ctx: Load) !@This() {
-    if (ctx.program.modules.get(name)) |res| {
-        return res;
+pub fn load(name: []const u8, location: okc.Location, use: okc.Item.Use, ctx: Load) !@This() {
+    switch (use) {
+        .root => {
+            if (ctx.program.modules.get(name)) |res| {
+                return res;
+            }
+            const path = try ctx.makePath(name, ctx.arena);
+            const module: okc.Module = try .read(ctx.io, ctx.gpa, path, ctx.arena, location);
+            try ctx.program.ast_modules.put(name, module);
+            if (!ctx.checked_mods.contains(name)) {
+                try ctx.check_queue.append(ctx.gpa, name);
+                try ctx.checked_mods.put(name, {});
+            }
+            const res = try module.makeInfo(ctx.moduleCheckCtx(.{ .name = name }));
+            try ctx.program.modules.put(name, res);
+            return res;
+        },
+        .self => unreachable,
     }
-    const path = try ctx.makePath(name, ctx.arena);
-    const module: okc.Module = try .read(ctx.io, ctx.gpa, path, ctx.arena, location);
-    try ctx.program.ast_modules.put(name, module);
-    if (!ctx.checked_mods.contains(name)) {
-        try ctx.check_queue.append(ctx.gpa, name);
-        try ctx.checked_mods.put(name, {});
-    }
-    const res = try module.makeInfo(ctx.moduleCheckCtx(.{ .name = name }));
-    try ctx.program.modules.put(name, res);
-    return res;
 }
 
 pub fn checkUsage(self: @This(), failer: *okc.Failer) void {
