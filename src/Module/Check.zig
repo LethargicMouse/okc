@@ -10,7 +10,7 @@ program: *okc.Program,
 root: []const u8,
 typ: okc.Typ.Name,
 checked_mods: *std.StringHashMap(void),
-check_queue: *std.ArrayList([]const u8),
+check_queue: *std.Deque([]const u8),
 
 pub fn deinit(self: @This()) void {
     self.modules.deinit();

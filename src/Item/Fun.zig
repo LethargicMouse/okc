@@ -94,7 +94,9 @@ pub fn gen(
 
 pub fn check(self: @This(), location: okc.Location, ctx: okc.Item.Check) !void {
     std.log.debug("check fun in {f}\n", .{location});
-    var stmt_check = ctx.stmtCheckCtx(self.header.context, self.header.ret_typ);
+    var generics_checker: okc.Item.Generic.Checker = try .init(ctx.gpa, self.header.generics);
+    defer generics_checker.deinit(ctx.gpa);
+    var stmt_check = ctx.stmtCheckCtx(self.header.context, self.header.ret_typ, &generics_checker);
     defer stmt_check.deinit();
     for (self.header.params) |param| {
         try stmt_check.declare(param.name, param.location, .{

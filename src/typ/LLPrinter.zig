@@ -10,9 +10,8 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
         .prime => |prime| {
             const sprime = switch (prime) {
                 .u8 => "i8",
-                .i32 => "i32",
-                .u32 => "i32",
-                .u64 => "i64",
+                .i32, .u32 => "i32",
+                .i64, .u64 => "i64",
                 .bool => "i1",
                 .void => "void",
             };

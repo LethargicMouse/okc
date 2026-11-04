@@ -253,8 +253,7 @@ pub fn genInt(self: @This(), ctx: *okc.Codegen) !u64 {
         },
         .member => |member| {
             // it is enum
-            const name = member.typ.name;
-            return ctx.typ_decls.get(.{ .name = name }).?
+            return ctx.typ_decls.get(member.typ.name).?
                 .variants.get(member.vari.name).?;
         },
         else => unreachable,

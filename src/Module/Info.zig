@@ -15,15 +15,15 @@ pub fn checkMain(self: @This(), location: okc.Location, ctx: okc.Module.Check) v
     item.used = true;
 }
 
-pub fn load(name: []const u8, location: okc.Location, ctx: Load) !@This() {
+pub fn load(dirs: []const []const u8, name: []const u8, location: okc.Location, ctx: Load) !@This() {
     if (ctx.program.modules.get(name)) |res| {
         return res;
     }
-    const path = try ctx.makePath(name, ctx.arena);
+    const path = try ctx.makePath(dirs, name, ctx.arena);
     const module: okc.Module = try .read(ctx.io, ctx.gpa, path, ctx.arena, location);
     try ctx.program.ast_modules.put(name, module);
     if (!ctx.checked_mods.contains(name)) {
-        try ctx.check_queue.append(ctx.gpa, name);
+        try ctx.check_queue.pushBack(ctx.gpa, name);
         try ctx.checked_mods.put(name, {});
     }
     const res = try module.makeInfo(ctx.moduleCheckCtx(.{ .name = name }));
@@ -60,7 +60,7 @@ pub const Load = struct {
     program: *okc.Program,
     failer: *okc.Failer,
     checked_mods: *std.StringHashMap(void),
-    check_queue: *std.ArrayList([]const u8),
+    check_queue: *std.Deque([]const u8),
     root: []const u8,
 
     pub fn moduleCheckCtx(self: @This(), typ: okc.Typ.Name) okc.Module.Check {
@@ -77,7 +77,23 @@ pub const Load = struct {
         };
     }
 
-    fn makePath(self: @This(), name: []const u8, arena: std.mem.Allocator) ![]const u8 {
-        return arena.print("{s}/{s}.ok", .{ self.root, name });
+    fn makePath(self: @This(), dirs: []const []const u8, name: []const u8, arena: std.mem.Allocator) ![]const u8 {
+        var len = self.root.len + name.len + 4;
+        for (dirs) |dir| {
+            len += dir.len + 1;
+        }
+        const res = try arena.alloc(u8, len);
+        @memcpy(res[0..self.root.len], self.root);
+        len = self.root.len + 1;
+        res[len - 1] = '/';
+        for (dirs) |dir| {
+            @memcpy(res[len..][0..dir.len], dir);
+            len += dir.len + 1;
+            res[len - 1] = '/';
+        }
+        @memcpy(res[len..][0..name.len], name);
+        len += name.len;
+        @memcpy(res[len..], ".ok");
+        return res;
     }
 };

@@ -1,1 +1,6 @@
 use Std;
+
+fn main() i32 {
+    Std.print("hello world\n");
+    return 0;
+}

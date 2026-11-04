@@ -1,0 +1,1 @@
+extern fn write(fd: i32, ptr: [*]u8, len: u64) u64;

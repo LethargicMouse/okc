@@ -86,7 +86,7 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var program: Program = .init(gpa);
     defer program.deinit();
     const name = std.Io.Dir.path.stem(path);
-    var check_queue: std.ArrayList([]const u8) = .empty;
+    var check_queue: std.Deque([]const u8) = .empty;
     defer check_queue.deinit(gpa);
     var checked: std.StringHashMap(void) = .init(gpa);
     defer checked.deinit();
@@ -104,7 +104,7 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var info = try module.makeInfo(check_ctx);
     defer info.deinit();
     try module.check(&info, .main, check_ctx);
-    while (check_queue.pop()) |mod_name| {
+    while (check_queue.popFront()) |mod_name| {
         check_ctx.typ = .{ .name = mod_name };
         try program.ast_modules.get(mod_name).?.check(
             program.modules.getPtr(mod_name).?,

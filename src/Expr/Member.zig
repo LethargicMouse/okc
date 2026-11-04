@@ -1,7 +1,7 @@
 const okc = @import("okc");
 
 vari: okc.Expr.Var,
-typ: okc.Typ.Name = .{ .name = "<unknown>" },
+typ: okc.Typ = .any,
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const ref = try self.genRef(ctx);
@@ -9,7 +9,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
 }
 
 pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
-    return self.vari.genRefIn(self.typ, ctx);
+    return self.vari.genRefIn(self.typ.name, ctx);
 }
 
 pub fn check(
@@ -19,12 +19,12 @@ pub fn check(
     mutability: okc.Expr.Var.Mutability,
     ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
-    if (hint.getName()) |typ| {
-        self.typ = typ;
-        return self.vari.checkIn(typ, location, mutability, ctx);
+    if (hint == .any) {
+        ctx.failer.cannotInfer(.any, location);
+        return .{ .typ = .err, .mutable = true };
     }
-    ctx.failer.cannotInfer(hint, location);
-    return .{ .typ = .err, .mutable = true };
+    self.typ = hint;
+    return self.vari.checkIn(hint, location, mutability, ctx);
 }
 
 pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {

@@ -55,17 +55,7 @@ pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info 
             .location = self.expr.location,
         };
     }
-    const inner_ctx = ctx.inside(caller.typ) orelse {
-        ctx.failer.noMember(self.name_location, self.vari.name, caller.typ);
-        for (self.args) |*expr| {
-            _ = try expr.check(.{}, ctx);
-        }
-        return .{
-            .typ = .err,
-            .mutable = false,
-        };
-    };
-    const callee = try self.vari.check(self.name_location, .constant, inner_ctx);
+    const callee = try self.vari.checkIn(caller.typ, self.name_location, .constant, ctx);
     self.caller = caller.typ.getName().?;
     const info_call: okc.Expr.Call.Info = .{
         .location = self.name_location,

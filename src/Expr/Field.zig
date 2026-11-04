@@ -73,7 +73,7 @@ pub fn check(
     if (norm == .typ) {
         const name = self.expr.kind.vari.name;
         return self.vari.checkIn(
-            .{ .name = name },
+            .{ .name = .{ .name = name } },
             location,
             if (hint_mutable) .mutable else .constant,
             ctx,

@@ -21,20 +21,20 @@ test "Empty.ok" {
     try testFileCode("Empty", "", 123);
 }
 
-test "SimpleCall.ok" {
-    try testFile("SimpleCall", "hello\n");
+test "Simple_Call.ok" {
+    try testFile("Simple_Call", "hello\n");
 }
 
-test "SimpleCall2.ok" {
-    try testFile("SimpleCall2", "123");
+test "Simple_Call_2.ok" {
+    try testFile("Simple_Call_2", "123");
 }
 
 test "Var.ok" {
     try testFile("Var", "wazzup niggas\n");
 }
 
-test "VarAssign.ok" {
-    try testFile("VarAssign", "oh gotta go nvm bye\n");
+test "Var_Assign.ok" {
+    try testFile("Var_Assign", "oh gotta go nvm bye\n");
 }
 
 test "Arith.ok" {
@@ -80,112 +80,112 @@ test "Str.ok" {
     try testFile("Str", "6-7!!!\n");
 }
 
-test "VoidFun.ok" {
-    try testFile("VoidFun", "hello\n");
+test "Void_Fun.ok" {
+    try testFile("Void_Fun", "hello\n");
 }
 
 test "Ignore.ok" {
     try testFile("Ignore", "");
 }
 
-test "FunArg.ok" {
-    try testFile("FunArg", "hello there\n");
+test "Fun_Arg.ok" {
+    try testFile("Fun_Arg", "hello there\n");
 }
 
 test "Struct.ok" {
     try testFile("Struct", "six seven\n");
 }
 
-test "RawTerm.ok" {
-    try okc.compile(std.testing.io, std.testing.allocator, "examples/RawTerm.ok");
+test "Raw_Term.ok" {
+    try okc.compile(std.testing.io, std.testing.allocator, "examples/Raw_Term.ok");
 }
 
-test "NestRet.ok" {
-    try testFile("NestRet", "does return\n");
+test "Nest_Ret.ok" {
+    try testFile("Nest_Ret", "does return\n");
 }
 
 test "Unreachable.ok" {
     try testFile("Unreachable", "reachable\n");
 }
 
-test "InferStruct.ok" {
-    try testFile("InferStruct", "6-7\n");
+test "Infer_Struct.ok" {
+    try testFile("Infer_Struct", "6-7\n");
 }
 
-test "MutPtr.ok" {
-    try testFile("MutPtr", "six seven\n");
+test "Mut_Ptr.ok" {
+    try testFile("Mut_Ptr", "six seven\n");
 }
 
 test "Comment.ok" {
     try testFile("Comment", "comments\n");
 }
 
-test "RetVoid.ok" {
-    try testFile("RetVoid", "hello");
+test "Ret_Void.ok" {
+    try testFile("Ret_Void", "hello");
 }
 
-test "NestVar.ok" {
-    try testFile("NestVar", "six\nseven\n");
+test "Nest_Var.ok" {
+    try testFile("Nest_Var", "six\nseven\n");
 }
 
-test "GenericStruct.ok" {
-    try testFile("GenericStruct", "67\n");
+test "Generic_Struct.ok" {
+    try testFile("Generic_Struct", "67\n");
 }
 
-test "SliceElem.ok" {
-    try testFile("SliceElem", "6-7...");
+test "Slice_Elem.ok" {
+    try testFile("Slice_Elem", "6-7...");
 }
 
-test "GenericFun.ok" {
-    try testFile("GenericFun", "six 7\n");
+test "Generic_Fun.ok" {
+    try testFile("Generic_Fun", "six 7\n");
 }
 
-test "MutSlice.ok" {
-    try testFile("MutSlice", "6 7\n");
+test "Mut_Slice.ok" {
+    try testFile("Mut_Slice", "6 7\n");
 }
 
-test "FnPtr.ok" {
-    try testFile("FnPtr", "hello\n");
+test "Fun_Ptr.ok" {
+    try testFile("Fun_Ptr", "hello\n");
 }
 
-test "ArrayToSlice.ok" {
-    try testFile("ArrayToSlice", "6 7");
+test "Array_To_Slice.ok" {
+    try testFile("Array_To_Slice", "6 7");
 }
 
 test "Constant.ok" {
     try testFile("Constant", "six seven\n");
 }
 
-test "DefaultField.ok" {
-    try testFile("DefaultField", "six seven\n");
+test "Default_Field.ok" {
+    try testFile("Default_Field", "six seven\n");
 }
 
 test "Box.ok" {
     try testFile("Box", "6 7");
 }
 
-test "InferInt.ok" {
-    try testFile("InferInt", "");
+test "Infer_Int.ok" {
+    try testFile("Infer_Int", "");
 }
 
-test "TypedArray.ok" {
-    try testFile("TypedArray", "six\nseven\n");
+test "Typed_Array.ok" {
+    try testFile("Typed_Array", "six\nseven\n");
 }
 
 test "For.ok" {
     try testFile("For", "six seven\n");
 }
 
-test "Fizzbuzz2.ok" {
-    try testFile("Fizzbuzz2", fizzbuzz_output);
+test "Fizzbuzz_2.ok" {
+    try testFile("Fizzbuzz_2", fizzbuzz_output);
 }
 
 test "Subslice.ok" {
     try testFile("Subslice", "6\n7\n");
 }
 
-test "TypeAlias.ok" {
-    try testFile("TypeAlias", "hello world");
+test "Type_Alias.ok" {
+    try testFile("Type_Alias", "hello world");
 }
 
 test "Method.ok" {
@@ -196,12 +196,12 @@ test "Enum.ok" {
     try testFile("Enum", "go\n");
 }
 
-test "EnumInfer.ok" {
-    try testFile("EnumInfer", "go\n");
+test "Enum_Infer.ok" {
+    try testFile("Enum_Infer", "go\n");
 }
 
-test "EnumArray.ok" {
-    try testFile("EnumArray", "go");
+test "Enum_Array.ok" {
+    try testFile("Enum_Array", "go");
 }
 
 test "Context.ok" {
@@ -209,5 +209,5 @@ test "Context.ok" {
 }
 
 test "Std.ok" {
-    try testFile("../Std_Test", "");
+    try testFile("../Std_Test", "hello world\n");
 }

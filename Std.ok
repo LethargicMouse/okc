@@ -1,0 +1,8 @@
+use Std.C;
+
+fn print(s: []u8) void {
+    let mut written = 0;
+    while (written < s.len) {
+        written += C.write(1, s.ptr, s.len);
+    }
+}

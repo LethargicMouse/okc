@@ -11,7 +11,7 @@ failer: *okc.Failer,
 mod_typ: okc.Typ.Name,
 root: []const u8,
 checked_mods: *std.StringHashMap(void),
-check_queue: *std.ArrayList([]const u8),
+check_queue: *std.Deque([]const u8),
 
 pub fn loadCtx(self: @This()) okc.Module.Info.Load {
     return .{
@@ -40,6 +40,7 @@ pub fn stmtCheckCtx(
     self: @This(),
     context: []const okc.Item.Fun.Param,
     ret_typ: okc.Typ,
+    generics_checker: *okc.Item.Generic.Checker,
 ) okc.Stmt.Check {
     return .{
         .gpa = self.gpa,
@@ -50,6 +51,7 @@ pub fn stmtCheckCtx(
         .mod_typ = self.mod_typ,
         .context = context,
         .ret_typ = ret_typ,
+        .generics_checker = generics_checker,
     };
 }
 

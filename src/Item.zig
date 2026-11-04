@@ -21,15 +21,22 @@ pub fn parseGenerics(ctx: *okc.Parser) ![]const okc.Item.Generic {
     return res;
 }
 
+fn parseUsePath(ctx: *okc.Parser) ![]const u8 {
+    const name = try ctx.parseName(.quiet);
+    try ctx.expect(.dot, .quiet);
+    return name;
+}
+
 fn parseUse(ctx: *okc.Parser) !@This() {
     try ctx.expect(.use, .quiet);
+    const path = try ctx.many(parseUsePath, .{});
     const location = ctx.getLocation();
     const name = try ctx.parseName(.loud);
     try ctx.expect(.semi, .loud);
     return .{
         .location = location,
         .name = name,
-        .kind = .use,
+        .kind = .{ .use = path },
     };
 }
 
@@ -54,7 +61,7 @@ pub fn reg(self: *@This(), ctx: Check) !void {
         .typ_decl => |typ| .{ .typ_decl = try typ.makeInfo(ctx) },
         .fun => |*fun| .{ .fun = &fun.header },
         .constant => |*constt| .{ .vari = try constt.reg(ctx) },
-        .use => .{ .module = try .load(self.name, self.location, ctx.loadCtx()) },
+        .use => |path| .{ .module = try .load(path, self.name, self.location, ctx.loadCtx()) },
     };
     if (kind == .fun) {
         try kind.fun.check(ctx);
@@ -86,5 +93,5 @@ pub const Kind = union(enum) {
     fun: Fun,
     typ_alias: TypAlias,
     typ_decl: TypDecl,
-    use,
+    use: []const []const u8,
 };

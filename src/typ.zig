@@ -125,19 +125,20 @@ pub const Typ = union(enum) {
         if (self == .name) {
             return self;
         }
-        const res = try self.updateRec(check, .{ctx}, ctx.arena);
-        if (res == .loc_name) {
-            if (ctx.generics_checker.mark(res.loc_name.bare.name)) {
+        if (self == .loc_name) {
+            const res = try updateRec(.{ .name = self.loc_name.bare }, check, .{ctx}, ctx.arena);
+            if (ctx.generics_checker.mark(res.name.name)) {
                 return res;
             }
-            const maybe_resolved = res.loc_name.checkDecl(ctx) catch |err| switch (err) {
+            const maybe_resolved = self.loc_name.checkDecl(ctx) catch |err| switch (err) {
                 error.BadType => return .err,
             };
             if (maybe_resolved) |resolved| {
                 return resolved;
             }
+            return res;
         }
-        return res;
+        return self.updateRec(check, .{ctx}, ctx.arena);
     }
 
     pub fn getName(self: @This()) ?Name {
@@ -254,6 +255,8 @@ pub const Typ = union(enum) {
             b.slice.sized)
         {
             std.log.info("append `.ptr` to get C-style string\n", .{});
+        } else if (a.isVoid()) {
+            std.log.info("prepend `_ =` to ignore value\n", .{});
         }
         return .err;
     }
@@ -403,10 +406,6 @@ pub const Typ = union(enum) {
                 } };
             },
             .name => |name| return .{ .name = try name.updateGenerics(fun, args, arena) },
-            .loc_name => |located| return .{ .loc_name = .{
-                .location = located.location,
-                .bare = try located.bare.updateGenerics(fun, args, arena),
-            } },
             .ptr => |ptr| {
                 const new = try @call(.auto, fun, .{ptr.typ.*} ++ args);
                 return .{ .ptr = .{
@@ -423,6 +422,7 @@ pub const Typ = union(enum) {
                 } };
             },
             .any, .err, .prime, .int, .lazy, .typ, .never => return self,
+            .loc_name => unreachable,
         }
     }
 
