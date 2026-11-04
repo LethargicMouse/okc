@@ -205,5 +205,9 @@ test "EnumArray.ok" {
 }
 
 test "Context.ok" {
-    try testFileCode("Context", "fatal: can't launch rockets cuz I'm not evil", 1);
+    try testFileCode("Context", "fatal: can't launch rockets cuz I'm not evil\n", 1);
+}
+
+test "Std.ok" {
+    try testFile("../StdMain", "");
 }
