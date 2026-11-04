@@ -29,19 +29,7 @@ fn parseUse(ctx: *okc.Parser) !@This() {
     return .{
         .location = location,
         .name = name,
-        .kind = .{ .use = .root },
-    };
-}
-
-fn parseTypUse(ctx: *okc.Parser) !@This() {
-    try ctx.expect(.typ, .quiet);
-    const location = ctx.getLocation();
-    const name = try ctx.parseName(.quiet);
-    try ctx.expect(.semi, .quiet);
-    return .{
-        .location = location,
-        .name = name,
-        .kind = .{ .use = .self },
+        .kind = .use,
     };
 }
 
@@ -52,7 +40,6 @@ pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!@This() {
         Fun.Extern.parseItem,
         Const.parseItem,
         TypAlias.parseItem,
-        parseTypUse,
         parseUse,
     }) catch |err| {
         try ctx.fail("<item>");
@@ -67,7 +54,7 @@ pub fn reg(self: *@This(), ctx: Check) !void {
         .typ_decl => |typ| .{ .typ_decl = try typ.makeInfo(ctx) },
         .fun => |*fun| .{ .fun = &fun.header },
         .constant => |*constt| .{ .vari = try constt.reg(ctx) },
-        .use => |use| .{ .module = try .load(self.name, self.location, use, ctx.loadCtx()) },
+        .use => .{ .module = try .load(self.name, self.location, ctx.loadCtx()) },
     };
     if (kind == .fun) {
         try kind.fun.check(ctx);
@@ -99,10 +86,5 @@ pub const Kind = union(enum) {
     fun: Fun,
     typ_alias: TypAlias,
     typ_decl: TypDecl,
-    use: Use,
-};
-
-pub const Use = enum {
-    self,
-    root,
+    use,
 };
