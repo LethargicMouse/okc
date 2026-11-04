@@ -1,4 +1,4 @@
-extern fn write(fd: i32, s: &u8, len: u64) void;
+extern fn write(fd: i32, s: [*]u8, len: u64) void;
 
 fn main() i32 {
     let array = ['6', ' ', '7']; // array: [3]u8

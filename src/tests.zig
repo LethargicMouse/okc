@@ -2,20 +2,23 @@ const std = @import("std");
 
 const okc = @import("okc");
 
-fn testFile(comptime name: []const u8, output: []const u8) !void {
+fn testFileCode(comptime name: []const u8, output: []const u8, code: u8) !void {
     const ok_path = std.fmt.comptimePrint("examples/{s}.ok", .{name});
     try okc.compile(std.testing.io, std.testing.allocator, ok_path);
 
     const run_res = try std.process.run(std.testing.allocator, std.testing.io, .{ .argv = &.{okc.out_path} });
     defer std.testing.allocator.free(run_res.stdout);
     defer std.testing.allocator.free(run_res.stderr);
-    try std.testing.expect(run_res.term.exited == 0);
+    try std.testing.expectEqual(run_res.term.exited, code);
     try std.testing.expectEqualStrings(output, run_res.stdout);
 }
 
+fn testFile(comptime name: []const u8, output: []const u8) !void {
+    try testFileCode(name, output, 0);
+}
+
 test "Empty.ok" {
-    const code = try okc.runFile(std.testing.io, std.testing.allocator, "examples/Empty.ok");
-    try std.testing.expectEqual(123, code);
+    try testFileCode("Empty", "", 123);
 }
 
 test "SimpleCall.ok" {
@@ -202,5 +205,5 @@ test "EnumArray.ok" {
 }
 
 test "Context.ok" {
-    try testFile("Context", "can't launch rockets cuz I'm not evil");
+    try testFileCode("Context", "fatal: can't launch rockets cuz I'm not evil", 1);
 }

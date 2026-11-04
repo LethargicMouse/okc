@@ -64,8 +64,8 @@ pub fn check(
         info.mutable = norm.ptr.mutable;
         norm = norm.ptr.typ.normalise();
     }
-    if (norm == .slice) {
-        return norm.slice.checkField(info.mutable, self.vari.name, location, ctx.failer);
+    if (norm == .slice and norm.slice.sized) {
+        return checkForSlice(norm.slice, info.mutable, self.vari.name, location, ctx.failer);
     }
     if (norm == .err) {
         return err;
@@ -104,5 +104,35 @@ pub fn check(
     return .{
         .typ = try fiel.typ.resolve(resolve_map, ctx.arena),
         .mutable = info.mutable,
+    };
+}
+
+fn checkForSlice(
+    slice: okc.Typ.Slice,
+    mutable: bool,
+    name: []const u8,
+    location: okc.Location,
+    failer: *okc.Failer,
+) !okc.Expr.Info {
+    if (std.mem.eql(u8, name, "ptr")) {
+        return .{
+            .typ = .{ .slice = .{
+                .typ = slice.typ,
+                .mutable = slice.mutable,
+                .sized = false,
+            } },
+            .mutable = mutable,
+        };
+    }
+    if (std.mem.eql(u8, name, "len")) {
+        return .{
+            .typ = .{ .prime = .u64 },
+            .mutable = mutable,
+        };
+    }
+    failer.noField(location, name, .{ .slice = slice });
+    return .{
+        .typ = .err,
+        .mutable = true,
     };
 }

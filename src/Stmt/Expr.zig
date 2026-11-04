@@ -49,8 +49,8 @@ pub fn check(self: *@This(), ctx: okc.Expr.Check) !okc.ControlFlow {
 
 pub const Postfix = union(enum) {
     assign: okc.Expr,
-    op_assign: okc.Stmt.OpAssign.Postfix,
     none,
+    op_assign: okc.Stmt.OpAssign.Postfix,
 
     pub fn parse(ctx: *okc.Parser) !@This() {
         return ctx.either(.{

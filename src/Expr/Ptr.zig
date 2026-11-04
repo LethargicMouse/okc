@@ -8,7 +8,12 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
 }
 
 pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
-    const mutable = if (hint == .ptr) hint.ptr.mutable else false;
+    const mutable = if (hint == .ptr)
+        hint.ptr.mutable
+    else if (hint == .slice)
+        hint.slice.mutable
+    else
+        false;
     const info = try self.expr.check(.{ .mutable = mutable }, ctx);
     const ptr = try okc.Typ.memo.box(info.typ, ctx.arena);
     return .{

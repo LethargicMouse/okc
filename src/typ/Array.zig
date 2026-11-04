@@ -73,8 +73,8 @@ pub const Index = union(enum) {
 
     pub fn format(self: @This(), writer: *std.Io.Writer) !void {
         switch (self) {
-            .len => |len| try writer.print("{}\n", .{len}),
-            .enumm => |enumm| try writer.print("{s}\n", .{enumm}),
+            .len => |len| try writer.print("{}", .{len}),
+            .enumm => |enumm| try writer.print("{s}", .{enumm}),
         }
     }
 };

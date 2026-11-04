@@ -11,8 +11,8 @@ type Termios {
 
 extern fn tcgetattr(fd: i32, termios: &mut Termios) void;
 extern fn tcsetattr(fd: i32, action: i32, termios: &Termios) void;
-extern fn read(fd: i32, ptr: &mut u8, len: u64) void;
-extern fn write(fd: i32, ptr: &u8, len: u64) void;
+extern fn read(fd: i32, ptr: [*]mut u8, len: u64) void;
+extern fn write(fd: i32, ptr: [*]u8, len: u64) void;
 
 fn main() i32 {
     let mut termios: Termios = undefined;
@@ -32,9 +32,9 @@ fn main() i32 {
     tcsetattr(stdin, flush, &termios);
     putStr("\x1b[2J    six seven");
     while (true) {
-        let mut input = 0;
+        let mut input = [0];
         read(stdin, &input, 1);
-        if (input == 'q') {
+        if (input[0] == 'q') {
             break;
         }
     }

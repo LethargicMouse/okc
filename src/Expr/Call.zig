@@ -59,6 +59,7 @@ pub fn genWithVal(
     for (arg_typ_vals_to_fill[0..args.len], args, params) |*target, arg, param| {
         target.* = try arg.gen(ctx);
         if (param == .slice and target.typ == .ptr) {
+            std.log.debug("cast array ptr {f} to slice", .{target.typ});
             target.* = try okc.Expr.Array.castToSlice(target.typ.ptr.typ.array, target.bare, ctx);
         }
     }

@@ -29,6 +29,6 @@ fn log_fatal(msg: []u8) ctx {
     if (log_level < .error) {
         exit_callback(1);
     }
-    printf("fatal: %s", msg);
+    printf("fatal: %s".ptr, msg.ptr);
     exit_callback(1);
 }

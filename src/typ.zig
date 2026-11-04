@@ -11,11 +11,11 @@ pub const Typ = union(enum) {
     lazy: Lazy,
     loc_name: Name.Located,
     name: Name,
+    never,
     prime: Prime,
     ptr: Ptr,
     slice: Slice,
     typ,
-    never,
 
     pub const Array = @import("typ/Array.zig");
     pub const Fun = @import("typ/Fun.zig");
@@ -88,9 +88,10 @@ pub const Typ = union(enum) {
         return if (self.getName()) |typ_name|
             typ_decls.get(typ_name).?.fields.get(name).?
         else if (std.mem.eql(u8, name, "ptr")) .{
-            .typ = .{ .ptr = .{
+            .typ = .{ .slice = .{
                 .typ = self.slice.typ,
                 .mutable = self.slice.mutable,
+                .sized = false,
             } },
             .index = 0,
         } else .{
@@ -237,22 +238,20 @@ pub const Typ = union(enum) {
         return res;
     }
 
-    pub const debug_unify = false;
-
     pub fn unify(b: Typ, a: Typ, location: okc.Location, failer: *okc.Failer) Typ {
         if (a.unifyOrNull(b, .active)) |typ| {
-            if (Typ.debug_unify) {
-                std.log.debug("==> {f}", .{typ});
-            }
+            std.log.debug("==> {f}", .{typ});
             return typ;
         }
         failer.wrongTyp(location, a, b);
-        if (a == .ptr and
-            a.ptr.typ.* == .prime and
-            a.ptr.typ.prime == .u8 and
+        if (a == .slice and
+            a.slice.typ.* == .prime and
+            a.slice.typ.prime == .u8 and
+            !a.slice.sized and
             b == .slice and
             b.slice.typ.* == .prime and
-            b.slice.typ.prime == .u8)
+            b.slice.typ.prime == .u8 and
+            b.slice.sized)
         {
             std.log.info("append `.ptr` to get C-style string\n", .{});
         }
@@ -345,7 +344,9 @@ pub const Typ = union(enum) {
                 return a;
             },
             .slice => |aslice| {
-                if (aslice.mutable != b.slice.mutable) {
+                if (aslice.mutable and !b.slice.mutable or
+                    aslice.sized != b.slice.sized)
+                {
                     return null;
                 }
                 if (aslice.typ != b.slice.typ) {
@@ -417,8 +418,8 @@ pub const Typ = union(enum) {
                 const new = try @call(.auto, fun, .{slice.typ.*} ++ args);
                 return .{ .slice = .{
                     .typ = try memo.box(new, arena),
-                    .sized = true,
-                    .mutable = false,
+                    .sized = slice.sized,
+                    .mutable = slice.mutable,
                 } };
             },
             .any, .err, .prime, .int, .lazy, .typ, .never => return self,

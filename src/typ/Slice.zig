@@ -8,9 +8,9 @@ mutable: bool,
 
 pub fn parseTyp(ctx: *okc.Parser) !okc.Typ {
     try ctx.expect(.bral, .quiet);
-    var sized = true;
+    var sized = false;
     try ctx.maybe(okc.Parser.expect, .{ .star, .quiet }) orelse {
-        sized = false;
+        sized = true;
     };
     try ctx.expect(.brar, .loud);
     var mutable = true;
@@ -21,53 +21,28 @@ pub fn parseTyp(ctx: *okc.Parser) !okc.Typ {
     const ptr = try okc.Typ.memo.box(typ, ctx.arena);
     return .{ .slice = .{
         .typ = ptr,
-        .sized = true,
+        .sized = sized,
         .mutable = mutable,
     } };
 }
 
 pub fn eql(a: @This(), b: @This()) bool {
-    return a.typ == b.typ and a.mutable == b.mutable;
+    return a.typ == b.typ and a.mutable == b.mutable and a.sized == b.sized;
 }
 
 pub fn hashIn(self: @This(), hasher: *std.hash.Wyhash) void {
     hasher.update(std.mem.asBytes(&self.typ));
-    hasher.update(&.{@intFromBool(self.mutable)});
+    hasher.update(&.{ @intFromBool(self.mutable), @intFromBool(self.sized) });
 }
 
 pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-    try writer.writeAll("[]");
+    try writer.writeByte('[');
+    if (!self.sized) {
+        try writer.writeByte('*');
+    }
+    try writer.writeByte(']');
     if (self.mutable) {
         try writer.writeAll("mut ");
     }
     try self.typ.format(writer);
-}
-
-pub fn checkField(
-    self: @This(),
-    mutable: bool,
-    name: []const u8,
-    location: okc.Location,
-    failer: *okc.Failer,
-) !okc.Expr.Info {
-    if (std.mem.eql(u8, name, "ptr")) {
-        return .{
-            .typ = .{ .ptr = .{
-                .typ = self.typ,
-                .mutable = self.mutable,
-            } },
-            .mutable = mutable,
-        };
-    }
-    if (std.mem.eql(u8, name, "len")) {
-        return .{
-            .typ = .{ .prime = .u64 },
-            .mutable = mutable,
-        };
-    }
-    failer.noField(location, name, .{ .slice = self });
-    return .{
-        .typ = .err,
-        .mutable = true,
-    };
 }

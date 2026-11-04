@@ -1,5 +1,5 @@
-extern fn write(fd: i32, ptr: &u8, size: u64) void;
-extern fn printf(fmt: &u8, n: i32) void;
+extern fn write(fd: i32, ptr: [*]u8, size: u64) void;
+extern fn printf(fmt: [*]u8, n: i32) void;
 extern fn fflush(filePtrAsU64: u64) void;
 
 fn main() i32 {

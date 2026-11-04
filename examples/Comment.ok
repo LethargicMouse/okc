@@ -1,7 +1,7 @@
 // start of file
 
 /// import of libc `puts`
-extern fn puts(s: &u8) void;  // actually returns `i32` but we ignore it
+extern fn puts(s: [*]u8) void;  // actually returns `i32` but we ignore it
   // end of externs
       /// main function
 fn main() i32 { // main body starts // // / / ///

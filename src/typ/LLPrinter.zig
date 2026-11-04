@@ -24,7 +24,11 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
                 @This(){ .typ = array.typ.* },
             });
         },
-        .slice => try writer.writeAll("%\"[]\""),
+        .slice => |slice| if (slice.sized) {
+            try writer.writeAll("%\"[]\"");
+        } else {
+            try writer.writeAll("ptr");
+        },
         .ptr, .fun => try writer.writeAll("ptr"),
         .name => |name| try writer.print("%\"{f}\"", .{name}),
         .loc_name => |located| try writer.print("%\"{f}\"", .{located.bare}),
