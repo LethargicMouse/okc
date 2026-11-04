@@ -36,7 +36,11 @@ pub fn typCheckCtx(self: @This(), generics_checker: *okc.Item.Generic.Checker) o
     };
 }
 
-pub fn stmtCheckCtx(self: @This(), ret_typ: okc.Typ) okc.Stmt.Check {
+pub fn stmtCheckCtx(
+    self: @This(),
+    context: []const okc.Item.Fun.Param,
+    ret_typ: okc.Typ,
+) okc.Stmt.Check {
     return .{
         .gpa = self.gpa,
         .arena = self.arena,
@@ -44,6 +48,7 @@ pub fn stmtCheckCtx(self: @This(), ret_typ: okc.Typ) okc.Stmt.Check {
         .failer = self.failer,
         .modules = self.program.modules,
         .mod_typ = self.mod_typ,
+        .context = context,
         .ret_typ = ret_typ,
     };
 }
@@ -56,6 +61,7 @@ pub fn checkExprCtx(self: @This()) okc.Expr.Check {
         .failer = self.failer,
         .modules = self.program.modules,
         .mod_typ = self.mod_typ,
+        .context = &.{},
     };
 }
 

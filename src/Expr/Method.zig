@@ -32,7 +32,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
         try self.expr.gen(ctx)
     else
         null;
-    return callee.genCall(first, self.args, ctx);
+    return okc.Expr.Call.genWithVal(callee, first, self.args, self.context, ctx);
 }
 
 pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {

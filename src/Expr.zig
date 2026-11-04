@@ -356,6 +356,7 @@ pub const Check = struct {
     mod_typ: okc.Typ.Name,
     items: std.StringHashMap(okc.Item.Info),
     modules: std.StringHashMap(okc.Module.Info),
+    context: []const okc.Item.Fun.Param,
     failer: *okc.Failer,
 
     pub fn inside(self: @This(), typ: okc.Typ) ?@This() {

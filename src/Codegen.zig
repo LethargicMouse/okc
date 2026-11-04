@@ -9,7 +9,7 @@ file: std.Io.File,
 writer: std.Io.File.Writer,
 buffer: std.ArrayList(u8) = .empty,
 extra_buffer: std.ArrayList(u8) = .empty,
-module: *okc.Module.GenInfo,
+module: *okc.Module.GenInfo = undefined,
 consts: std.StringHashMap(okc.Typ),
 typ_decls: okc.HashMap(okc.Typ.Name, okc.Item.TypDecl.GenInfo),
 vars: std.StringHashMap(okc.Val.Ref),
@@ -20,6 +20,7 @@ resolve_map: std.StringHashMap(okc.Typ),
 counter: okc.Counter = .init(),
 modules: std.StringHashMap(*okc.Module.GenInfo),
 ast_modules: std.StringHashMap(okc.Module),
+context: []const okc.Item.Fun.Param = &.{},
 
 pub fn init(
     ctx: struct {
@@ -46,7 +47,6 @@ pub fn init(
         .resolve_map = .init(ctx.gpa),
         .writer = file.writer(ctx.io, ctx.write_buf),
         .vars = .init(ctx.gpa),
-        .module = undefined,
         .consts = .init(ctx.gpa),
         .generated = .init(ctx.gpa),
     };

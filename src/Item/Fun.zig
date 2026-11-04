@@ -30,6 +30,7 @@ pub fn gen(
     fun_typ: okc.Typ.Fun,
     ctx: *okc.Codegen,
 ) !void {
+    ctx.context = self.header.context;
     try ctx.extra_buffer.print(
         ctx.gpa,
         "\ndefine {f} @\"{f}\"(",
@@ -93,7 +94,7 @@ pub fn gen(
 
 pub fn check(self: @This(), location: okc.Location, ctx: okc.Item.Check) !void {
     std.log.debug("check fun in {f}\n", .{location});
-    var stmt_check = ctx.stmtCheckCtx(self.header.ret_typ);
+    var stmt_check = ctx.stmtCheckCtx(self.header.context, self.header.ret_typ);
     defer stmt_check.deinit();
     for (self.header.params) |param| {
         try stmt_check.declare(param.name, param.location, .{

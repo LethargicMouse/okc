@@ -11,6 +11,7 @@ ret_typ: okc.Typ,
 failer: *okc.Failer,
 modules: std.StringHashMap(okc.Module.Info),
 mod_typ: okc.Typ.Name,
+context: []const okc.Item.Fun.Param,
 
 pub fn deinit(self: *@This()) void {
     self.vars_stack.deinit(self.gpa);
@@ -43,6 +44,7 @@ pub fn exprCheckCtx(self: @This()) okc.Expr.Check {
         .failer = self.failer,
         .modules = self.modules,
         .mod_typ = self.mod_typ,
+        .context = self.context,
     };
 }
 

@@ -50,7 +50,15 @@ pub fn check(self: @This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
     }
     for (fun.context) |param| {
         if (!defined.contains(param.name)) {
-            ctx.failer.notInit(self.location, param.name, "ctx");
+            for (ctx.context) |outer| {
+                if (std.mem.eql(u8, outer.name, param.name)) {
+                    _ = outer.typ.unify(param.typ, self.location, ctx.failer);
+                    ctx.items.getPtr(outer.name).?.used = true;
+                    break;
+                }
+            } else {
+                ctx.failer.notInit(self.location, param.name, "ctx");
+            }
         }
     }
     return .{
