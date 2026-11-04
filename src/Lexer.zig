@@ -254,6 +254,7 @@ fn isNameChar(c: u8) bool {
 }
 
 fn makeToken(self: *@This(), lexeme: okc.Lexeme, len: usize) Token {
+    std.log.debug("make tok {s}", .{okc.Lexeme.describe(lexeme)});
     var location = okc.Location{
         .name = self.source.name,
         .start = self.poses[self.cursor],

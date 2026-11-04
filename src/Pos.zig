@@ -4,7 +4,7 @@ line: u32,
 symbol: u32,
 
 pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) error{OutOfMemory}![]const @This() {
-    var vec = try std.ArrayList(@This()).initCapacity(gpa, code.len + 2);
+    var vec = try std.ArrayList(@This()).initCapacity(gpa, code.len + 1);
     var current = start;
     for (code) |c| {
         try vec.append(gpa, current);
@@ -15,6 +15,7 @@ pub fn makePoses(gpa: std.mem.Allocator, code: []const u8) error{OutOfMemory}![]
             current.symbol += 1;
         }
     }
+    try vec.append(gpa, current);
     return vec.toOwnedSlice(gpa);
 }
 
