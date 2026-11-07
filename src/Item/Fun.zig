@@ -92,25 +92,24 @@ pub fn gen(
     ctx.buffer.clearRetainingCapacity();
 }
 
-pub fn check(self: @This(), location: okc.Location, ctx: okc.Item.Check) !void {
+pub fn check(self: @This(), location: okc.Location, generics_usage: std.bit_set.Dynamic, ctx: okc.Item.Check) !void {
     std.log.debug("check fun in {f}\n", .{location});
-    var generics_checker: okc.Item.Generic.Checker = try .init(ctx.gpa, self.header.generics);
-    defer generics_checker.deinit(ctx.gpa);
-    var stmt_check = ctx.stmtCheckCtx(self.header.context, self.header.ret_typ, &generics_checker);
+    var stmt_check = ctx.stmtCheckCtx(self.header);
     defer stmt_check.deinit();
+    try self.header.regGenerics(generics_usage, &stmt_check);
     for (self.header.params) |param| {
         try stmt_check.declare(param.name, param.location, .{
             .typ = param.typ,
             .mutable = false,
             .can_be_mutable = false,
-        }, ctx.failer);
+        });
     }
     for (self.header.context) |param| {
         try stmt_check.declare(param.name, param.location, .{
             .typ = param.typ,
             .mutable = false,
             .can_be_mutable = false,
-        }, ctx.failer);
+        });
     }
     const control_flow = try self.body.check(&stmt_check);
     if (@backingInt(control_flow) < @backingInt(okc.ControlFlow.ret) and

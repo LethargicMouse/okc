@@ -1,6 +1,12 @@
 use Std;
+use Std.Vec;
 
 fn main() i32 {
     Std.print("hello world\n");
+    let mut vec = Vec.init();
+    vec.push("one");
+    vec.push("two");
+    vec.push("three");
+    Std.print("{} {} {}\n", Vec.data[0], Vec.data[1], Vec.data[2]);
     return 0;
 }

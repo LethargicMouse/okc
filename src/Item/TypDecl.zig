@@ -10,6 +10,50 @@ generics: []const okc.Item.Generic,
 fields: []Field,
 variants: []const Variant,
 
+pub fn checkTyped(typ: okc.Typ.Name.Located, ctx: okc.Typ.Check) ?okc.Typ {
+    std.log.debug("checkTypDecl {f}", .{typ.bare});
+    const name = if (std.mem.eql(u8, typ.bare.name, "Self"))
+        ctx.mod_typ.name
+    else
+        typ.bare.name;
+    const item = ctx.items.getPtr(name) orelse {
+        ctx.failer.notDeclared(typ.location, typ.bare.name);
+        return .err;
+    };
+    switch (item.kind) {
+        .module => unreachable,
+        .fun => {
+            ctx.failer.notTyp(typ.location, typ.bare.name);
+            return .err;
+        },
+        .vari => |vari| {
+            if (vari.typ == .typ) {
+                item.used = true;
+                std.log.debug("item {s} used", .{name});
+                return .{ .name = .{ .name = name } };
+            }
+            ctx.failer.notTyp(typ.location, typ.bare.name);
+            return .err;
+        },
+        .alias => |alias| {
+            item.used = true;
+            return alias.typ;
+        },
+        .typ_decl => |decl| {
+            item.used = true;
+            std.log.debug("item {s} used", .{name});
+            if (decl.generics.len != typ.bare.generics.len) {
+                ctx.failer.wrongCount(typ.location, decl.generics.len, typ.bare.generics.len);
+            }
+            if (std.mem.eql(u8, typ.bare.name, "Self")) {
+                return .{ .name = ctx.mod_typ };
+            } else {
+                return null;
+            }
+        },
+    }
+}
+
 pub fn parseItem(ctx: *okc.Parser) !okc.Item {
     try ctx.expect(.typ, .quiet);
     const location = ctx.getLocation();

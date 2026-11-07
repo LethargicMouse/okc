@@ -10,6 +10,7 @@ pub fn check(
     location: okc.Location,
     ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
+    std.log.debug("check struct expr of `{f}`", .{self.typ});
     const err = okc.Expr.Info{
         .typ = .err,
         .mutable = false,

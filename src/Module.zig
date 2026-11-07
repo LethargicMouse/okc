@@ -73,7 +73,7 @@ pub fn makeGenInfo(self: @This(), gpa: std.mem.Allocator, name: []const u8) !*Ge
 
 pub fn makeInfo(self: @This(), ctx: Check) error{ OutOfMemory, Handled }!Info {
     var res: Info = .init(ctx.gpa);
-    errdefer res.deinit();
+    errdefer res.deinit(ctx.gpa);
     for (self.items) |*item| {
         try item.reg(ctx.itemCheckCtx(&res.items));
     }

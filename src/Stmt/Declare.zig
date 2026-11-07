@@ -63,7 +63,7 @@ pub const Named = struct {
             .typ = typ,
             .mutable = self.bare.mutable,
             .can_be_mutable = true,
-        }, ctx.failer);
+        });
         return .cont;
     }
 };

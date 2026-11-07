@@ -81,43 +81,4 @@ const Name = @This();
 pub const Located = struct {
     bare: Name,
     location: okc.Location,
-
-    pub fn checkDecl(self: @This(), ctx: okc.Typ.Check) error{BadType}!?okc.Typ {
-        std.log.debug("checkTypDecl {f}", .{self.bare});
-        const name = if (std.mem.eql(u8, self.bare.name, "Self"))
-            ctx.mod_typ.name
-        else
-            self.bare.name;
-        const item = ctx.items.getPtr(name) orelse {
-            ctx.failer.fail(self.location, "item `{s}` is not declared", .{self.bare.name});
-            return error.BadType;
-        };
-        switch (item.kind) {
-            .module => unreachable,
-            .fun, .vari => {
-                ctx.failer.fail(self.location, "item `{s}` is not a type", .{self.bare.name});
-                return error.BadType;
-            },
-            .alias => |alias| {
-                item.used = true;
-                return alias.typ;
-            },
-            .typ_decl => |typ| {
-                item.used = true;
-                std.log.debug("item {s} used", .{name});
-                if (typ.generics.len != self.bare.generics.len) {
-                    ctx.failer.fail(
-                        self.location,
-                        "expected {} generics\n        found {}",
-                        .{ typ.generics.len, self.bare.generics.len },
-                    );
-                }
-                if (std.mem.eql(u8, self.bare.name, "Self")) {
-                    return .{ .name = ctx.mod_typ };
-                } else {
-                    return null;
-                }
-            },
-        }
-    }
 };

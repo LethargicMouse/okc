@@ -25,7 +25,16 @@ pub fn check(self: @This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
         params = fun.params[1..];
         _ = first.bare.typ.unify(fun.params[0], self.location, ctx.failer);
     }
-    for (self.args, params) |*arg, param| {
+    var args = self.args;
+    if (self.args.len != params.len) {
+        ctx.failer.wrongCount(self.location, params.len, self.args.len);
+        if (params.len < self.args.len) {
+            args = self.args[0..params.len];
+        } else {
+            params = params[0..args.len];
+        }
+    }
+    for (args, params) |*arg, param| {
         const info = try arg.check(.{ .typ = param }, ctx);
         _ = info.typ.unify(param, arg.location, ctx.failer);
     }

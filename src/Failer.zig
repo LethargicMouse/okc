@@ -8,6 +8,10 @@ pub fn init() @This() {
     return .{};
 }
 
+pub fn notTyp(self: *@This(), location: okc.Location, name: []const u8) void {
+    self.fail(location, "item `{s}` is not a type", .{name});
+}
+
 pub fn notCompound(self: *@This(), location: okc.Location, typ: okc.Typ.Name) void {
     self.fail(location, "`{f}` is not a compound type", .{typ});
 }
@@ -83,4 +87,8 @@ pub fn cannotInfer(self: *@This(), typ: okc.Typ, location: okc.Location) void {
 
 pub fn notDeclared(self: *@This(), location: okc.Location, name: []const u8) void {
     self.fail(location, "item `{s}` is not declared", .{name});
+}
+
+pub fn wrongCount(self: *@This(), location: okc.Location, a: usize, b: usize) void {
+    self.fail(location, "expected {} arguments\n        found {}", .{ a, b });
 }

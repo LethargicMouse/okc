@@ -7,12 +7,10 @@ arena: std.mem.Allocator,
 items: *std.StringHashMap(okc.Item.Info),
 vars_stack: std.ArrayList([]const u8) = .empty,
 loops_nested: u16 = 0,
-ret_typ: okc.Typ,
 failer: *okc.Failer,
 modules: std.StringHashMap(okc.Module.Info),
 mod_typ: okc.Typ.Name,
-context: []const okc.Item.Fun.Param,
-generics_checker: *okc.Item.Generic.Checker,
+header: okc.Item.Fun.Header,
 
 pub fn deinit(self: *@This()) void {
     self.vars_stack.deinit(self.gpa);
@@ -24,10 +22,9 @@ pub fn declare(
     name: []const u8,
     location: okc.Location,
     vari: okc.Stmt.Declare.Info,
-    failer: *okc.Failer,
 ) !void {
     if (self.items.get(name)) |prev| {
-        failer.alreadyDeclared(location, name, prev.location);
+        self.failer.alreadyDeclared(location, name, prev.location);
         return;
     }
     try self.vars_stack.append(self.gpa, name);
@@ -45,7 +42,7 @@ pub fn exprCheckCtx(self: @This()) okc.Expr.Check {
         .failer = self.failer,
         .modules = self.modules,
         .mod_typ = self.mod_typ,
-        .context = self.context,
+        .context = self.header.context,
     };
 }
 
@@ -55,7 +52,6 @@ pub fn typCheckCtx(self: @This()) okc.Typ.Check {
         .mod_typ = self.mod_typ,
         .arena = self.arena,
         .items = self.items.*,
-        .generics_checker = self.generics_checker,
     };
 }
 

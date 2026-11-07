@@ -1,4 +1,5 @@
 const okc = @import("okc");
+const std = @import("std");
 
 expr: ?okc.Expr,
 
@@ -27,13 +28,13 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
 pub fn check(
     ret: *@This(),
     location: okc.Location,
-    ret_typ: okc.Typ,
-    ctx: okc.Expr.Check,
+    ctx: *okc.Stmt.Check,
 ) !okc.ControlFlow {
+    std.log.debug("ret stmt, expect `{f}`", .{ctx.header.ret_typ});
     if (ret.expr) |*expr| {
-        const info = try expr.check(.{ .typ = ret_typ }, ctx);
-        _ = info.typ.unify(ret_typ, expr.location, ctx.failer);
-    } else if (!ret_typ.isVoid()) {
+        const info = try expr.check(.{ .typ = ctx.header.ret_typ }, ctx.exprCheckCtx());
+        _ = info.typ.unify(ctx.header.ret_typ, expr.location, ctx.failer);
+    } else if (!ctx.header.ret_typ.isVoid()) {
         ctx.failer.fail(location, "should return a value", .{});
     }
     return .ret;

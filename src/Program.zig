@@ -12,10 +12,10 @@ pub fn init(gpa: std.mem.Allocator) @This() {
     };
 }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     var iter = self.modules.valueIterator();
     while (iter.next()) |module| {
-        module.deinit();
+        module.deinit(gpa);
     }
     self.modules.deinit();
     self.ast_modules.deinit();

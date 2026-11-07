@@ -1,6 +1,6 @@
 extern fn printf(fmt: [*]u8, a: [*]u8, b: i32) void;
 
-extern fn malloc<t>(size: u64) &mut t;
+extern fn malloc<T>(size: u64) &mut T;
 
 fn main() i32 {
     let six = box("6");

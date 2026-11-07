@@ -122,10 +122,10 @@ pub fn check(
         return err;
     };
     switch (item.kind) {
-        .fun => |header| {
+        .fun => |info| {
             item.used = true;
             self.kind = .{ .fun = undefined };
-            return self.kind.fun.fillFromHeader(ctx.gpa, ctx.arena, header.*);
+            return self.kind.fun.fillFromHeader(ctx.gpa, ctx.arena, info.header);
         },
         .typ_decl, .alias, .module => {
             self.kind = .typ;

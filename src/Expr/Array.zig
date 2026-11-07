@@ -98,7 +98,7 @@ pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info 
         } };
         return .{
             .typ = typ,
-            .mutable = false,
+            .mutable = true,
         };
     }
     for (self.exprs) |*expr| {

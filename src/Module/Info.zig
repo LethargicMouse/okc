@@ -44,10 +44,10 @@ pub fn init(gpa: std.mem.Allocator) @This() {
     };
 }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
     var iter = self.items.valueIterator();
     while (iter.next()) |item| {
-        item.kind.deinit();
+        item.kind.deinit(gpa);
     }
     self.items.deinit();
     self.* = undefined;

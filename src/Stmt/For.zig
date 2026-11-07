@@ -96,7 +96,7 @@ pub fn check(self: *@This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
         .typ = elem_info.typ,
         .mutable = false,
         .can_be_mutable = false,
-    }, ctx.failer);
+    });
     defer {
         _ = ctx.vars_stack.pop();
         ctx.freeVar(self.vari);

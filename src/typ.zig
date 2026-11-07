@@ -122,21 +122,15 @@ pub const Typ = union(enum) {
         self: @This(),
         ctx: Check,
     ) error{OutOfMemory}!@This() {
+        std.log.debug("check `{f}`", .{self});
         if (self == .name) {
             return self;
         }
         if (self == .loc_name) {
-            const res = try updateRec(.{ .name = self.loc_name.bare }, check, .{ctx}, ctx.arena);
-            if (ctx.generics_checker.mark(res.name.name)) {
-                return res;
-            }
-            const maybe_resolved = self.loc_name.checkDecl(ctx) catch |err| switch (err) {
-                error.BadType => return .err,
-            };
-            if (maybe_resolved) |resolved| {
+            if (okc.Item.TypDecl.checkTyped(self.loc_name, ctx)) |resolved| {
                 return resolved;
             }
-            return res;
+            return updateRec(.{ .name = self.loc_name.bare }, check, .{ctx}, ctx.arena);
         }
         return self.updateRec(check, .{ctx}, ctx.arena);
     }
@@ -433,7 +427,6 @@ pub const Typ = union(enum) {
     pub const Check = struct {
         arena: std.mem.Allocator,
         items: std.StringHashMap(okc.Item.Info),
-        generics_checker: *okc.Item.Generic.Checker,
         failer: *okc.Failer,
         mod_typ: okc.Typ.Name,
     };

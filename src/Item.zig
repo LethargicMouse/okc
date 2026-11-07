@@ -57,15 +57,12 @@ pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!@This() {
 pub fn reg(self: *@This(), ctx: Check) !void {
     const kind: okc.Item.Info.Kind = switch (self.kind) {
         .typ_alias => |alias| .{ .alias = alias },
-        .ext_fun => |*ext_fun| .{ .fun = &ext_fun.header },
+        .ext_fun => |*ext_fun| .{ .fun = try ext_fun.header.makeInfo(ctx) },
         .typ_decl => |typ| .{ .typ_decl = try typ.makeInfo(ctx) },
-        .fun => |*fun| .{ .fun = &fun.header },
+        .fun => |*fun| .{ .fun = try fun.header.makeInfo(ctx) },
         .constant => |*constt| .{ .vari = try constt.reg(ctx) },
         .use => |path| .{ .module = try .load(path, self.name, self.location, ctx.loadCtx()) },
     };
-    if (kind == .fun) {
-        try kind.fun.check(ctx);
-    }
     const name = if (std.mem.eql(u8, self.name, "Self"))
         ctx.mod_typ.name
     else
@@ -83,7 +80,11 @@ pub fn reg(self: *@This(), ctx: Check) !void {
 pub fn check(self: @This(), ctx: Check) error{OutOfMemory}!void {
     switch (self.kind) {
         .typ_alias, .constant, .typ_decl, .ext_fun, .use => {},
-        .fun => |fun| try fun.check(self.location, ctx),
+        .fun => |fun| try fun.check(
+            self.location,
+            ctx.items.get(self.name).?.kind.fun.generics_usage,
+            ctx,
+        ),
     }
 }
 

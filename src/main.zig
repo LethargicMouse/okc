@@ -38,7 +38,7 @@ pub fn main(init: std.process.Init) u8 {
     return code;
 }
 
-const more_stack_trace_frames = true;
+const more_stack_trace_frames = false;
 
 fn run(init: std.process.Init) !u8 {
     if (more_stack_trace_frames) {
@@ -84,7 +84,7 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     const root = std.Io.Dir.path.dirname(path) orelse ".";
     var failer: Failer = .init();
     var program: Program = .init(gpa);
-    defer program.deinit();
+    defer program.deinit(gpa);
     const name = std.Io.Dir.path.stem(path);
     var check_queue: std.Deque([]const u8) = .empty;
     defer check_queue.deinit(gpa);
@@ -102,7 +102,7 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
         .typ = .{ .name = name },
     };
     var info = try module.makeInfo(check_ctx);
-    defer info.deinit();
+    defer info.deinit(gpa);
     try module.check(&info, .main, check_ctx);
     while (check_queue.popFront()) |mod_name| {
         check_ctx.typ = .{ .name = mod_name };

@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const okc = @import("okc");
 
 kind: Kind,
@@ -36,15 +38,16 @@ pub fn checkUsage(self: @This(), name: []const u8, failer: *okc.Failer) void {
 
 pub const Kind = union(enum) {
     alias: okc.Item.TypAlias,
-    fun: *okc.Item.Fun.Header,
+    fun: okc.Item.Fun.Header.Info,
     module: okc.Module.Info,
     typ_decl: okc.Item.TypDecl.Info,
     vari: okc.Stmt.Declare.Info,
 
-    pub fn deinit(self: *@This()) void {
+    pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
         switch (self.*) {
             .typ_decl => |*struc| struc.deinit(),
-            .fun, .vari, .alias, .module => {},
+            .fun => |*info| info.deinit(gpa),
+            else => {},
         }
         self.* = undefined;
     }
