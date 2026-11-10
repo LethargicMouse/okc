@@ -85,8 +85,8 @@ pub const Typ = union(enum) {
         typ_decls: okc.HashMap(Name, okc.Item.TypDecl.GenInfo),
     ) okc.Item.TypDecl.Field.GenInfo {
         std.log.debug("get field `{s}` of `{f}`", .{ name, self });
-        return if (self.getName()) |typ_name|
-            typ_decls.get(typ_name).?.fields.get(name).?
+        return if (self == .name)
+            typ_decls.get(self.name).?.fields.get(name).?
         else if (std.mem.eql(u8, name, "ptr")) .{
             .typ = .{ .slice = .{
                 .typ = self.slice.typ,
@@ -135,17 +135,9 @@ pub const Typ = union(enum) {
         return self.updateRec(check, .{ctx}, ctx.gpa, ctx.arena);
     }
 
-    pub fn getName(self: @This()) ?Name {
-        return switch (self) {
-            .name => |name| name,
-            .loc_name => |located| located.bare,
-            else => null,
-        };
-    }
-
     pub fn resolve(self: @This(), ctx: Resolve) error{OutOfMemory}!@This() {
-        if (self.getName()) |name| {
-            if (ctx.map.get(name.name)) |resolved| {
+        if (self == .name) {
+            if (ctx.map.get(self.name.name)) |resolved| {
                 return resolved;
             }
         }
@@ -312,12 +304,12 @@ pub const Typ = union(enum) {
         if (b == .int and a.isNumber()) {
             return a;
         }
-        if (a.getName()) |aname| {
-            const bname = b.getName() orelse return null;
-            if (!std.mem.eql(u8, aname.name, bname.name)) {
+        if (a == .name) {
+            const bname = if (b == .name) b.name else return null;
+            if (!std.mem.eql(u8, a.name.name, bname.name)) {
                 return null;
             }
-            for (aname.generics, bname.generics) |ag, bg| {
+            for (a.name.generics, bname.generics) |ag, bg| {
                 _ = ag.unifyOrNull(bg, mode) orelse return null;
             }
             return b;

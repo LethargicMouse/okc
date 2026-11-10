@@ -56,7 +56,7 @@ pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info 
         };
     }
     const callee = try self.vari.checkIn(caller.typ, self.name_location, .constant, ctx);
-    self.caller = caller.typ.getName().?;
+    self.caller = caller.typ.name;
     const info_call: okc.Expr.Call.Info = .{
         .location = self.name_location,
         .typ = callee.typ,

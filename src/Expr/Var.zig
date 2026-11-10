@@ -81,7 +81,7 @@ pub fn checkIn(
     mutability: Mutability,
     ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
-    const name_typ = typ.getName() orelse {
+    const name_typ = if (typ == .name) typ.name else {
         ctx.failer.noMember(location, self.name, typ);
         return .{ .typ = .err, .mutable = true };
     };
@@ -91,18 +91,12 @@ pub fn checkIn(
     if (item.getTypDecl(name_typ, ctx)) |decl| {
         if (decl.variants.getPtr(self.name)) |variant| {
             variant.used = true;
-            return .{
-                .typ = typ,
-                .mutable = false,
-            };
+            return .{ .typ = typ, .mutable = false };
         }
     }
     const inner_ctx = ctx.inside(typ) orelse {
         ctx.failer.noMember(location, self.name, typ);
-        return .{
-            .typ = .err,
-            .mutable = true,
-        };
+        return .{ .typ = .err, .mutable = true };
     };
     return self.check(location, mutability, inner_ctx);
 }
@@ -113,26 +107,19 @@ pub fn check(
     mutability: Mutability,
     ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
-    const err = okc.Expr.Info{
-        .typ = .err,
-        .mutable = true,
-    };
     const item = ctx.items.getPtr(self.name) orelse {
         ctx.failer.notDeclared(location, self.name);
-        return err;
+        return .{ .typ = .err, .mutable = true };
     };
     switch (item.kind) {
         .fun => |info| {
             item.used = true;
             self.kind = .{ .fun = undefined };
-            return self.kind.fun.fillFromHeader(ctx.gpa, ctx.arena, info.header);
+            return self.kind.fun.fillFromHeader(info.header, ctx);
         },
         .typ_decl, .alias, .module => {
             self.kind = .typ;
-            return .{
-                .typ = .typ,
-                .mutable = false,
-            };
+            return .{ .typ = .typ, .mutable = false };
         },
         .vari => |*vari_decl| {
             item.used = true;
@@ -145,10 +132,7 @@ pub fn check(
                     }
                 }
             }
-            return .{
-                .typ = vari_decl.typ,
-                .mutable = vari_decl.mutable,
-            };
+            return .{ .typ = vari_decl.typ, .mutable = vari_decl.mutable };
         },
     }
 }

@@ -79,7 +79,7 @@ pub fn check(
             ctx,
         );
     }
-    const name = norm.getName() orelse {
+    const name = if (norm == .name) norm.name else {
         ctx.failer.noField(location, self.vari.name, norm);
         return err;
     };

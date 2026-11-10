@@ -27,15 +27,15 @@ pub fn parseBody(ctx: *okc.Parser) ![]Field {
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
-    if (self.typ.getName()) |name| {
-        try okc.Item.TypDecl.genNamed(name, ctx);
+    if (self.typ == .name) {
+        try okc.Item.TypDecl.genNamed(self.typ.name, ctx);
     }
     var res = okc.Val.Typed{
         .typ = self.typ,
         .bare = .undef,
     };
-    if (self.typ.getName()) |typ_name| {
-        for (ctx.typ_decls.get(typ_name).?.default_fields) |field| {
+    if (self.typ == .name) {
+        for (ctx.typ_decls.get(self.typ.name).?.default_fields) |field| {
             const typ_val = try field.expr.gen(ctx);
             try res.genIV(typ_val, field.index, ctx);
         }
@@ -49,15 +49,15 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
 }
 
 pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
-    if (self.typ.getName()) |name| {
-        try okc.Item.TypDecl.genNamed(name, ctx);
+    if (self.typ == .name) {
+        try okc.Item.TypDecl.genNamed(self.typ.name, ctx);
     }
     try ctx.buffer.print(ctx.gpa, "{f} {{", .{okc.Typ.LLPrinter{ .typ = self.typ }});
     if (self.fields.len != 0) {
         const fields = try ctx.gpa.alloc(okc.Expr, self.fields.len);
         defer ctx.gpa.free(fields);
-        if (self.typ.getName()) |typ_name| {
-            for (ctx.typ_decls.get(typ_name).?.default_fields) |field| {
+        if (self.typ == .name) {
+            for (ctx.typ_decls.get(self.typ.name).?.default_fields) |field| {
                 fields[field.index] = field.expr;
             }
         }

@@ -18,7 +18,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
     const ref = try self.expr.genRef(ctx);
     var index_ref = try self.index.genRef(ctx);
     var index: okc.Val.Typed = undefined;
-    if (index_ref.inner_typ.getName()) |_| {
+    if (index_ref.inner_typ == .name) {
         index = .{
             .typ = .{ .prime = .u32 },
             .bare = .{ .tmp = try index_ref.loadTag(ctx) },

@@ -317,7 +317,7 @@ pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}
         .notb => |notb| notb.check(ctx),
         .ptr => |ptr| ptr.check(hint.typ, ctx),
         .subslice => |subslice| subslice.check(self.location, ctx),
-        .sizeof => |*sizeof| sizeof.check(),
+        .sizeof => |*sizeof| sizeof.check(ctx.typCheckCtx()),
         .array => |*array| array.check(hint.typ, ctx),
         .struc => |*struc| struc.check(self.location, hint.typ, ctx),
         .int => |*int| int.check(),
@@ -358,9 +358,19 @@ pub const Check = struct {
     context: []const okc.Item.Fun.Param,
     failer: *okc.Failer,
 
+    pub fn typCheckCtx(self: @This()) okc.Typ.Check {
+        return .{
+            .arena = self.arena,
+            .mod_typ = self.mod_typ,
+            .failer = self.failer,
+            .gpa = self.gpa,
+            .items = self.items,
+        };
+    }
+
     pub fn inside(self: @This(), typ: okc.Typ) ?@This() {
         var res = self;
-        const name = typ.getName() orelse return null;
+        const name = if (typ == .name) typ.name else return null;
         res.mod_typ = name;
         res.items = name.getItems(self.items) orelse return null;
         return res;

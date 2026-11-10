@@ -1,7 +1,7 @@
 extern fn printf(fmt: [*]u8, n: i32) void;
 
-type Array<t> {
-    buffer: [256]t,
+type Array<T> {
+    buffer: [256]T,
     len: u64,
 }
 

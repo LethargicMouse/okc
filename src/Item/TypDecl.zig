@@ -160,13 +160,17 @@ pub fn gen(self: @This(), name: okc.Typ.Name, ctx: *okc.Codegen) !void {
 }
 
 pub fn makeInfo(self: @This(), ctx: okc.Item.Check) !Info {
-    try ctx.checkGenericsRedeclare(self.generics);
+    // for typ `vars` functionality
+    var stmt_ctx = ctx.stmtCheckCtx(undefined);
+    defer stmt_ctx.deinit();
+    try okc.Item.regGenerics(self.generics, null, &stmt_ctx);
     var res = Info{
         .generics = self.generics,
         .fields = .init(ctx.gpa),
         .variants = .init(ctx.gpa),
     };
     for (self.fields) |*field| {
+        field.typ = try field.typ.check(ctx.typCheckCtx());
         var defaulted = false;
         if (field.default) |*expr| {
             const expr_typ = try expr.checkConst(.{ .typ = field.typ }, ctx.checkExprCtx());

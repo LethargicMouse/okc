@@ -6,8 +6,8 @@ bare: okc.Val,
 typ: okc.Typ,
 
 pub fn toStack(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
-    if (self.typ.getName()) |name| {
-        try okc.Item.TypDecl.genNamed(name, ctx);
+    if (self.typ == .name) {
+        try okc.Item.TypDecl.genNamed(self.typ.name, ctx);
     }
     const tmp = ctx.counter.next();
     try ctx.extra_buffer.print(

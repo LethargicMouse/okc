@@ -28,33 +28,29 @@ pub fn gen(self: @This(), fun_name: []const u8, ctx: *okc.Codegen) !okc.Val.Type
 
 pub fn fillFromHeader(
     self: *@This(),
-    gpa: std.mem.Allocator,
-    arena: *std.heap.ArenaAllocator,
     header: okc.Item.Fun.Header,
+    ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
-    var resolve_map: std.StringHashMap(okc.Typ) = .init(gpa);
+    std.log.debug("ref header {any}", .{header});
+    var resolve_map: std.StringHashMap(okc.Typ) = .init(ctx.gpa);
     defer resolve_map.deinit();
-    self.generics = try arena.allocator().alloc(okc.Typ, header.generics.len);
+    self.generics = try ctx.arena.allocator().alloc(okc.Typ, header.generics.len);
     @memset(self.generics, .any);
     for (header.generics, self.generics) |generic, *typ| {
         try resolve_map.put(generic.name, .{ .lazy = .from(typ) });
     }
-    const params = try gpa.alloc(okc.Typ, header.params.len);
-    defer gpa.free(params);
+    const params = try ctx.gpa.alloc(okc.Typ, header.params.len);
+    defer ctx.gpa.free(params);
     for (header.params, params) |param, *target| {
-        target.* = try param.typ.resolve(.{ .gpa = gpa, .arena = arena, .map = resolve_map });
+        target.* = try param.typ.resolve(.{ .gpa = ctx.gpa, .arena = ctx.arena, .map = resolve_map });
     }
-    const context = try gpa.alloc(okc.Typ, header.context.len);
-    defer gpa.free(context);
-    for (header.context, context) |param, *target| {
-        target.* = try param.typ.resolve(.{ .gpa = gpa, .arena = arena, .map = resolve_map });
-    }
-    const ret_typ = try header.ret_typ.resolve(.{ .gpa = gpa, .arena = arena, .map = resolve_map });
+    const ret_typ = try header.ret_typ.resolve(.{ .gpa = ctx.gpa, .arena = ctx.arena, .map = resolve_map });
     self.typ = .{ .fun = .{
-        .params = try okc.Typ.memo.save(params, arena),
-        .ret_typ = try okc.Typ.memo.box(ret_typ, arena),
+        .params = try okc.Typ.memo.save(params, ctx.arena),
+        .ret_typ = try okc.Typ.memo.box(ret_typ, ctx.arena),
         .context = header.context,
     } };
+    std.log.debug("got fun ref {f}", .{self.typ});
     return .{
         .typ = self.typ,
         .mutable = false,

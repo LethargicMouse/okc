@@ -77,6 +77,19 @@ pub fn reg(self: *@This(), ctx: Check) !void {
     });
 }
 
+pub fn regGenerics(generics: []const okc.Item.Generic, musage: ?std.bit_set.Dynamic, ctx: *okc.Stmt.Check) !void {
+    for (generics, 0..) |generic, i| {
+        try ctx.declare(generic.name, generic.location, .{
+            .typ = .typ,
+            .can_be_mutable = false,
+            .mutable = false,
+        });
+        if (musage) |usage| {
+            ctx.items.getPtr(generic.name).?.used = usage.isSet(i);
+        }
+    }
+}
+
 pub fn check(self: @This(), ctx: Check) error{OutOfMemory}!void {
     switch (self.kind) {
         .typ_alias, .constant, .typ_decl, .ext_fun, .use => {},

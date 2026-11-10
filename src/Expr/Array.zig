@@ -2,7 +2,7 @@ const std = @import("std");
 
 const okc = @import("okc");
 
-mtyp: ?okc.Typ,
+typ_hint: ?okc.Typ,
 exprs: []okc.Expr,
 typ: okc.Typ = .any,
 
@@ -43,7 +43,7 @@ pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {
         .location = start.combine(end),
         .kind = .{ .array = .{
             .exprs = exprs,
-            .mtyp = mtyp,
+            .typ_hint = mtyp,
             .typ = undefined,
         } },
     };
@@ -85,9 +85,10 @@ pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
 pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
     var inner_typ: okc.Typ = .any;
     var inner_hint: okc.Typ = .any;
-    if (self.mtyp) |typ| {
-        inner_typ = typ;
-        inner_hint = typ;
+    if (self.typ_hint) |typ| {
+        const checked = try typ.check(ctx.typCheckCtx());
+        inner_typ = checked;
+        inner_hint = checked;
     } else if (hint == .array) {
         inner_hint = hint.array.typ.*;
     }
@@ -172,7 +173,7 @@ pub const Indexed = struct {
             ctx.failer.cannotInfer(norm, location);
             return .{ .typ = .err, .mutable = false };
         }
-        const name_typ = norm.getName() orelse {
+        const name_typ = if (norm == .name) norm.name else {
             ctx.failer.fail(location, "array cannot be indexed by `{f}`", .{norm});
             return .{ .typ = .err, .mutable = false };
         };

@@ -39,15 +39,14 @@ pub fn makeInfo(self: *@This(), ctx: okc.Item.Check) !Info {
     // for typ `vars` functionality
     var stmt_ctx = ctx.stmtCheckCtx(self.*);
     defer stmt_ctx.deinit();
-    try self.regGenerics(null, &stmt_ctx);
-    const typ_check_ctx = ctx.typCheckCtx();
+    try okc.Item.regGenerics(self.generics, null, &stmt_ctx);
     for (self.params) |*param| {
-        param.typ = try param.typ.check(typ_check_ctx);
+        param.typ = try param.typ.check(ctx.typCheckCtx());
     }
     for (self.context) |*param| {
-        param.typ = try param.typ.check(typ_check_ctx);
+        param.typ = try param.typ.check(ctx.typCheckCtx());
     }
-    self.ret_typ = try self.ret_typ.check(typ_check_ctx);
+    self.ret_typ = try self.ret_typ.check(ctx.typCheckCtx());
     var generics_usage: std.bit_set.Dynamic = try .initEmpty(ctx.gpa, self.generics.len);
     for (self.generics, 0..) |generic, i| {
         generics_usage.setValue(i, ctx.items.get(generic.name).?.used);
@@ -57,19 +56,6 @@ pub fn makeInfo(self: *@This(), ctx: okc.Item.Check) !Info {
         .generics_usage = generics_usage,
         .header = self.*,
     };
-}
-
-pub fn regGenerics(self: @This(), musage: ?std.bit_set.Dynamic, ctx: *okc.Stmt.Check) !void {
-    for (self.generics, 0..) |generic, i| {
-        try ctx.declare(generic.name, generic.location, .{
-            .typ = .typ,
-            .can_be_mutable = false,
-            .mutable = false,
-        });
-        if (musage) |usage| {
-            ctx.items.getPtr(generic.name).?.used = usage.isSet(i);
-        }
-    }
 }
 
 const Header = @This();

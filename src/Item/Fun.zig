@@ -96,7 +96,7 @@ pub fn check(self: @This(), location: okc.Location, generics_usage: std.bit_set.
     std.log.debug("check fun in {f}\n", .{location});
     var stmt_check = ctx.stmtCheckCtx(self.header);
     defer stmt_check.deinit();
-    try self.header.regGenerics(generics_usage, &stmt_check);
+    try okc.Item.regGenerics(self.header.generics, generics_usage, &stmt_check);
     for (self.header.params) |param| {
         try stmt_check.declare(param.name, param.location, .{
             .typ = param.typ,

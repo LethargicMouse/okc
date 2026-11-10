@@ -28,8 +28,8 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     };
 }
 
-pub fn check(self: *@This()) !okc.Expr.Info {
-    _ = self;
+pub fn check(self: *@This(), ctx: okc.Typ.Check) !okc.Expr.Info {
+    self.typ = try self.typ.check(ctx);
     return .{
         .typ = .{ .prime = .u64 },
         .mutable = false,

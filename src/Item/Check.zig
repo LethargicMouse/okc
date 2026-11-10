@@ -62,19 +62,3 @@ pub fn checkExprCtx(self: @This()) okc.Expr.Check {
         .context = &.{},
     };
 }
-
-pub fn checkGenericsRedeclare(self: @This(), generics: []const okc.Item.Generic) !void {
-    var map = std.StringHashMap(okc.Location).init(self.gpa);
-    defer map.deinit();
-    for (generics) |generic| {
-        if (self.items.get(generic.name)) |prev| {
-            self.failer.alreadyDeclared(generic.location, generic.name, prev.location);
-        }
-        const entry = try map.getOrPut(generic.name);
-        if (entry.found_existing) {
-            self.failer.alreadyDeclared(generic.location, generic.name, entry.value_ptr.*);
-        } else {
-            entry.value_ptr.* = generic.location;
-        }
-    }
-}

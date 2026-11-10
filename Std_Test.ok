@@ -7,6 +7,9 @@ fn main() i32 {
     vec.push("one");
     vec.push("two");
     vec.push("three");
-    Std.print("{} {} {}\n", Vec.data[0], Vec.data[1], Vec.data[2]);
+    while (s : vec.data) {
+        Std.print(s);
+        Std.print(" ");
+    }
     return 0;
 }
