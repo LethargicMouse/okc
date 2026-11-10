@@ -4,7 +4,7 @@ const okc = @import("okc");
 
 io: std.Io,
 gpa: std.mem.Allocator,
-arena: std.mem.Allocator,
+arena: *std.heap.ArenaAllocator,
 items: *std.StringHashMap(okc.Item.Info),
 program: *okc.Program,
 failer: *okc.Failer,
@@ -28,6 +28,7 @@ pub fn loadCtx(self: @This()) okc.Module.Info.Load {
 
 pub fn typCheckCtx(self: @This()) okc.Typ.Check {
     return .{
+        .gpa = self.gpa,
         .arena = self.arena,
         .items = self.items.*,
         .failer = self.failer,

@@ -2,9 +2,9 @@ const std = @import("std");
 
 const okc = @import("okc");
 
-io: std.Io, // expr
-gpa: std.mem.Allocator, // expr
-arena: std.mem.Allocator,
+io: std.Io,
+gpa: std.mem.Allocator,
+arena: *std.heap.ArenaAllocator,
 file: std.Io.File,
 writer: std.Io.File.Writer,
 buffer: std.ArrayList(u8) = .empty,
@@ -26,7 +26,7 @@ pub fn init(
     ctx: struct {
         io: std.Io,
         gpa: std.mem.Allocator,
-        arena: std.mem.Allocator,
+        arena: *std.heap.ArenaAllocator,
         ast_modules: std.StringHashMap(okc.Module),
         write_buf: []u8,
         path: []const u8,

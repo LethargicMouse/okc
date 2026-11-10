@@ -76,7 +76,7 @@ pub fn loadTypVal(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     };
 }
 
-pub fn toPtrTypVal(self: @This(), arena: std.mem.Allocator) !okc.Val.Typed {
+pub fn toPtrTypVal(self: @This(), arena: *std.heap.ArenaAllocator) !okc.Val.Typed {
     return .{
         .typ = .{ .ptr = .{
             .typ = try okc.Typ.memo.box(self.inner_typ, arena),

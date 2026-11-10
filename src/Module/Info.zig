@@ -56,7 +56,7 @@ pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
 pub const Load = struct {
     io: std.Io,
     gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
     program: *okc.Program,
     failer: *okc.Failer,
     checked_mods: *std.StringHashMap(void),
@@ -77,12 +77,17 @@ pub const Load = struct {
         };
     }
 
-    fn makePath(self: @This(), dirs: []const []const u8, name: []const u8, arena: std.mem.Allocator) ![]const u8 {
+    fn makePath(
+        self: @This(),
+        dirs: []const []const u8,
+        name: []const u8,
+        arena: *std.heap.ArenaAllocator,
+    ) ![]const u8 {
         var len = self.root.len + name.len + 4;
         for (dirs) |dir| {
             len += dir.len + 1;
         }
-        const res = try arena.alloc(u8, len);
+        const res = try arena.allocator().alloc(u8, len);
         @memcpy(res[0..self.root.len], self.root);
         len = self.root.len + 1;
         res[len - 1] = '/';

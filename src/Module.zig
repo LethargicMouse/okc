@@ -84,7 +84,7 @@ pub fn read(
     io: std.Io,
     gpa: std.mem.Allocator,
     path: []const u8,
-    arena: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
     location: ?okc.Location,
 ) !@This() {
     const source: okc.Source = try .read(io, gpa, arena, path, location);

@@ -14,7 +14,7 @@ pub fn gen(self: @This(), fun_name: []const u8, ctx: *okc.Codegen) !okc.Val.Type
         name.generics = &.{};
     }
     const typ: okc.Typ = .{ .fun = self.typ.fun };
-    const solved = try typ.solve(ctx.arena);
+    const solved = try typ.solve(ctx.gpa, ctx.arena);
     try ctx.fun_queue.append(ctx.gpa, .{
         .module = ctx.module,
         .name = name,
@@ -29,12 +29,12 @@ pub fn gen(self: @This(), fun_name: []const u8, ctx: *okc.Codegen) !okc.Val.Type
 pub fn fillFromHeader(
     self: *@This(),
     gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
     header: okc.Item.Fun.Header,
 ) !okc.Expr.Info {
     var resolve_map: std.StringHashMap(okc.Typ) = .init(gpa);
     defer resolve_map.deinit();
-    self.generics = try arena.alloc(okc.Typ, header.generics.len);
+    self.generics = try arena.allocator().alloc(okc.Typ, header.generics.len);
     @memset(self.generics, .any);
     for (header.generics, self.generics) |generic, *typ| {
         try resolve_map.put(generic.name, .{ .lazy = .from(typ) });
@@ -42,14 +42,14 @@ pub fn fillFromHeader(
     const params = try gpa.alloc(okc.Typ, header.params.len);
     defer gpa.free(params);
     for (header.params, params) |param, *target| {
-        target.* = try param.typ.resolve(resolve_map, arena);
+        target.* = try param.typ.resolve(.{ .gpa = gpa, .arena = arena, .map = resolve_map });
     }
     const context = try gpa.alloc(okc.Typ, header.context.len);
     defer gpa.free(context);
     for (header.context, context) |param, *target| {
-        target.* = try param.typ.resolve(resolve_map, arena);
+        target.* = try param.typ.resolve(.{ .gpa = gpa, .arena = arena, .map = resolve_map });
     }
-    const ret_typ = try header.ret_typ.resolve(resolve_map, arena);
+    const ret_typ = try header.ret_typ.resolve(.{ .gpa = gpa, .arena = arena, .map = resolve_map });
     self.typ = .{ .fun = .{
         .params = try okc.Typ.memo.save(params, arena),
         .ret_typ = try okc.Typ.memo.box(ret_typ, arena),

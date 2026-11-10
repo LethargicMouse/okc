@@ -34,7 +34,7 @@ pub fn parsePosted(ctx: *okc.Parser, mode: okc.Parser.Mode) error{ OutOfMemory, 
     while (try ctx.maybe(Postfix.parse, .{})) |postfix| {
         switch (postfix.kind) {
             .method => |method_postfix| {
-                const method = try ctx.arena.create(Method);
+                const method = try ctx.arena.allocator().create(Method);
                 method.* = .{
                     .expr = res,
                     .vari = method_postfix.vari,
@@ -48,7 +48,7 @@ pub fn parsePosted(ctx: *okc.Parser, mode: okc.Parser.Mode) error{ OutOfMemory, 
                 };
             },
             .call => |call_postfix| {
-                const call = try ctx.arena.create(Call);
+                const call = try ctx.arena.allocator().create(Call);
                 call.* = .{
                     .expr = res,
                     .args = call_postfix.args,
@@ -60,7 +60,7 @@ pub fn parsePosted(ctx: *okc.Parser, mode: okc.Parser.Mode) error{ OutOfMemory, 
                 };
             },
             .field => |name| {
-                const field = try ctx.arena.create(Field);
+                const field = try ctx.arena.allocator().create(Field);
                 field.* = .{
                     .expr = res,
                     .vari = name,
@@ -71,7 +71,7 @@ pub fn parsePosted(ctx: *okc.Parser, mode: okc.Parser.Mode) error{ OutOfMemory, 
                 };
             },
             .elem => |index| {
-                const elem = try ctx.arena.create(Elem);
+                const elem = try ctx.arena.allocator().create(Elem);
                 elem.* = .{
                     .expr = res,
                     .index = index,
@@ -82,7 +82,7 @@ pub fn parsePosted(ctx: *okc.Parser, mode: okc.Parser.Mode) error{ OutOfMemory, 
                 };
             },
             .subslice => |subslice_postfix| {
-                const subslice = try ctx.arena.create(Subslice);
+                const subslice = try ctx.arena.allocator().create(Subslice);
                 subslice.* = .{
                     .expr = res,
                     .start = subslice_postfix.start,
@@ -104,7 +104,7 @@ pub fn parsePrior(ctx: *okc.Parser, prior: u8, mode: okc.Parser.Mode) error{
 }!okc.Expr {
     var res = try parsePosted(ctx, mode);
     while (try Binary.Postfix.parse(ctx, prior)) |bin_postfix| {
-        const binary = try ctx.arena.create(okc.Expr.Binary);
+        const binary = try ctx.arena.allocator().create(okc.Expr.Binary);
         binary.* = .{
             .left = res,
             .kind = bin_postfix.kind,
@@ -335,7 +335,7 @@ pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}
             .typ = .{ .prime = .bool },
             .mutable = false,
         },
-        .undef => |*undef| undef.check(hint.typ, ctx.arena),
+        .undef => |*undef| undef.check(hint.typ, ctx.gpa, ctx.arena),
         .call => |call| call.check(hint.typ, ctx),
         .binary => |binary| binary.check(ctx),
         .field => |field| field.check(self.location, hint.mutable, ctx),
@@ -351,7 +351,7 @@ pub const Hint = struct {
 
 pub const Check = struct {
     gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
     mod_typ: okc.Typ.Name,
     items: std.StringHashMap(okc.Item.Info),
     modules: std.StringHashMap(okc.Module.Info),

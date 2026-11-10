@@ -58,7 +58,7 @@ fn parseTypHint(ctx: *okc.Parser) !okc.Typ {
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     var res = okc.Val.Typed{
-        .typ = try self.typ.solve(ctx.arena),
+        .typ = try self.typ.solve(ctx.gpa, ctx.arena),
         .bare = .undef,
     };
     for (self.exprs, 0..) |expr, i| {
@@ -122,7 +122,7 @@ pub const Indexed = struct {
 
     pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
         var res = okc.Val.Typed{
-            .typ = try self.typ.solve(ctx.arena),
+            .typ = try self.typ.solve(ctx.gpa, ctx.arena),
             .bare = .undef,
         };
         switch (res.typ.array.index) {

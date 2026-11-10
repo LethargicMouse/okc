@@ -100,11 +100,11 @@ pub const Typ = union(enum) {
         };
     }
 
-    pub fn solve(self: @This(), arena: std.mem.Allocator) error{OutOfMemory}!@This() {
+    pub fn solve(self: @This(), gpa: std.mem.Allocator, arena: *std.heap.ArenaAllocator) error{OutOfMemory}!@This() {
         if (self == .lazy) {
-            return self.lazy.typ.solve(arena);
+            return self.lazy.typ.solve(gpa, arena);
         }
-        return self.updateRec(solve, .{arena}, arena);
+        return self.updateRec(solve, .{ gpa, arena }, gpa, arena);
     }
 
     pub fn getFun(self: @This(), location: okc.Location, failer: *okc.Failer) ?Typ.Fun {
@@ -130,9 +130,9 @@ pub const Typ = union(enum) {
             if (okc.Item.TypDecl.checkTyped(self.loc_name, ctx)) |resolved| {
                 return resolved;
             }
-            return updateRec(.{ .name = self.loc_name.bare }, check, .{ctx}, ctx.arena);
+            return updateRec(.{ .name = self.loc_name.bare }, check, .{ctx}, ctx.gpa, ctx.arena);
         }
-        return self.updateRec(check, .{ctx}, ctx.arena);
+        return self.updateRec(check, .{ctx}, ctx.gpa, ctx.arena);
     }
 
     pub fn getName(self: @This()) ?Name {
@@ -143,13 +143,13 @@ pub const Typ = union(enum) {
         };
     }
 
-    pub fn resolve(self: @This(), map: std.StringHashMap(@This()), arena: std.mem.Allocator) error{OutOfMemory}!@This() {
+    pub fn resolve(self: @This(), ctx: Resolve) error{OutOfMemory}!@This() {
         if (self.getName()) |name| {
-            if (map.get(name.name)) |resolved| {
+            if (ctx.map.get(name.name)) |resolved| {
                 return resolved;
             }
         }
-        return self.updateRec(resolve, .{ map, arena }, arena);
+        return self.updateRec(resolve, .{ctx}, ctx.gpa, ctx.arena);
     }
 
     pub fn fromName(name: []const u8, location: okc.Location) @This() {
@@ -377,7 +377,13 @@ pub const Typ = union(enum) {
         passive,
     };
 
-    fn updateRec(self: @This(), fun: anytype, args: anytype, arena: std.mem.Allocator) !@This() {
+    fn updateRec(
+        self: @This(),
+        fun: anytype,
+        args: anytype,
+        gpa: std.mem.Allocator,
+        arena: *std.heap.ArenaAllocator,
+    ) !@This() {
         switch (self) {
             .array => |array| {
                 const new = try @call(.auto, fun, .{array.typ.*} ++ args);
@@ -387,8 +393,8 @@ pub const Typ = union(enum) {
                 } };
             },
             .fun => |fun_typ| {
-                const params = try arena.alloc(Typ, fun_typ.params.len);
-                defer arena.free(params);
+                const params = try gpa.alloc(Typ, fun_typ.params.len);
+                defer gpa.free(params);
                 for (params, fun_typ.params) |*target, param| {
                     target.* = try @call(.auto, fun, .{param} ++ args);
                 }
@@ -399,7 +405,7 @@ pub const Typ = union(enum) {
                     .context = fun_typ.context,
                 } };
             },
-            .name => |name| return .{ .name = try name.updateGenerics(fun, args, arena) },
+            .name => |name| return .{ .name = try name.updateGenerics(fun, args, gpa, arena) },
             .ptr => |ptr| {
                 const new = try @call(.auto, fun, .{ptr.typ.*} ++ args);
                 return .{ .ptr = .{
@@ -425,9 +431,16 @@ pub const Typ = union(enum) {
     }
 
     pub const Check = struct {
-        arena: std.mem.Allocator,
+        gpa: std.mem.Allocator,
+        arena: *std.heap.ArenaAllocator,
         items: std.StringHashMap(okc.Item.Info),
         failer: *okc.Failer,
         mod_typ: okc.Typ.Name,
+    };
+
+    pub const Resolve = struct {
+        gpa: std.mem.Allocator,
+        arena: *std.heap.ArenaAllocator,
+        map: std.StringHashMap(Typ),
     };
 };

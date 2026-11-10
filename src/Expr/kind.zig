@@ -26,25 +26,29 @@ pub const Kind = union(enum) {
     undef: okc.Expr.Undef,
     vari: okc.Expr.Var,
 
-    pub fn makeUnary(unary: okc.Expr.Unary, expr: okc.Expr, arena: std.mem.Allocator) !@This() {
+    pub fn makeUnary(
+        unary: okc.Expr.Unary,
+        expr: okc.Expr,
+        arena: *std.heap.ArenaAllocator,
+    ) !@This() {
         switch (unary) {
             .deref => {
-                const deref = try arena.create(okc.Expr.Deref);
+                const deref = try arena.allocator().create(okc.Expr.Deref);
                 deref.* = .{ .expr = expr };
                 return .{ .deref = deref };
             },
             .neg => {
-                const neg = try arena.create(okc.Expr.Neg);
+                const neg = try arena.allocator().create(okc.Expr.Neg);
                 neg.* = .{ .expr = expr };
                 return .{ .neg = neg };
             },
             .ptr => {
-                const ptr = try arena.create(okc.Expr.Ptr);
+                const ptr = try arena.allocator().create(okc.Expr.Ptr);
                 ptr.* = .{ .expr = expr };
                 return .{ .ptr = ptr };
             },
             .notb => {
-                const notb = try arena.create(okc.Expr.Notb);
+                const notb = try arena.allocator().create(okc.Expr.Notb);
                 notb.* = .{ .expr = expr };
                 return .{ .notb = notb };
             },

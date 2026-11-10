@@ -102,7 +102,7 @@ pub fn check(
         try resolve_map.put(generic.name, typ);
     }
     return .{
-        .typ = try fiel.typ.resolve(resolve_map, ctx.arena),
+        .typ = try fiel.typ.resolve(.{ .gpa = ctx.gpa, .arena = ctx.arena, .map = resolve_map }),
         .mutable = info.mutable,
     };
 }

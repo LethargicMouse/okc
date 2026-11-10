@@ -79,7 +79,7 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     Typ.memo = .init(gpa);
     defer Typ.memo.deinit();
 
-    const module: Module = try .read(io, gpa, path, arena.allocator(), null);
+    const module: Module = try .read(io, gpa, path, &arena, null);
 
     const root = std.Io.Dir.path.dirname(path) orelse ".";
     var failer: Failer = .init();
@@ -93,7 +93,7 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var check_ctx: Module.Check = .{
         .io = io,
         .gpa = gpa,
-        .arena = arena.allocator(),
+        .arena = &arena,
         .failer = &failer,
         .program = &program,
         .checked_mods = &checked,
@@ -123,7 +123,7 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
     var codegen_ctx = try Codegen.init(.{
         .io = io,
         .gpa = gpa,
-        .arena = arena.allocator(),
+        .arena = &arena,
         .ast_modules = program.ast_modules,
         .write_buf = &write_buf,
         .path = out_ll_path,

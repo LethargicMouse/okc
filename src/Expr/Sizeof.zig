@@ -16,7 +16,11 @@ pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
-    const resolved = try self.typ.resolve(ctx.resolve_map, ctx.arena);
+    const resolved = try self.typ.resolve(.{
+        .gpa = ctx.gpa,
+        .arena = ctx.arena,
+        .map = ctx.resolve_map,
+    });
     const layout = try resolved.getLayout(ctx);
     return .{
         .typ = .{ .prime = .u64 },

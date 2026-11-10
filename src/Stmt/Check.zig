@@ -3,7 +3,7 @@ const std = @import("std");
 const okc = @import("okc");
 
 gpa: std.mem.Allocator,
-arena: std.mem.Allocator,
+arena: *std.heap.ArenaAllocator,
 items: *std.StringHashMap(okc.Item.Info),
 vars_stack: std.ArrayList([]const u8) = .empty,
 loops_nested: u16 = 0,
@@ -48,6 +48,7 @@ pub fn exprCheckCtx(self: @This()) okc.Expr.Check {
 
 pub fn typCheckCtx(self: @This()) okc.Typ.Check {
     return .{
+        .gpa = self.gpa,
         .failer = self.failer,
         .mod_typ = self.mod_typ,
         .arena = self.arena,

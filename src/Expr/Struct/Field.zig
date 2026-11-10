@@ -29,7 +29,11 @@ pub fn check(
         ctx.failer.noField(self.location, self.name, struc_typ);
         return;
     };
-    const decl_typ = try f_decl.typ.resolve(resolve_map, ctx.arena);
+    const decl_typ = try f_decl.typ.resolve(.{
+        .gpa = ctx.gpa,
+        .arena = ctx.arena,
+        .map = resolve_map,
+    });
     const info = try self.expr.check(.{ .typ = decl_typ }, ctx);
     _ = info.typ.unify(decl_typ, self.expr.location, ctx.failer);
 }

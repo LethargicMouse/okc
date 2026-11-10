@@ -32,10 +32,11 @@ pub fn updateGenerics(
     self: @This(),
     fun: anytype,
     args: anytype,
-    arena: std.mem.Allocator,
+    gpa: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
 ) !@This() {
-    const generics = try arena.alloc(okc.Typ, self.generics.len);
-    defer arena.free(generics);
+    const generics = try gpa.alloc(okc.Typ, self.generics.len);
+    defer gpa.free(generics);
     for (generics, self.generics) |*target, generic| {
         target.* = try @call(.auto, fun, .{generic} ++ args);
     }

@@ -8,8 +8,13 @@ pub fn gen(self: @This()) !okc.Val.Typed {
     return .{ .typ = self.typ, .bare = .undef };
 }
 
-pub fn check(self: *@This(), typ: okc.Typ, arena: std.mem.Allocator) !okc.Expr.Info {
-    self.typ = try typ.solve(arena);
+pub fn check(
+    self: *@This(),
+    typ: okc.Typ,
+    gpa: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
+) !okc.Expr.Info {
+    self.typ = try typ.solve(gpa, arena);
     return .{
         .typ = self.typ,
         .mutable = false,

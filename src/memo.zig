@@ -20,21 +20,29 @@ pub fn Memo(T: type) type {
             self.* = undefined;
         }
 
-        pub fn box(self: *@This(), val: T, arena: std.mem.Allocator) error{OutOfMemory}!*const T {
+        pub fn box(
+            self: *@This(),
+            val: T,
+            arena: *std.heap.ArenaAllocator,
+        ) error{OutOfMemory}!*const T {
             if (self.map.getKey(&val)) |ptr| {
                 return ptr;
             }
-            const ptr = try arena.create(T);
+            const ptr = try arena.allocator().create(T);
             ptr.* = val;
             try self.map.put(ptr, {});
             return ptr;
         }
 
-        pub fn save(self: *@This(), slice: []const T, arena: std.mem.Allocator) error{OutOfMemory}![]const T {
+        pub fn save(
+            self: *@This(),
+            slice: []const T,
+            arena: *std.heap.ArenaAllocator,
+        ) error{OutOfMemory}![]const T {
             if (self.slice_map.getKey(slice)) |res| {
                 return res;
             }
-            const res = try arena.dupe(T, slice);
+            const res = try arena.allocator().dupe(T, slice);
             try self.slice_map.put(res, {});
             return res;
         }

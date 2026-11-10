@@ -4,7 +4,7 @@ const okc = @import("okc");
 
 gpa: std.mem.Allocator,
 tokens: []const okc.Lexer.Token,
-arena: std.mem.Allocator,
+arena: *std.heap.ArenaAllocator,
 err_msgs: std.ArrayList([]const u8) = .empty,
 tmp_name: []const u8 = "<unknown>",
 tmp_location: okc.Location = .fake,
@@ -13,7 +13,7 @@ err_cursor: usize = 0,
 
 pub fn init(
     gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
     tokens: []const okc.Lexer.Token,
 ) @This() {
     return .{
@@ -35,7 +35,7 @@ pub fn sep(self: *@This(), parse: anytype, args: anytype) ![]ParseRes(parse, arg
             } else break;
         }
     }
-    const slice = try self.arena.dupe(ParseRes(parse, args), vec.items);
+    const slice = try self.arena.allocator().dupe(ParseRes(parse, args), vec.items);
     return slice;
 }
 
@@ -58,7 +58,7 @@ pub fn manyTo(self: *@This(), vec: anytype, parse: anytype, args: anytype) ![]Pa
     while (try self.maybe(parse, args)) |item| {
         try vec.append(self.gpa, item);
     }
-    const slice = try self.arena.dupe(ParseRes(parse, args), vec.items);
+    const slice = try self.arena.allocator().dupe(ParseRes(parse, args), vec.items);
     return slice;
 }
 

@@ -125,7 +125,11 @@ pub fn gen(self: @This(), name: okc.Typ.Name, ctx: *okc.Codegen) !void {
         }
     }
     for (field_typs_to_init, self.fields, 0..) |*f_typ, field, i| {
-        f_typ.* = try field.typ.resolve(resolve_map, ctx.arena);
+        f_typ.* = try field.typ.resolve(.{
+            .gpa = ctx.gpa,
+            .arena = ctx.arena,
+            .map = resolve_map,
+        });
         const layout = try f_typ.getLayout(ctx);
         struct_layout.add(layout);
         try fields.put(field.name, .{

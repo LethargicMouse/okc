@@ -11,11 +11,11 @@ const Error = error{ OutOfMemory, Handled };
 pub fn read(
     io: std.Io,
     gpa: std.mem.Allocator,
-    arena: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
     path: []const u8,
     maybe_location: ?okc.Location,
 ) Error!@This() {
-    const code = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .unlimited) catch {
+    const code = std.Io.Dir.cwd().readFileAlloc(io, path, arena.allocator(), .unlimited) catch {
         if (maybe_location) |location| {
             std.log.err("{f}\n     failed to read `{s}`", .{ location, path });
         } else {
@@ -29,7 +29,7 @@ pub fn read(
     while (iter.next()) |line| {
         try vec.append(gpa, line);
     }
-    const lines = try arena.dupe([]const u8, vec.items);
+    const lines = try arena.allocator().dupe([]const u8, vec.items);
     return .{
         .code = code,
         .name = path,

@@ -4,7 +4,7 @@ const okc = @import("okc");
 
 io: std.Io,
 gpa: std.mem.Allocator,
-arena: std.mem.Allocator,
+arena: *std.heap.ArenaAllocator,
 failer: *okc.Failer,
 program: *okc.Program,
 root: []const u8,
