@@ -107,6 +107,7 @@ pub fn check(
     mutability: Mutability,
     ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
+    std.log.debug("check var `{s}`", .{self.name});
     const item = ctx.items.getPtr(self.name) orelse {
         ctx.failer.notDeclared(location, self.name);
         return .{ .typ = .err, .mutable = true };

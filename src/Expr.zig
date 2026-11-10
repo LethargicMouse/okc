@@ -352,7 +352,7 @@ pub const Hint = struct {
 pub const Check = struct {
     gpa: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
-    mod_typ: okc.Typ.Name,
+    mod_name: []const u8,
     items: std.StringHashMap(okc.Item.Info),
     modules: std.StringHashMap(okc.Module.Info),
     context: []const okc.Item.Fun.Param,
@@ -361,7 +361,7 @@ pub const Check = struct {
     pub fn typCheckCtx(self: @This()) okc.Typ.Check {
         return .{
             .arena = self.arena,
-            .mod_typ = self.mod_typ,
+            .mod_name = self.mod_name,
             .failer = self.failer,
             .gpa = self.gpa,
             .items = self.items,
@@ -370,9 +370,8 @@ pub const Check = struct {
 
     pub fn inside(self: @This(), typ: okc.Typ) ?@This() {
         var res = self;
-        const name = if (typ == .name) typ.name else return null;
-        res.mod_typ = name;
-        res.items = name.getItems(self.items) orelse return null;
+        res.mod_name = if (typ == .name) typ.name.name else return null;
+        res.items = okc.Module.getMembers(res.mod_name, self.items) orelse return null;
         return res;
     }
 };

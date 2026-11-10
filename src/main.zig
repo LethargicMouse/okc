@@ -99,13 +99,13 @@ pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {
         .checked_mods = &checked,
         .check_queue = &check_queue,
         .root = root,
-        .typ = .{ .name = name },
+        .name = name,
     };
     var info = try module.makeInfo(check_ctx);
     defer info.deinit(gpa);
     try module.check(&info, .main, check_ctx);
     while (check_queue.popFront()) |mod_name| {
-        check_ctx.typ = .{ .name = mod_name };
+        check_ctx.name = mod_name;
         try program.ast_modules.get(mod_name).?.check(
             program.modules.getPtr(mod_name).?,
             .simple,

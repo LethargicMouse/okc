@@ -124,13 +124,17 @@ pub const Typ = union(enum) {
     ) error{OutOfMemory}!@This() {
         std.log.debug("check `{f}`", .{self});
         if (self == .name) {
-            return self;
+            unreachable;
         }
         if (self == .loc_name) {
-            if (okc.Item.TypDecl.checkTyped(self.loc_name, ctx)) |resolved| {
+            const res = try updateRec(.{ .name = self.loc_name.bare }, check, .{ctx}, ctx.gpa, ctx.arena);
+            if (okc.Item.TypDecl.checkTyped(.{
+                .bare = res.name,
+                .location = self.loc_name.location,
+            }, ctx)) |resolved| {
                 return resolved;
             }
-            return updateRec(.{ .name = self.loc_name.bare }, check, .{ctx}, ctx.gpa, ctx.arena);
+            return res;
         }
         return self.updateRec(check, .{ctx}, ctx.gpa, ctx.arena);
     }
@@ -427,7 +431,7 @@ pub const Typ = union(enum) {
         arena: *std.heap.ArenaAllocator,
         items: std.StringHashMap(okc.Item.Info),
         failer: *okc.Failer,
-        mod_typ: okc.Typ.Name,
+        mod_name: []const u8,
     };
 
     pub const Resolve = struct {

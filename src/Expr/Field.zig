@@ -79,6 +79,7 @@ pub fn check(
             ctx,
         );
     }
+    std.log.debug("getting field of {f}", .{norm});
     const name = if (norm == .name) norm.name else {
         ctx.failer.noField(location, self.vari.name, norm);
         return err;
@@ -87,7 +88,7 @@ pub fn check(
         ctx.failer.noField(location, self.vari.name, norm);
         return err;
     };
-    const struc = if (item.kind == .typ_decl) item.kind.typ_decl else {
+    const struc = item.getTypDecl(name, ctx) orelse {
         ctx.failer.noField(location, self.vari.name, norm);
         return err;
     };

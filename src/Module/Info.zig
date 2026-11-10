@@ -26,7 +26,7 @@ pub fn load(dirs: []const []const u8, name: []const u8, location: okc.Location, 
         try ctx.check_queue.pushBack(ctx.gpa, name);
         try ctx.checked_mods.put(name, {});
     }
-    const res = try module.makeInfo(ctx.moduleCheckCtx(.{ .name = name }));
+    const res = try module.makeInfo(ctx.moduleCheckCtx(name));
     try ctx.program.modules.put(name, res);
     return res;
 }
@@ -63,7 +63,7 @@ pub const Load = struct {
     check_queue: *std.Deque([]const u8),
     root: []const u8,
 
-    pub fn moduleCheckCtx(self: @This(), typ: okc.Typ.Name) okc.Module.Check {
+    pub fn moduleCheckCtx(self: @This(), name: []const u8) okc.Module.Check {
         return .{
             .io = self.io,
             .gpa = self.gpa,
@@ -73,7 +73,7 @@ pub const Load = struct {
             .root = self.root,
             .check_queue = self.check_queue,
             .checked_mods = self.checked_mods,
-            .typ = typ,
+            .name = name,
         };
     }
 

@@ -12,10 +12,7 @@ variants: []const Variant,
 
 pub fn checkTyped(typ: okc.Typ.Name.Located, ctx: okc.Typ.Check) ?okc.Typ {
     std.log.debug("checkTypDecl {f}", .{typ.bare});
-    const name = if (std.mem.eql(u8, typ.bare.name, "Self"))
-        ctx.mod_typ.name
-    else
-        typ.bare.name;
+    const name = if (std.mem.eql(u8, typ.bare.name, "Self")) ctx.mod_name else typ.bare.name;
     const item = ctx.items.getPtr(name) orelse {
         ctx.failer.notDeclared(typ.location, typ.bare.name);
         return .err;
@@ -46,7 +43,7 @@ pub fn checkTyped(typ: okc.Typ.Name.Located, ctx: okc.Typ.Check) ?okc.Typ {
                 ctx.failer.wrongCount(typ.location, decl.generics.len, typ.bare.generics.len);
             }
             if (std.mem.eql(u8, typ.bare.name, "Self")) {
-                return .{ .name = ctx.mod_typ };
+                return .{ .name = .{ .name = ctx.mod_name, .generics = typ.bare.generics } };
             } else {
                 return null;
             }

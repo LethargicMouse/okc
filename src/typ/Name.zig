@@ -20,14 +20,6 @@ pub fn parseGenericTyp(ctx: *okc.Parser) !okc.Typ {
     } };
 }
 
-pub fn getItems(self: @This(), items: std.StringHashMap(okc.Item.Info)) ?std.StringHashMap(okc.Item.Info) {
-    const item = items.get(self.name).?;
-    switch (item.kind) {
-        .module => |mod| return mod.items,
-        else => return null,
-    }
-}
-
 pub fn updateGenerics(
     self: @This(),
     fun: anytype,

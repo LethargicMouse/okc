@@ -63,10 +63,7 @@ pub fn reg(self: *@This(), ctx: Check) !void {
         .constant => |*constt| .{ .vari = try constt.reg(ctx) },
         .use => |path| .{ .module = try .load(path, self.name, self.location, ctx.loadCtx()) },
     };
-    const name = if (std.mem.eql(u8, self.name, "Self"))
-        ctx.mod_typ.name
-    else
-        self.name;
+    const name = if (std.mem.eql(u8, self.name, "Self")) ctx.mod_name else self.name;
     if (ctx.items.get(name)) |prev| {
         ctx.failer.alreadyDeclared(self.location, self.name, prev.location);
         return;

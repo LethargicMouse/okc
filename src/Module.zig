@@ -105,6 +105,17 @@ pub fn check(self: @This(), info: *Info, kind: Kind, ctx: Check) !void {
     info.checkUsage(ctx.failer);
 }
 
+pub fn getMembers(
+    name: []const u8,
+    items: std.StringHashMap(okc.Item.Info),
+) ?std.StringHashMap(okc.Item.Info) {
+    const item = items.get(name).?;
+    switch (item.kind) {
+        .module => |mod| return mod.items,
+        else => return null,
+    }
+}
+
 pub const Kind = enum {
     main,
     simple,

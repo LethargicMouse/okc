@@ -8,7 +8,7 @@ arena: *std.heap.ArenaAllocator,
 items: *std.StringHashMap(okc.Item.Info),
 program: *okc.Program,
 failer: *okc.Failer,
-mod_typ: okc.Typ.Name,
+mod_name: []const u8,
 root: []const u8,
 checked_mods: *std.StringHashMap(void),
 check_queue: *std.Deque([]const u8),
@@ -32,7 +32,7 @@ pub fn typCheckCtx(self: @This()) okc.Typ.Check {
         .arena = self.arena,
         .items = self.items.*,
         .failer = self.failer,
-        .mod_typ = self.mod_typ,
+        .mod_name = self.mod_name,
     };
 }
 
@@ -46,7 +46,7 @@ pub fn stmtCheckCtx(
         .items = self.items,
         .failer = self.failer,
         .modules = self.program.modules,
-        .mod_typ = self.mod_typ,
+        .mod_name = self.mod_name,
         .header = header,
     };
 }
@@ -58,7 +58,7 @@ pub fn checkExprCtx(self: @This()) okc.Expr.Check {
         .items = self.items.*,
         .failer = self.failer,
         .modules = self.program.modules,
-        .mod_typ = self.mod_typ,
+        .mod_name = self.mod_name,
         .context = &.{},
     };
 }

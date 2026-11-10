@@ -8,7 +8,7 @@ arena: *std.heap.ArenaAllocator,
 failer: *okc.Failer,
 program: *okc.Program,
 root: []const u8,
-typ: okc.Typ.Name,
+name: []const u8,
 checked_mods: *std.StringHashMap(void),
 check_queue: *std.Deque([]const u8),
 
@@ -26,7 +26,7 @@ pub fn itemCheckCtx(self: @This(), items: *std.StringHashMap(okc.Item.Info)) okc
         .program = self.program,
         .items = items,
         .root = self.root,
-        .mod_typ = self.typ,
+        .mod_name = self.name,
         .check_queue = self.check_queue,
         .checked_mods = self.checked_mods,
     };

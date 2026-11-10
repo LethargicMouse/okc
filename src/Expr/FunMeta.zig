@@ -31,12 +31,16 @@ pub fn fillFromHeader(
     header: okc.Item.Fun.Header,
     ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
-    std.log.debug("ref header {any}", .{header});
     var resolve_map: std.StringHashMap(okc.Typ) = .init(ctx.gpa);
     defer resolve_map.deinit();
-    self.generics = try ctx.arena.allocator().alloc(okc.Typ, header.generics.len);
+    const mod_generics = if (ctx.items.get(ctx.mod_name)) |item| item.kind.typ_decl.generics else &.{};
+    std.log.debug("ref header {any} with mod generics {any}", .{ header, mod_generics });
+    self.generics = try ctx.arena.allocator().alloc(okc.Typ, header.generics.len + mod_generics.len);
     @memset(self.generics, .any);
-    for (header.generics, self.generics) |generic, *typ| {
+    for (header.generics, self.generics[0..header.generics.len]) |generic, *typ| {
+        try resolve_map.put(generic.name, .{ .lazy = .from(typ) });
+    }
+    for (mod_generics, self.generics[header.generics.len..]) |generic, *typ| {
         try resolve_map.put(generic.name, .{ .lazy = .from(typ) });
     }
     const params = try ctx.gpa.alloc(okc.Typ, header.params.len);
