@@ -12,6 +12,7 @@ pub const Lexeme = union(enum) {
     ctx,
     curl,
     curr,
+    deferr,
     dot,
     dot2,
     els,
@@ -61,6 +62,7 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: @typeInfo(Lexeme).@"union".tag_type.?) []const u8 {
         return switch (lexeme) {
+            .deferr => "`defer`",
             .pubb => "`pub`",
             .bang => "`!`",
             .ctx => "`ctx`",
