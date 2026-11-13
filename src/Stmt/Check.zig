@@ -10,7 +10,6 @@ vars_stack: std.ArrayList([]const u8) = .empty,
 defers: std.ArrayList(*const okc.Stmt) = .empty,
 loops_nested: u16 = 0,
 failer: *okc.Failer,
-modules: std.StringHashMap(okc.Module.Info),
 mod_name: []const u8,
 header: okc.Item.Fun.Header,
 
@@ -47,7 +46,6 @@ pub fn exprCheckCtx(self: @This()) okc.Expr.Check {
         .program = self.program,
         .items = self.items,
         .failer = self.failer,
-        .modules = self.modules,
         .mod_name = self.mod_name,
         .context = self.header.context,
     };
@@ -57,6 +55,7 @@ pub fn typCheckCtx(self: @This()) okc.Typ.Check {
     return .{
         .gpa = self.gpa,
         .failer = self.failer,
+        .modules = &self.program.modules,
         .mod_name = self.mod_name,
         .arena = self.arena,
         .items = self.items,

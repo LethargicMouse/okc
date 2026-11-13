@@ -1,0 +1,10 @@
+use Std;
+
+type Self {
+    _count: u64,
+    vector: [*][*]u8,
+}
+
+pub fn get(self: Self, index: u64) []u8 {
+    return Std.measure_cstr(self.vector[index]);
+}

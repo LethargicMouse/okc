@@ -1,0 +1,20 @@
+use Std;
+use Std.Vec;
+
+fn main() i32 {
+    // hello world
+    Std.print("hello world\n");
+
+    // vec usage
+    let mut vec = Vec.init();
+    defer vec.deinit();
+    vec.push("one");
+    vec.push("two");
+    vec.push("three");
+    while (s : vec.data) {
+        Std.print(s);
+        Std.print(" ");
+    }
+
+    return 0;
+}

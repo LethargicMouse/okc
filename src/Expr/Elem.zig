@@ -27,15 +27,20 @@ pub fn genOnVals(ref: okc.Val.Ref, index: okc.Val.Typed, ctx: *okc.Codegen) !okc
             };
         },
         .slice => |slice| {
-            const ptrptr = try ref.genGEPIB(.int(0), ctx);
-            const ptrref: okc.Val.Ref = .{
-                .inner_typ = .{ .ptr = .{
-                    .typ = slice.typ,
-                    .mutable = false,
-                } },
-                .val = .{ .tmp = ptrptr },
-            };
-            const ptr = try ptrref.load(ctx);
+            var ptr: u32 = std.math.maxInt(u32);
+            if (slice.sized) {
+                const ptrptr = try ref.genGEPIB(.int(0), ctx);
+                const ptrref: okc.Val.Ref = .{
+                    .inner_typ = .{ .ptr = .{
+                        .typ = slice.typ,
+                        .mutable = false,
+                    } },
+                    .val = .{ .tmp = ptrptr },
+                };
+                ptr = try ptrref.load(ctx);
+            } else {
+                ptr = try ref.load(ctx);
+            }
             const tmp = ctx.counter.next();
             try ctx.buffer.print(
                 ctx.gpa,

@@ -113,7 +113,7 @@ pub fn check(
         .slice => |slice| return self.checkSlice(slice, location, ctx),
         .err => return err,
         .lazy => unreachable,
-        .prime, .ptr, .any, .array, .fun, .int, .typ, .never => {
+        else => {
             ctx.failer.cannotInfer(.any, location);
             for (self.fields) |*field| {
                 _ = try field.expr.check(.{}, ctx);

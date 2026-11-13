@@ -10,6 +10,7 @@ pub const Typ = union(enum) {
     int,
     lazy: Lazy,
     loc_name: Name.Located,
+    maybe: Maybe,
     name: Name,
     never,
     prime: Prime,
@@ -21,6 +22,7 @@ pub const Typ = union(enum) {
     pub const Fun = @import("typ/Fun.zig");
     pub const Lazy = @import("typ/Lazy.zig");
     pub const LLPrinter = @import("typ/LLPrinter.zig");
+    pub const Maybe = @import("typ/Maybe.zig");
     pub const Name = @import("typ/Name.zig");
     pub const Prime = @import("typ/prime.zig").Prime;
     pub const Ptr = @import("typ/Ptr.zig");
@@ -56,13 +58,14 @@ pub const Typ = union(enum) {
                 try okc.Item.TypDecl.genNamed(name.bare, ctx);
                 return ctx.typ_decls.get(name.bare).?.layout;
             },
-            .any, .err, .int, .lazy, .typ, .never => unreachable,
+            else => unreachable,
         }
     }
 
     pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!okc.Typ {
         return ctx.either(.{
             parseNever,
+            Maybe.parseTyp,
             Fun.parseTyp,
             Name.parseGenericTyp,
             okc.Typ.parseVerbal,
@@ -151,6 +154,7 @@ pub const Typ = union(enum) {
             .ptr => |aptr| aptr.eql(b.ptr),
             .array => |arr| arr.eql(b.array),
             .lazy => |alazy| alazy.typ == b.lazy.typ,
+            .maybe => |amaybe| amaybe.eql(b.maybe),
             .any, .err, .int, .typ, .never => true,
         };
     }
@@ -166,12 +170,14 @@ pub const Typ = union(enum) {
             .array => |array| array.hashIn(hasher),
             .lazy => |inner| hasher.update(std.mem.asBytes(&inner)),
             .slice => |slice| slice.hashIn(hasher),
+            .maybe => |maybe| maybe.hashIn(hasher),
             .any, .err, .int, .typ, .never => {},
         }
     }
 
     pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
         switch (self) {
+            .maybe => |maybe| try maybe.format(writer),
             .prime => |prime| try prime.format(writer),
             .loc_name => |located| try located.bare.format(writer),
             .name => |name| try name.format(writer),
@@ -345,6 +351,12 @@ pub const Typ = union(enum) {
                 }
                 return a;
             },
+            .maybe => |amaybe| {
+                if (amaybe.typ != b.maybe.typ and amaybe.typ.unifyOrNull(b.maybe.typ.*, mode) == null) {
+                    return null;
+                }
+                return a;
+            },
             .lazy, .any, .err, .int, .loc_name, .name, .typ, .never => unreachable,
         }
     }
@@ -398,8 +410,12 @@ pub const Typ = union(enum) {
                     .mutable = slice.mutable,
                 } };
             },
-            .any, .err, .prime, .int, .lazy, .typ, .never => return self,
+            .maybe => |maybe| {
+                const new = try @call(.auto, fun, .{maybe.typ.*} ++ args);
+                return .{ .maybe = .{ .typ = try memo.box(new, arena) } };
+            },
             .loc_name => unreachable,
+            .any, .err, .prime, .int, .lazy, .typ, .never => return self,
         }
     }
 
@@ -411,6 +427,7 @@ pub const Typ = union(enum) {
         gpa: std.mem.Allocator,
         arena: *std.heap.ArenaAllocator,
         items: *std.StringHashMap(okc.Item.Info),
+        modules: *std.StringHashMap(okc.Module.Info),
         failer: *okc.Failer,
         mod_name: []const u8,
     };

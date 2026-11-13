@@ -15,7 +15,7 @@ pub fn getTypDecl(
     if (self.kind == .typ_decl) {
         return self.kind.typ_decl;
     } else if (self.kind == .module) {
-        if (ctx.modules.get(typ.name).?.items.get(typ.name)) |item| {
+        if (ctx.program.modules.get(typ.name).?.items.get(typ.name)) |item| {
             return item.getTypDecl(typ, ctx);
         } else {
             return null;

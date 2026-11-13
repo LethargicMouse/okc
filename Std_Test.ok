@@ -1,9 +1,10 @@
 use Std;
 use Std.Vec;
+use Std.Args;
 
-fn main() i32 {
+fn main(args: Args) i32 {
     // hello world
-    Std.print("hello world\n");
+    Std.puts("hello world\n");
 
     // vec usage
     let mut vec = Vec.init();
@@ -12,9 +13,12 @@ fn main() i32 {
     vec.push("two");
     vec.push("three");
     while (s : vec.data) {
-        Std.print(s);
-        Std.print(" ");
+        Std.puts(s);
+        Std.puts(" ");
     }
+
+    // args usage
+    Std.putsln(args.get(0));
 
     return 0;
 }

@@ -143,16 +143,18 @@ const Error = error{ ParseFailed, OutOfMemory };
 
 pub const ErrMsgsPrinter = struct {
     msgs: []const []const u8,
+    found: []const u8,
 
     pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
         if (self.msgs.len == 1) {
-            try writer.print("     expected  {s}", .{self.msgs[0]});
+            try writer.print("     expected  {s}\n        found  {s}", .{ self.msgs[0], self.found });
             return;
         }
         try writer.writeAll("     expected:");
         for (self.msgs) |msg| {
             try writer.print("\n       - {s}", .{msg});
         }
+        try writer.print("\n     found  {s}", .{self.found});
     }
 };
 

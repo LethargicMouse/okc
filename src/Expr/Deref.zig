@@ -30,10 +30,10 @@ pub fn check(self: *@This(), location: okc.Location, ctx: okc.Expr.Check) !okc.E
             };
         },
         .err => return err,
-        .prime, .name, .any, .array, .slice, .fun, .int, .loc_name, .typ, .never => {
+        .lazy => unreachable,
+        else => {
             ctx.failer.fail(location, "cannot dereference type `{f}`", .{info.typ});
             return err;
         },
-        .lazy => unreachable,
     }
 }

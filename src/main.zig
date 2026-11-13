@@ -24,7 +24,7 @@ pub const Typ = @import("typ.zig").Typ;
 pub const Val = @import("val.zig").Val;
 
 pub const std_options: std.Options = .{
-    .log_level = .debug,
+    .log_level = .warn,
 };
 
 pub fn main(init: std.process.Init) u8 {
@@ -56,7 +56,7 @@ fn runCLI(io: std.Io, gpa: std.mem.Allocator, args: std.process.Args) !u8 {
     // skip exec name
     std.debug.assert(iter.skip());
     if (iter.next()) |path| {
-        return runFile(io, gpa, path);
+        return runFile(io, gpa, path, &iter);
     } else {
         std.log.err("no source path given", .{});
         return error.Handled;
@@ -67,9 +67,20 @@ const build_dir_path = "build";
 const out_ll_path = build_dir_path ++ "/out.ll";
 pub const out_path = build_dir_path ++ "/out";
 
-pub fn runFile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !u8 {
+pub fn runFile(
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    path: []const u8,
+    passthru: *std.process.Args.Iterator,
+) !u8 {
     try compile(io, gpa, path);
-    return runCmd(io, &.{out_path});
+    var argv = std.ArrayList([]const u8).empty;
+    defer argv.deinit(gpa);
+    try argv.append(gpa, out_path);
+    while (passthru.next()) |arg| {
+        try argv.append(gpa, arg);
+    }
+    return runCmd(io, argv.items);
 }
 
 pub fn compile(io: std.Io, gpa: std.mem.Allocator, path: []const u8) !void {

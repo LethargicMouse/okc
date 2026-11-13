@@ -166,6 +166,7 @@ fn lexVerbal(self: *@This()) ?Token {
 }
 
 const verbal_list = [_]LexPair{
+    .{ .str = "null", .lexeme = .nulll },
     .{ .str = "defer", .lexeme = .deferr },
     .{ .str = "pub", .lexeme = .pubb },
     .{ .str = "ctx", .lexeme = .ctx },
@@ -200,6 +201,7 @@ fn lexByList(self: *@This()) ?Token {
 }
 
 const lex_list = [_]LexPair{
+    .{ .str = "?", .lexeme = .quest },
     .{ .str = "!", .lexeme = .bang },
     .{ .str = ">=", .lexeme = .moreq },
     .{ .str = ">", .lexeme = .mor },

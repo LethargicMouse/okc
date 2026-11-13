@@ -30,6 +30,7 @@ pub fn typCheckCtx(self: @This()) okc.Typ.Check {
     return .{
         .gpa = self.gpa,
         .arena = self.arena,
+        .modules = &self.program.modules,
         .items = self.items,
         .failer = self.failer,
         .mod_name = self.mod_name,
@@ -46,7 +47,6 @@ pub fn stmtCheckCtx(
         .program = self.program,
         .items = self.items,
         .failer = self.failer,
-        .modules = self.program.modules,
         .mod_name = self.mod_name,
         .header = header,
     };
@@ -59,7 +59,6 @@ pub fn checkExprCtx(self: @This()) okc.Expr.Check {
         .program = self.program,
         .items = self.items,
         .failer = self.failer,
-        .modules = self.program.modules,
         .mod_name = self.mod_name,
         .context = &.{},
     };

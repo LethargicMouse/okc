@@ -17,8 +17,14 @@ pub fn checkTyped(typ: okc.Typ.Name.Located, ctx: okc.Typ.Check) ?okc.Typ {
         ctx.failer.notDeclared(typ.location, typ.bare.name, ctx.mod_name);
         return .err;
     };
-    switch (item.kind) {
-        .module => unreachable,
+    sw: switch (item.kind) {
+        .module => {
+            if (ctx.modules.get(name).?.items.get(name)) |self_item| {
+                continue :sw self_item.kind;
+            } else {
+                return null;
+            }
+        },
         .fun => {
             ctx.failer.notTyp(typ.location, typ.bare.name);
             return .err;

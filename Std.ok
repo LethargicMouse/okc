@@ -8,9 +8,18 @@ pub fn free<T>(ptr: [*]mut T) void {
     C.free(ptr);
 }
 
-pub fn print(s: []u8) void {
+pub fn puts(s: []u8) void {
     let mut written = 0;
     while (written < s.len) {
         written += C.write(1, s.ptr, s.len);
     }
+}
+
+pub fn putsln(s: []u8) void {
+    puts(s);
+    puts("\n");
+}
+
+pub fn measure_cstr(ptr: [*]u8) []u8 {
+    return .{ ptr = ptr, len = C.strlen(ptr) };
 }

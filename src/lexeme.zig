@@ -36,11 +36,13 @@ pub const Lexeme = union(enum) {
     moreq,
     mut,
     name: []const u8,
+    nulll,
     parl,
     parr,
     pipe,
     plus,
     pubb,
+    quest,
     rem,
     ret,
     semi,
@@ -62,6 +64,8 @@ pub const Lexeme = union(enum) {
 
     pub fn describe(lexeme: @typeInfo(Lexeme).@"union".tag_type.?) []const u8 {
         return switch (lexeme) {
+            .nulll => "`null`",
+            .quest => "`?`",
             .deferr => "`defer`",
             .pubb => "`pub`",
             .bang => "`!`",

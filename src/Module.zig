@@ -27,10 +27,12 @@ pub fn load(dirs: []const []const u8, name: []const u8, location: okc.Location, 
 
 fn parseOrDie(ctx: *okc.Parser) error{ OutOfMemory, Handled }!okc.Module {
     const module = try ctx.maybe(okc.Module.parse, .{}) orelse {
-        std.log.err("failed to parse {f}\n{f}\n        found  {s}", .{
+        std.log.err("failed to parse {f}\n{f}", .{
             ctx.tokens[ctx.err_cursor].location,
-            okc.Parser.ErrMsgsPrinter{ .msgs = ctx.err_msgs.items },
-            okc.Lexeme.describe(ctx.tokens[ctx.err_cursor].lexeme),
+            okc.Parser.ErrMsgsPrinter{
+                .msgs = ctx.err_msgs.items,
+                .found = okc.Lexeme.describe(ctx.tokens[ctx.err_cursor].lexeme),
+            },
         });
         if (ctx.err_cursor != 0) {
             const before = ctx.tokens[ctx.err_cursor - 1];
@@ -64,7 +66,7 @@ pub fn gen(self: @This(), name: []const u8, ctx: *okc.Codegen) error{ WriteFaile
         .module = ctx.module,
         .name = .{ .name = "main" },
         .fun = .{
-            .params = &.{},
+            .params = &.{.{ .name = .{ .name = "Args" } }},
             .context = &.{},
             .ret_typ = try okc.Typ.memo.box(.{ .prime = .i32 }, ctx.arena),
         },

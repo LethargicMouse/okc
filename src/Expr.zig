@@ -162,6 +162,7 @@ fn parseLiteral(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!@This() {
         .fals => .{ .bool = false },
         .char => |c| .{ .char = c },
         .undef => .{ .undef = .{} },
+        .nulll => .nulll,
         else => return error.ParseFailed,
     };
     ctx.cursor += 1;
@@ -170,6 +171,7 @@ fn parseLiteral(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!@This() {
 
 pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!okc.Val.Ref {
     switch (self.kind) {
+        .nulll => unreachable,
         .i_array => unreachable,
         .member => |member| return member.genRef(ctx),
         .vari => |vari| return vari.genRef(ctx),
@@ -201,6 +203,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory 
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) error{ OutOfMemory, WriteFailed }!okc.Val.Typed {
     return switch (self.kind) {
+        .nulll => unreachable,
         .i_array => |array| array.gen(ctx),
         .member => |member| member.gen(ctx),
         .method => |method| method.gen(ctx),
@@ -261,6 +264,7 @@ pub fn genInt(self: @This(), ctx: *okc.Codegen) !u64 {
 
 fn checkComptime(self: @This(), failer: *okc.Failer) void {
     switch (self.kind) {
+        .nulll => unreachable,
         .i_array => unreachable,
         .member => unreachable,
         .str, .bool, .char, .int, .sizeof, .vari, .undef => {},
@@ -303,6 +307,7 @@ pub fn checkConst(self: *@This(), hint: okc.Expr.Hint, ctx: Check) !okc.Typ {
 
 pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}!okc.Expr.Info {
     return switch (self.kind) {
+        .nulll => unreachable,
         .i_array => |*array| array.check(hint.typ, self.location, ctx),
         .member => |*member| member.check(
             self.location,

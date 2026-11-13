@@ -31,6 +31,7 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
         .name => |name| try writer.print("%\"{f}\"", .{name}),
         .loc_name => |located| try writer.print("%\"{f}\"", .{located.bare}),
         .never => try writer.writeAll("void"),
+        .maybe => |maybe| try writer.print("type {{ i1, {f} }}", .{maybe}),
         .lazy, .any, .int, .err, .typ => unreachable,
     }
 }
