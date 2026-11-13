@@ -85,8 +85,8 @@ pub fn cannotInfer(self: *@This(), typ: okc.Typ, location: okc.Location) void {
     }
 }
 
-pub fn notDeclared(self: *@This(), location: okc.Location, name: []const u8) void {
-    self.fail(location, "item `{s}` is not declared", .{name});
+pub fn notDeclared(self: *@This(), location: okc.Location, name: []const u8, in: []const u8) void {
+    self.fail(location, "item `{s}` is not declared in `{s}`", .{ name, in });
 }
 
 pub fn wrongCount(self: *@This(), location: okc.Location, a: usize, b: usize) void {

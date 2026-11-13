@@ -40,7 +40,7 @@ pub fn checkUsage(self: @This(), name: []const u8, failer: *okc.Failer) void {
 pub const Kind = union(enum) {
     alias: okc.Item.TypAlias,
     fun: okc.Item.Fun.Header.Info,
-    module: okc.Module.Info,
+    module: void,
     typ_decl: okc.Item.TypDecl.Info,
     vari: okc.Stmt.Declare.Info,
 

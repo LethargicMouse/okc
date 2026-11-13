@@ -4,8 +4,10 @@ const okc = @import("okc");
 
 gpa: std.mem.Allocator,
 arena: *std.heap.ArenaAllocator,
+program: *okc.Program,
 items: *std.StringHashMap(okc.Item.Info),
 vars_stack: std.ArrayList([]const u8) = .empty,
+defers: std.ArrayList(*const okc.Stmt) = .empty,
 loops_nested: u16 = 0,
 failer: *okc.Failer,
 modules: std.StringHashMap(okc.Module.Info),
@@ -15,6 +17,7 @@ header: okc.Item.Fun.Header,
 pub fn deinit(self: *@This()) void {
     self.freeVars(0);
     self.vars_stack.deinit(self.gpa);
+    self.defers.deinit(self.gpa);
     self.* = undefined;
 }
 
@@ -41,7 +44,8 @@ pub fn exprCheckCtx(self: @This()) okc.Expr.Check {
     return .{
         .gpa = self.gpa,
         .arena = self.arena,
-        .items = self.items.*,
+        .program = self.program,
+        .items = self.items,
         .failer = self.failer,
         .modules = self.modules,
         .mod_name = self.mod_name,
@@ -55,7 +59,7 @@ pub fn typCheckCtx(self: @This()) okc.Typ.Check {
         .failer = self.failer,
         .mod_name = self.mod_name,
         .arena = self.arena,
-        .items = self.items.*,
+        .items = self.items,
     };
 }
 

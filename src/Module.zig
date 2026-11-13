@@ -5,9 +5,25 @@ const okc = @import("okc");
 pub const Check = @import("Module/Check.zig");
 pub const GenInfo = @import("Module/GenInfo.zig");
 pub const Info = @import("Module/Info.zig");
+pub const Load = @import("Module/Load.zig");
 
 items: []okc.Item,
 location: okc.Location,
+
+pub fn load(dirs: []const []const u8, name: []const u8, location: okc.Location, ctx: Load) !void {
+    if (ctx.program.modules.contains(name)) {
+        return;
+    }
+    const path = try ctx.makePath(dirs, name, ctx.arena);
+    const module: okc.Module = try .read(ctx.io, ctx.gpa, path, ctx.arena, location);
+    try ctx.program.ast_modules.put(name, module);
+    if (!ctx.checked_mods.contains(name)) {
+        try ctx.check_queue.pushBack(ctx.gpa, name);
+        try ctx.checked_mods.put(name, {});
+    }
+    const res = try module.makeInfo(ctx.moduleCheckCtx(name));
+    try ctx.program.modules.put(name, res);
+}
 
 fn parseOrDie(ctx: *okc.Parser) error{ OutOfMemory, Handled }!okc.Module {
     const module = try ctx.maybe(okc.Module.parse, .{}) orelse {
@@ -108,10 +124,10 @@ pub fn check(self: @This(), info: *Info, kind: Kind, ctx: Check) !void {
 pub fn getMembers(
     name: []const u8,
     ctx: okc.Expr.Check,
-) ?std.StringHashMap(okc.Item.Info) {
-    const item = ctx.items.get(name).?;
+) ?*std.StringHashMap(okc.Item.Info) {
+    const item = ctx.items.getPtr(name).?;
     switch (item.kind) {
-        .module => |mod| return mod.items,
+        .module => return &ctx.program.modules.getPtr(name).?.items,
         else => return null,
     }
 }

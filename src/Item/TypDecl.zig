@@ -14,7 +14,7 @@ pub fn checkTyped(typ: okc.Typ.Name.Located, ctx: okc.Typ.Check) ?okc.Typ {
     std.log.debug("checkTypDecl {f}", .{typ.bare});
     const name = if (std.mem.eql(u8, typ.bare.name, "Self")) ctx.mod_name else typ.bare.name;
     const item = ctx.items.getPtr(name) orelse {
-        ctx.failer.notDeclared(typ.location, typ.bare.name);
+        ctx.failer.notDeclared(typ.location, typ.bare.name, ctx.mod_name);
         return .err;
     };
     switch (item.kind) {

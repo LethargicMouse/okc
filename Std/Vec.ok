@@ -9,6 +9,10 @@ pub fn init() Self<T> {
     return .{ data = &[], cap = 0 };
 }
 
+pub fn deinit(self: Self<T>) void {
+    Std.free(self.data.ptr);
+}
+
 pub fn push(self: &mut Self<T>, val: T) void {
     if (self.data.len == self.cap) {
         self.grow();

@@ -17,6 +17,11 @@ pub fn parseStmt(ctx: *okc.Parser) !okc.Stmt {
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
+    var i = ctx.defers.items.len;
+    while (i > 0) {
+        i -= 1;
+        try ctx.defers.items[i].gen(ctx);
+    }
     if (self.expr) |expr| {
         const val = try expr.gen(ctx);
         try ctx.buffer.print(ctx.gpa, "\n  ret {f}", .{val});

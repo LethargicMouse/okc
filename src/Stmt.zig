@@ -6,6 +6,7 @@ pub const Branch = @import("Stmt/Branch.zig");
 pub const brek = @import("Stmt/brek.zig");
 pub const Check = @import("Stmt/Check.zig");
 pub const Declare = @import("Stmt/Declare.zig");
+pub const Defer = @import("Stmt/Defer.zig");
 pub const Expr = @import("Stmt/Expr.zig");
 pub const For = @import("Stmt/For.zig");
 pub const ForRange = @import("Stmt/ForRange.zig");
@@ -22,6 +23,7 @@ kind: Kind,
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!void {
     switch (self.kind) {
+        .deferr => |deferr| try ctx.defers.append(ctx.gpa, deferr.inner),
         .swi => |swi| try swi.gen(ctx),
         .for_range => |forr| try forr.gen(ctx),
         .forr => |forr| try forr.gen(ctx),
@@ -38,8 +40,9 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) error{ WriteFailed, OutOfMemory }!v
     }
 }
 
-pub fn parse(ctx: *okc.Parser) !@This() {
+pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!@This() {
     return ctx.either(.{
+        Defer.parseStmt,
         Switch.parseStmt,
         unre.parseStmt,
         brek.parseStmt,
@@ -58,6 +61,7 @@ pub fn parse(ctx: *okc.Parser) !@This() {
 
 pub fn check(self: *@This(), ctx: *Check) error{OutOfMemory}!okc.ControlFlow {
     return switch (self.kind) {
+        .deferr => |deferr| try deferr.check(ctx),
         .swi => |*swi| swi.check(ctx),
         .for_range => |*forr| forr.check(ctx),
         .forr => |*forr| forr.check(ctx),
@@ -78,6 +82,7 @@ pub const Kind = union(enum) {
     assign: Assign,
     brek,
     declare: Declare.Named,
+    deferr: Defer,
     expr: Expr,
     for_range: ForRange,
     forr: For,

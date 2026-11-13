@@ -118,7 +118,7 @@ pub fn check(
 ) !okc.Expr.Info {
     std.log.debug("check var `{s}`", .{self.name});
     const item = ctx.items.getPtr(self.name) orelse {
-        ctx.failer.notDeclared(location, self.name);
+        ctx.failer.notDeclared(location, self.name, ctx.mod_name);
         return .{ .typ = .err, .mutable = true };
     };
     switch (access) {

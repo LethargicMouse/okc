@@ -21,6 +21,7 @@ counter: okc.Counter = .init(),
 modules: std.StringHashMap(*okc.Module.GenInfo),
 ast_modules: std.StringHashMap(okc.Module),
 context: []const okc.Item.Fun.Param = &.{},
+defers: std.ArrayList(*const okc.Stmt) = .empty,
 
 pub fn init(
     ctx: struct {
@@ -73,5 +74,6 @@ pub fn deinit(self: *@This()) void {
     self.consts.deinit();
     self.extra_buffer.deinit(self.gpa);
     self.buffer.deinit(self.gpa);
+    self.defers.deinit(self.gpa);
     self.* = undefined;
 }

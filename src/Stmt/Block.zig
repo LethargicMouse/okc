@@ -12,8 +12,12 @@ pub fn parse(ctx: *okc.Parser) error{ OutOfMemory, ParseFailed }!okc.Stmt.Block 
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
+    const rbp = ctx.defers.items.len;
     for (self.stmts) |stmt| {
         try stmt.gen(ctx);
+    }
+    while (ctx.defers.items.len > rbp) {
+        try ctx.defers.pop().?.gen(ctx);
     }
 }
 

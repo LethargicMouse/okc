@@ -410,7 +410,7 @@ pub const Typ = union(enum) {
     pub const Check = struct {
         gpa: std.mem.Allocator,
         arena: *std.heap.ArenaAllocator,
-        items: std.StringHashMap(okc.Item.Info),
+        items: *std.StringHashMap(okc.Item.Info),
         failer: *okc.Failer,
         mod_name: []const u8,
     };

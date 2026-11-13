@@ -65,7 +65,7 @@ pub fn reg(self: *@This(), ctx: Check) !void {
         .typ_decl => |typ| .{ .typ_decl = try typ.makeInfo(ctx) },
         .fun => |*fun| .{ .fun = try fun.header.makeInfo(ctx) },
         .constant => |*constt| .{ .vari = try constt.reg(ctx) },
-        .use => |path| .{ .module = try .load(path, self.name, self.location, ctx.loadCtx()) },
+        .use => |path| .{ .module = try okc.Module.load(path, self.name, self.location, ctx.loadCtx()) },
     };
     const name = if (std.mem.eql(u8, self.name, "Self")) ctx.mod_name else self.name;
     if (ctx.items.get(name)) |prev| {

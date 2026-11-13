@@ -1,10 +1,9 @@
-const std = @import("std");
-
 const okc = @import("okc");
 
 pub const Array = @import("Expr/Array.zig");
 pub const Binary = @import("Expr/Binary.zig");
 pub const Call = @import("Expr/Call.zig");
+pub const Check = @import("Expr/Check.zig");
 pub const Deref = @import("Expr/Deref.zig");
 pub const Elem = @import("Expr/Elem.zig");
 pub const Field = @import("Expr/Field.zig");
@@ -348,33 +347,6 @@ pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}
 pub const Hint = struct {
     typ: okc.Typ = .any,
     mutable: bool = false,
-};
-
-pub const Check = struct {
-    gpa: std.mem.Allocator,
-    arena: *std.heap.ArenaAllocator,
-    mod_name: []const u8,
-    items: std.StringHashMap(okc.Item.Info),
-    modules: std.StringHashMap(okc.Module.Info),
-    context: []const okc.Item.Fun.Param,
-    failer: *okc.Failer,
-
-    pub fn typCheckCtx(self: @This()) okc.Typ.Check {
-        return .{
-            .arena = self.arena,
-            .mod_name = self.mod_name,
-            .failer = self.failer,
-            .gpa = self.gpa,
-            .items = self.items,
-        };
-    }
-
-    pub fn inside(self: @This(), typ: okc.Typ) ?@This() {
-        var res = self;
-        res.mod_name = if (typ == .name) typ.name.name else return null;
-        res.items = okc.Module.getMembers(res.mod_name, self) orelse return null;
-        return res;
-    }
 };
 
 pub const Checked = struct {

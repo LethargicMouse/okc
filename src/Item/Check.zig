@@ -13,7 +13,7 @@ root: []const u8,
 checked_mods: *std.StringHashMap(void),
 check_queue: *std.Deque([]const u8),
 
-pub fn loadCtx(self: @This()) okc.Module.Info.Load {
+pub fn loadCtx(self: @This()) okc.Module.Load {
     return .{
         .io = self.io,
         .gpa = self.gpa,
@@ -30,7 +30,7 @@ pub fn typCheckCtx(self: @This()) okc.Typ.Check {
     return .{
         .gpa = self.gpa,
         .arena = self.arena,
-        .items = self.items.*,
+        .items = self.items,
         .failer = self.failer,
         .mod_name = self.mod_name,
     };
@@ -43,6 +43,7 @@ pub fn stmtCheckCtx(
     return .{
         .gpa = self.gpa,
         .arena = self.arena,
+        .program = self.program,
         .items = self.items,
         .failer = self.failer,
         .modules = self.program.modules,
@@ -55,7 +56,8 @@ pub fn checkExprCtx(self: @This()) okc.Expr.Check {
     return .{
         .gpa = self.gpa,
         .arena = self.arena,
-        .items = self.items.*,
+        .program = self.program,
+        .items = self.items,
         .failer = self.failer,
         .modules = self.program.modules,
         .mod_name = self.mod_name,

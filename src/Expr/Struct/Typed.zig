@@ -16,7 +16,7 @@ pub fn check(
         .mutable = false,
     };
     const item = ctx.items.getPtr(self.typ.name) orelse {
-        ctx.failer.notDeclared(location, self.typ.name);
+        ctx.failer.notDeclared(location, self.typ.name, ctx.mod_name);
         return err;
     };
     item.used = true;
