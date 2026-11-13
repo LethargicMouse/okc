@@ -30,6 +30,7 @@ pub fn checkLoop(self: @This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
 pub fn check(self: @This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
     var res: okc.ControlFlow = .cont;
     const rbp = ctx.vars_stack.items.len;
+    defer ctx.freeVars(rbp);
     for (self.stmts, 0..) |*stmt, i| {
         const control_flow = try stmt.check(ctx);
         if (control_flow != .cont) {
@@ -41,6 +42,5 @@ pub fn check(self: @This(), ctx: *okc.Stmt.Check) !okc.ControlFlow {
             }
         }
     }
-    ctx.freeVars(rbp);
     return res;
 }

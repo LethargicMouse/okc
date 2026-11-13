@@ -1,19 +1,27 @@
+use Std;
+
 type Self<T> {
     data: []mut T,
     cap: u64,
 }
 
-fn init() Self<T> {
-    return .{
-        data = &[],
-        cap = 0,
-    };
+pub fn init() Self<T> {
+    return .{ data = &[], cap = 0 };
 }
 
-fn push(self: Self<T>, val: T) void {
+pub fn push(self: &mut Self<T>, val: T) void {
     if (self.data.len == self.cap) {
         self.grow();
     }
     self.data.len += 1;
     self.data[self.data.len - 1] = val;
+}
+
+fn grow(self: &mut Self<T>) void {
+    if (self.cap == 0) {
+        self.cap = 8;
+    } else {
+        self.cap *= 2;
+    }
+    self.data.ptr = Std.realloc(self.data.ptr, self.cap);
 }

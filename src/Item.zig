@@ -11,6 +11,7 @@ pub const TypAlias = @import("Item/TypAlias.zig");
 pub const TypDecl = @import("Item/TypDecl.zig");
 
 name: []const u8,
+public: bool,
 kind: Kind,
 location: okc.Location,
 
@@ -28,6 +29,8 @@ fn parseUsePath(ctx: *okc.Parser) ![]const u8 {
 }
 
 fn parseUse(ctx: *okc.Parser) !@This() {
+    var public = false;
+    if (try ctx.maybe(okc.Parser.expect, .{ .pubb, .quiet }) != null) public = true;
     try ctx.expect(.use, .quiet);
     const path = try ctx.many(parseUsePath, .{});
     const location = ctx.getLocation();
@@ -35,6 +38,7 @@ fn parseUse(ctx: *okc.Parser) !@This() {
     try ctx.expect(.semi, .loud);
     return .{
         .location = location,
+        .public = public,
         .name = name,
         .kind = .{ .use = path },
     };
@@ -69,9 +73,28 @@ pub fn reg(self: *@This(), ctx: Check) !void {
         return;
     }
     try ctx.items.put(name, .{
+        .public = self.public,
+        .used = self.public,
         .location = self.location,
         .kind = kind,
     });
+    if (std.mem.eql(u8, self.name, "Self")) {
+        for (self.kind.typ_decl.generics) |generic| {
+            if (ctx.items.get(generic.name)) |prev| {
+                ctx.failer.alreadyDeclared(generic.location, generic.name, prev.location);
+            }
+            try ctx.items.put(generic.name, .{
+                .public = false,
+                .used = true,
+                .location = self.location,
+                .kind = .{ .vari = .{
+                    .mutable = false,
+                    .can_be_mutable = false,
+                    .typ = .typ,
+                } },
+            });
+        }
+    }
 }
 
 pub fn regGenerics(generics: []const okc.Item.Generic, musage: ?std.bit_set.Dynamic, ctx: *okc.Stmt.Check) !void {

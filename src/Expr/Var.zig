@@ -5,6 +5,11 @@ const okc = @import("okc");
 name: []const u8,
 kind: Kind = .simple,
 
+pub fn markMutable(self: @This(), ctx: okc.Expr.Check) void {
+    std.log.debug("mark `{s}` as mutable", .{self.name});
+    ctx.items.getPtr(self.name).?.kind.vari.mutated = true;
+}
+
 pub fn parse(ctx: *okc.Parser, mode: okc.Parser.Mode) !@This() {
     const name = try ctx.parseName(mode);
     return .{ .name = name };
@@ -94,17 +99,21 @@ pub fn checkIn(
             return .{ .typ = typ, .mutable = false };
         }
     }
+    if (std.mem.eql(u8, name_typ.name, ctx.mod_name)) {
+        return self.check(location, mutability, .local, ctx);
+    }
     const inner_ctx = ctx.inside(typ) orelse {
         ctx.failer.noMember(location, self.name, typ);
         return .{ .typ = .err, .mutable = true };
     };
-    return self.check(location, mutability, inner_ctx);
+    return self.check(location, mutability, .external, inner_ctx);
 }
 
 pub fn check(
     self: *@This(),
     location: okc.Location,
     mutability: Mutability,
+    access: Access,
     ctx: okc.Expr.Check,
 ) !okc.Expr.Info {
     std.log.debug("check var `{s}`", .{self.name});
@@ -112,9 +121,12 @@ pub fn check(
         ctx.failer.notDeclared(location, self.name);
         return .{ .typ = .err, .mutable = true };
     };
+    switch (access) {
+        .external => if (!item.public) ctx.failer.private(location, self.name),
+        .local => item.used = true,
+    }
     switch (item.kind) {
         .fun => |info| {
-            item.used = true;
             self.kind = .{ .fun = undefined };
             return self.kind.fun.fillFromHeader(info.header, ctx);
         },
@@ -123,7 +135,6 @@ pub fn check(
             return .{ .typ = .typ, .mutable = false };
         },
         .vari => |*vari_decl| {
-            item.used = true;
             if (mutability == .mutable) {
                 if (vari_decl.mutable) {
                     vari_decl.mutated = true;
@@ -147,4 +158,9 @@ pub const Kind = union(enum) {
 pub const Mutability = enum {
     constant,
     mutable,
+};
+
+pub const Access = enum {
+    external,
+    local,
 };

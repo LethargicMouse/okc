@@ -3,11 +3,14 @@ const okc = @import("okc");
 header: okc.Item.Fun.Header,
 
 pub fn parseItem(ctx: *okc.Parser) !okc.Item {
+    var public = false;
+    if (try ctx.maybe(okc.Parser.expect, .{ .pubb, .quiet }) != null) public = true;
     try ctx.expect(.ext, .quiet);
     const header: okc.Item.Fun.Header = try .parse(ctx, .loud);
     try ctx.expect(.semi, .loud);
     return .{
         .name = ctx.tmp_name,
+        .public = public,
         .location = ctx.tmp_location,
         .kind = .{ .ext_fun = .{ .header = header } },
     };

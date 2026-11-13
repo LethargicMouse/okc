@@ -5,6 +5,7 @@ const okc = @import("okc");
 pub const Val = union(enum) {
     global: okc.Typ.Name,
     int: u64,
+    nullptr,
     str: usize,
     tmp: u32,
     undef,
@@ -19,6 +20,7 @@ pub const Val = union(enum) {
             .tmp => |tmp| try writer.print("%t{}", .{tmp}),
             .global => |name| try writer.print("@\"{f}\"", .{name}),
             .undef => try writer.writeAll("poison"),
+            .nullptr => try writer.writeAll("null"),
         }
     }
 };

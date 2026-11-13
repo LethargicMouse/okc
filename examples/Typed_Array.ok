@@ -1,6 +1,6 @@
 extern fn puts(s: [*]u8) void;
 
-type number {
+type Number {
     name: []u8,
 }
 
@@ -10,7 +10,7 @@ fn main() i32 {
     return 0;
 }
 
-let list = <number>[
+let list = <Number>[
     .{ name = "six" },
     .{ name = "seven" }
 ];

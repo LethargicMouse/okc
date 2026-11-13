@@ -35,7 +35,7 @@ pub fn genRef(self: @This(), ctx: *okc.Codegen) !okc.Val.Ref {
             .bare = .{ .int = try vari.inner_typ.array.getLen(ctx) },
         }, ctx);
     }
-    const info = vari.inner_typ.getFieldGenInfo(self.vari.name, ctx.typ_decls);
+    const info = try okc.Item.TypDecl.Field.GenInfo.get(vari.inner_typ, self.vari.name, ctx);
     const tmp = try vari.genGEPIB(.int(info.index), ctx);
     return .{
         .inner_typ = info.typ,

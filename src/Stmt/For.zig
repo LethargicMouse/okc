@@ -77,7 +77,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !void {
     const end_label = ctx.counter.next();
     try okc.Stmt.Branch.cond(.{ .tmp = less }, body_label, end_label, ctx);
     // var = slice[i]
-    const elem = try slice.genElem(ival_, ctx);
+    const elem = try okc.Expr.Elem.genOnVals(slice, ival_, ctx);
     try ctx.vars.put(self.vari, elem);
     // <body>
     try self.body.gen(ctx);

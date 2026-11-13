@@ -52,6 +52,8 @@ pub fn checkTyped(typ: okc.Typ.Name.Located, ctx: okc.Typ.Check) ?okc.Typ {
 }
 
 pub fn parseItem(ctx: *okc.Parser) !okc.Item {
+    var public = false;
+    if (try ctx.maybe(okc.Parser.expect, .{ .pubb, .quiet }) != null) public = true;
     try ctx.expect(.typ, .quiet);
     const location = ctx.getLocation();
     const name = try ctx.parseName(.loud);
@@ -66,6 +68,7 @@ pub fn parseItem(ctx: *okc.Parser) !okc.Item {
     try ctx.expect(.curr, .loud);
     return .{
         .name = name,
+        .public = public,
         .location = location,
         .kind = .{ .typ_decl = .{
             .generics = generics,
@@ -136,6 +139,7 @@ pub fn gen(self: @This(), name: okc.Typ.Name, ctx: *okc.Codegen) !void {
         if (field.default) |expr| {
             try default_fields_vec.append(ctx.gpa, .{
                 .expr = expr,
+                .typ = f_typ.*,
                 .index = i,
             });
         }
@@ -224,11 +228,34 @@ pub const Field = struct {
 
     pub const DefaultedGenInfo = struct {
         index: usize,
+        typ: okc.Typ,
         expr: okc.Expr,
     };
 
     pub const GenInfo = struct {
         index: usize,
         typ: okc.Typ,
+
+        pub fn get(typ: okc.Typ, name: []const u8, ctx: *okc.Codegen) !@This() {
+            std.log.debug("get field `{s}` of `{f}`", .{ name, typ });
+            if (typ == .name) {
+                try okc.Item.TypDecl.genNamed(typ.name, ctx);
+                return ctx.typ_decls.get(typ.name).?.fields.get(name).?;
+            } else if (std.mem.eql(u8, name, "ptr")) {
+                return .{
+                    .typ = .{ .slice = .{
+                        .typ = typ.slice.typ,
+                        .mutable = typ.slice.mutable,
+                        .sized = false,
+                    } },
+                    .index = 0,
+                };
+            } else {
+                return .{
+                    .typ = .{ .prime = .u64 },
+                    .index = 1,
+                };
+            }
+        }
     };
 };

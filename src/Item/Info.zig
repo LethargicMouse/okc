@@ -4,7 +4,8 @@ const okc = @import("okc");
 
 kind: Kind,
 location: okc.Location,
-used: bool = false,
+public: bool,
+used: bool,
 
 pub fn getTypDecl(
     self: @This(),

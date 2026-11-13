@@ -2,14 +2,14 @@ const std = @import("std");
 
 const okc = @import("okc");
 
-typ: okc.Typ,
+callee_typ: okc.Typ,
 args: []okc.Expr,
 context: okc.Expr.Call.Context,
-maybe_first: ?okc.Expr.Info.Located,
+maybe_first: ?okc.Expr.Checked,
 location: okc.Location,
 
 pub fn check(self: @This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
-    const fun = self.typ.getFun(self.location, ctx.failer) orelse {
+    const fun = self.callee_typ.getFun(self.location, ctx.failer) orelse {
         for (self.args) |*arg| {
             _ = try arg.check(.{}, ctx);
         }
@@ -23,7 +23,20 @@ pub fn check(self: @This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
     var params = fun.params;
     if (self.maybe_first) |first| {
         params = fun.params[1..];
-        _ = first.bare.typ.unify(fun.params[0], self.location, ctx.failer);
+        var fstyp = first.info.typ;
+        if (fun.params[0] == .ptr and first.info.typ != .ptr) {
+            fstyp = .{ .ptr = .{
+                .typ = try okc.Typ.memo.box(first.info.typ, ctx.arena),
+                .mutable = first.info.mutable,
+            } };
+            if (first.info.mutable) {
+                first.expr.markMutable(ctx);
+                const ptr = try ctx.arena.allocator().create(okc.Expr.Ptr);
+                ptr.* = .{ .expr = first.expr.* };
+                first.expr.kind = .{ .ptr = ptr };
+            }
+        }
+        _ = fstyp.unify(fun.params[0], first.expr.location, ctx.failer);
     }
     var args = self.args;
     if (self.args.len != params.len) {

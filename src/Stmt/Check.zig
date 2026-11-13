@@ -13,6 +13,7 @@ mod_name: []const u8,
 header: okc.Item.Fun.Header,
 
 pub fn deinit(self: *@This()) void {
+    self.freeVars(0);
     self.vars_stack.deinit(self.gpa);
     self.* = undefined;
 }
@@ -29,6 +30,8 @@ pub fn declare(
     }
     try self.vars_stack.append(self.gpa, name);
     try self.items.put(name, .{
+        .public = false,
+        .used = false,
         .location = location,
         .kind = .{ .vari = vari },
     });

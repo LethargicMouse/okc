@@ -21,8 +21,3 @@ pub fn getElem(self: @This(), location: okc.Location, failer: *okc.Failer) ?@Thi
         .lazy => unreachable,
     }
 }
-
-pub const Located = struct {
-    bare: okc.Expr.Info,
-    location: okc.Location,
-};

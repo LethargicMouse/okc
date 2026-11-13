@@ -10,12 +10,15 @@ pub const Header = @import("Fun/Header.zig");
 pub const Param = @import("Fun/Param.zig");
 
 pub fn parseItem(ctx: *okc.Parser) !okc.Item {
+    var public = false;
+    if (try ctx.maybe(okc.Parser.expect, .{ .pubb, .quiet }) != null) public = true;
     const header: Header = try .parse(ctx, .quiet);
     const location = ctx.tmp_location;
     const name = ctx.tmp_name;
     const body: okc.Stmt.Block = try .parse(ctx);
     return .{
         .name = name,
+        .public = public,
         .location = location,
         .kind = .{ .fun = .{
             .header = header,
@@ -30,6 +33,7 @@ pub fn gen(
     fun_typ: okc.Typ.Fun,
     ctx: *okc.Codegen,
 ) !void {
+    std.log.debug("gen fun {f} : {f}", .{ name, fun_typ });
     ctx.context = self.header.context;
     try ctx.extra_buffer.print(
         ctx.gpa,
@@ -121,7 +125,6 @@ pub fn check(self: @This(), location: okc.Location, generics_usage: std.bit_set.
     if (self.header.ret_typ == .never and control_flow != .never) {
         ctx.failer.fail(location, "function may return", .{});
     }
-    stmt_check.freeVars(0);
 }
 
 pub const GenReq = struct {
@@ -149,7 +152,15 @@ pub const GenReq = struct {
         if (was.found_existing) {
             return;
         }
-        for (fun.header.generics, req.name.generics) |generic, typ| {
+        const mod_generics = if (ctx.module.items.get(ctx.module.name)) |self_item|
+            self_item.typ_decl.generics
+        else
+            &.{};
+        const glen = fun.header.generics.len;
+        for (fun.header.generics, req.name.generics[0..glen]) |generic, typ| {
+            try ctx.resolve_map.put(generic.name, typ);
+        }
+        for (mod_generics, req.name.generics[glen..]) |generic, typ| {
             try ctx.resolve_map.put(generic.name, typ);
         }
         try fun.gen(req.name, req.fun, ctx);

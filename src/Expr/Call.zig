@@ -25,7 +25,7 @@ pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info 
         .context = self.context,
         .location = self.expr.location,
         .maybe_first = null,
-        .typ = callee.typ,
+        .callee_typ = callee.typ,
     };
     return info.check(hint, ctx);
 }

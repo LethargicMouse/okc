@@ -92,3 +92,7 @@ pub fn notDeclared(self: *@This(), location: okc.Location, name: []const u8) voi
 pub fn wrongCount(self: *@This(), location: okc.Location, a: usize, b: usize) void {
     self.fail(location, "expected {} arguments\n        found {}", .{ a, b });
 }
+
+pub fn private(self: *@This(), location: okc.Location, name: []const u8) void {
+    self.fail(location, "item `{s}` is private", .{name});
+}

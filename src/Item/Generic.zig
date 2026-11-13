@@ -1,5 +1,3 @@
-const std = @import("std");
-
 const okc = @import("okc");
 
 name: []const u8,

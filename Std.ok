@@ -1,6 +1,10 @@
 use Std.C;
 
-fn print(s: []u8) void {
+pub fn realloc<T>(ptr: [*]mut T, new_cap: u64) [*]mut T {
+    return C.realloc(ptr, new_cap * #size<T>);
+}
+
+pub fn print(s: []u8) void {
     let mut written = 0;
     while (written < s.len) {
         written += C.write(1, s.ptr, s.len);

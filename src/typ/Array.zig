@@ -9,7 +9,7 @@ pub fn getLen(self: @This(), ctx: *okc.Codegen) !u64 {
     switch (self.index) {
         .len => |len| return len,
         .enumm => |name| {
-            try okc.Item.Const.genNamed(name, ctx);
+            try okc.Item.TypDecl.genNamed(.{ .name = name }, ctx);
             return ctx.typ_decls.get(.{ .name = name }).?.variants.count();
         },
     }

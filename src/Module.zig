@@ -107,9 +107,9 @@ pub fn check(self: @This(), info: *Info, kind: Kind, ctx: Check) !void {
 
 pub fn getMembers(
     name: []const u8,
-    items: std.StringHashMap(okc.Item.Info),
+    ctx: okc.Expr.Check,
 ) ?std.StringHashMap(okc.Item.Info) {
-    const item = items.get(name).?;
+    const item = ctx.items.get(name).?;
     switch (item.kind) {
         .module => |mod| return mod.items,
         else => return null,

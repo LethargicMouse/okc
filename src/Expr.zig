@@ -325,6 +325,7 @@ pub fn check(self: *@This(), hint: okc.Expr.Hint, ctx: Check) error{OutOfMemory}
         .vari => |*vari| vari.check(
             self.location,
             if (hint.mutable) .mutable else .constant,
+            .local,
             ctx,
         ),
         .char => .{
@@ -371,7 +372,19 @@ pub const Check = struct {
     pub fn inside(self: @This(), typ: okc.Typ) ?@This() {
         var res = self;
         res.mod_name = if (typ == .name) typ.name.name else return null;
-        res.items = okc.Module.getMembers(res.mod_name, self.items) orelse return null;
+        res.items = okc.Module.getMembers(res.mod_name, self) orelse return null;
         return res;
     }
 };
+
+pub const Checked = struct {
+    info: Info,
+    expr: *okc.Expr,
+};
+
+pub fn markMutable(self: @This(), ctx: okc.Expr.Check) void {
+    switch (self.kind) {
+        .vari => |vari| vari.markMutable(ctx),
+        else => {},
+    }
+}

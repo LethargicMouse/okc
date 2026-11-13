@@ -2,23 +2,39 @@ const std = @import("std");
 
 const okc = @import("okc");
 
+// mutable cuz lazies that are returned by `fillFromHeader` point here
 generics: []okc.Typ,
-typ: okc.Typ,
+typ: okc.Typ.Fun,
 
 pub fn gen(self: @This(), fun_name: []const u8, ctx: *okc.Codegen) !okc.Val.Typed {
+    const generics = try ctx.gpa.dupe(okc.Typ, self.generics);
+    defer ctx.gpa.free(generics);
+    for (generics) |*typ| {
+        typ.* = try typ.solve(ctx.gpa, ctx.arena);
+        typ.* = try typ.resolve(.{
+            .gpa = ctx.gpa,
+            .arena = ctx.arena,
+            .map = ctx.resolve_map,
+        });
+    }
     var name = okc.Typ.Name{
         .name = fun_name,
-        .generics = self.generics,
+        .generics = try okc.Typ.memo.save(generics, ctx.arena),
     };
     if (ctx.module.items.get(fun_name).? == .ext_fun) {
         name.generics = &.{};
     }
-    const typ: okc.Typ = .{ .fun = self.typ.fun };
+    const typ: okc.Typ = .{ .fun = self.typ };
     const solved = try typ.solve(ctx.gpa, ctx.arena);
+    const resolved = try solved.resolve(.{
+        .gpa = ctx.gpa,
+        .arena = ctx.arena,
+        .map = ctx.resolve_map,
+    });
     try ctx.fun_queue.append(ctx.gpa, .{
         .module = ctx.module,
         .name = name,
-        .fun = solved.fun,
+        .fun = resolved.fun,
     });
     return .{
         .typ = solved,
@@ -49,14 +65,14 @@ pub fn fillFromHeader(
         target.* = try param.typ.resolve(.{ .gpa = ctx.gpa, .arena = ctx.arena, .map = resolve_map });
     }
     const ret_typ = try header.ret_typ.resolve(.{ .gpa = ctx.gpa, .arena = ctx.arena, .map = resolve_map });
-    self.typ = .{ .fun = .{
+    self.typ = .{
         .params = try okc.Typ.memo.save(params, ctx.arena),
         .ret_typ = try okc.Typ.memo.box(ret_typ, ctx.arena),
         .context = header.context,
-    } };
+    };
     std.log.debug("got fun ref {f}", .{self.typ});
     return .{
-        .typ = self.typ,
+        .typ = .{ .fun = self.typ },
         .mutable = false,
     };
 }

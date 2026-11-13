@@ -5,7 +5,6 @@ const okc = @import("okc");
 typ: okc.Typ,
 
 pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-    std.log.debug("llvm of `{f}`", .{self.typ});
     switch (self.typ) {
         .prime => |prime| {
             const sprime = switch (prime) {

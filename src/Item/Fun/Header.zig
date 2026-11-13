@@ -51,7 +51,6 @@ pub fn makeInfo(self: *@This(), ctx: okc.Item.Check) !Info {
     for (self.generics, 0..) |generic, i| {
         generics_usage.setValue(i, ctx.items.get(generic.name).?.used);
     }
-    stmt_ctx.freeVars(0);
     return .{
         .generics_usage = generics_usage,
         .header = self.*,

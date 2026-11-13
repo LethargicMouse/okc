@@ -24,7 +24,7 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
     const ref = try self.expr.genRef(ctx);
     const start = try self.start.gen(ctx);
     const end = try self.end.gen(ctx);
-    const ptr_ref = try ref.genElem(start, ctx);
+    const ptr_ref = try okc.Expr.Elem.genOnVals(ref, start, ctx);
     const ptr = try ptr_ref.toPtrTypVal(ctx.arena);
     const len = try okc.Expr.Binary.genOnVals(.sub, start.typ, end.bare, start.bare, ctx);
     var res = okc.Val.Typed{

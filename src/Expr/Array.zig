@@ -7,6 +7,7 @@ exprs: []okc.Expr,
 typ: okc.Typ = .any,
 
 pub fn castToSlice(typ: okc.Typ.Array, val: okc.Val, ctx: *okc.Codegen) !okc.Val.Typed {
+    std.log.debug("cast array ptr {f} to slice", .{typ});
     var res = okc.Val.Typed{
         .typ = .{ .slice = .{
             .typ = typ.typ,
@@ -15,17 +16,14 @@ pub fn castToSlice(typ: okc.Typ.Array, val: okc.Val, ctx: *okc.Codegen) !okc.Val
         } },
         .bare = .undef,
     };
-    try res.genIV(.{
-        .typ = .{ .ptr = .{
-            .typ = typ.typ,
-            .mutable = false,
-        } },
-        .bare = val,
-    }, 0, ctx);
-    try res.genIV(.{
-        .typ = .{ .prime = .u64 },
-        .bare = .{ .int = try typ.getLen(ctx) },
-    }, 1, ctx);
+    const len = try typ.getLen(ctx);
+    const ptr_typ = okc.Typ{ .slice = .{ .typ = typ.typ, .mutable = false, .sized = false } };
+    if (len == 0) {
+        try res.genIV(.{ .typ = ptr_typ, .bare = .nullptr }, 0, ctx);
+    } else {
+        try res.genIV(.{ .typ = ptr_typ, .bare = val }, 0, ctx);
+    }
+    try res.genIV(.{ .typ = .{ .prime = .u64 }, .bare = .{ .int = len } }, 1, ctx);
     return res;
 }
 
@@ -44,7 +42,6 @@ pub fn parseExpr(ctx: *okc.Parser) !okc.Expr {
         .kind = .{ .array = .{
             .exprs = exprs,
             .typ_hint = mtyp,
-            .typ = undefined,
         } },
     };
 }
@@ -57,8 +54,17 @@ fn parseTypHint(ctx: *okc.Parser) !okc.Typ {
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
+    var inner_typ = try self.typ.solve(ctx.gpa, ctx.arena);
+    inner_typ = try inner_typ.resolve(.{
+        .gpa = ctx.gpa,
+        .arena = ctx.arena,
+        .map = ctx.resolve_map,
+    });
     var res = okc.Val.Typed{
-        .typ = try self.typ.solve(ctx.gpa, ctx.arena),
+        .typ = .{ .array = .{
+            .typ = try okc.Typ.memo.box(inner_typ, ctx.arena),
+            .index = .{ .len = self.exprs.len },
+        } },
         .bare = .undef,
     };
     for (self.exprs, 0..) |expr, i| {
@@ -69,7 +75,11 @@ pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
 }
 
 pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
-    try ctx.buffer.print(ctx.gpa, "{f} [", .{okc.Typ.LLPrinter{ .typ = self.typ }});
+    const typ = okc.Typ{ .array = .{
+        .typ = try okc.Typ.memo.box(self.typ, ctx.arena),
+        .index = .{ .len = self.exprs.len },
+    } };
+    try ctx.buffer.print(ctx.gpa, "{f} [", .{okc.Typ.LLPrinter{ .typ = typ }});
     if (self.exprs.len != 0) {
         try ctx.buffer.print(ctx.gpa, "\n  ", .{});
         _ = try self.exprs[0].genConst(ctx);
@@ -79,39 +89,36 @@ pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
         }
     }
     try ctx.buffer.print(ctx.gpa, "\n]", .{});
-    return self.typ;
+    return typ;
 }
 
 pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info {
-    var inner_typ: okc.Typ = .any;
     var inner_hint: okc.Typ = .any;
     if (self.typ_hint) |typ| {
         const checked = try typ.check(ctx.typCheckCtx());
-        inner_typ = checked;
+        self.typ = checked;
         inner_hint = checked;
     } else if (hint == .array) {
         inner_hint = hint.array.typ.*;
     }
     if (self.exprs.len == 0) {
-        const typ = okc.Typ{ .array = .{
-            .typ = try okc.Typ.memo.box(inner_hint, ctx.arena),
-            .index = .{ .len = 0 },
-        } };
         return .{
-            .typ = typ,
+            .typ = .{ .array = .{
+                .typ = try okc.Typ.memo.box(.{ .lazy = .from(&self.typ) }, ctx.arena),
+                .index = .{ .len = 0 },
+            } },
             .mutable = true,
         };
     }
     for (self.exprs) |*expr| {
         const info = try expr.check(.{ .typ = inner_hint }, ctx);
-        inner_typ = info.typ.unify(inner_typ, expr.location, ctx.failer);
+        self.typ = info.typ.unify(self.typ, expr.location, ctx.failer);
     }
-    self.typ = okc.Typ{ .array = .{
-        .typ = try okc.Typ.memo.box(inner_typ, ctx.arena),
-        .index = .{ .len = self.exprs.len },
-    } };
     return .{
-        .typ = self.typ,
+        .typ = .{ .array = .{
+            .typ = try okc.Typ.memo.box(self.typ, ctx.arena),
+            .index = .{ .len = self.exprs.len },
+        } },
         .mutable = false,
     };
 }
@@ -129,7 +136,7 @@ pub const Indexed = struct {
         switch (res.typ.array.index) {
             .len => {},
             .enumm => |name| {
-                try okc.Item.Const.genNamed(name, ctx);
+                try okc.Item.TypDecl.genNamed(.{ .name = name }, ctx);
                 res.typ.array.index =
                     .{ .len = ctx.typ_decls.get(.{ .name = name }).?.variants.count() };
             },

@@ -24,8 +24,7 @@ pub fn check(
         ctx.failer.notCompound(location, self.typ);
         return err;
     };
-    const generics = try ctx.gpa.alloc(okc.Typ, decl.generics.len);
-    defer ctx.gpa.free(generics);
+    const generics = try ctx.arena.allocator().alloc(okc.Typ, decl.generics.len);
     if (self.typ.generics.len == 0) {
         @memset(generics, .any);
     } else {

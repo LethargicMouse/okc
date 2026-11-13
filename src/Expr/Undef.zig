@@ -10,11 +10,11 @@ pub fn gen(self: @This()) !okc.Val.Typed {
 
 pub fn check(
     self: *@This(),
-    typ: okc.Typ,
+    hint: okc.Typ,
     gpa: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
 ) !okc.Expr.Info {
-    self.typ = try typ.solve(gpa, arena);
+    self.typ = try hint.solve(gpa, arena);
     return .{
         .typ = self.typ,
         .mutable = false,

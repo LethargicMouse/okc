@@ -5,9 +5,12 @@ const okc = @import("okc");
 declare: okc.Stmt.Declare,
 
 pub fn parseItem(ctx: *okc.Parser) !okc.Item {
+    var public = false;
+    if (try ctx.maybe(okc.Parser.expect, .{ .pubb, .quiet }) != null) public = true;
     const declare: okc.Stmt.Declare.Named = try .parse(ctx);
     return .{
         .name = declare.name,
+        .public = public,
         .location = ctx.tmp_location,
         .kind = .{ .constant = .{ .declare = declare.bare } },
     };

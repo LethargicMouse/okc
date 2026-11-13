@@ -1,1 +1,3 @@
-extern fn write(fd: i32, ptr: [*]u8, len: u64) u64;
+pub extern fn write(fd: i32, ptr: [*]u8, len: u64) u64;
+
+pub extern fn realloc<T>(ptr: [*]mut T, len: u64) [*]mut T;

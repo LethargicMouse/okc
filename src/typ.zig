@@ -35,6 +35,7 @@ pub const Typ = union(enum) {
     }
 
     pub fn getLayout(self: @This(), ctx: *okc.Codegen) !okc.Layout {
+        std.log.debug("get layout of `{f}`", .{self});
         switch (self) {
             .prime => |prime| return prime.getLayout(),
             .array => |array| {
@@ -77,27 +78,6 @@ pub const Typ = union(enum) {
     fn parseNever(ctx: *okc.Parser) !okc.Typ {
         try ctx.expect(.bang, .quiet);
         return .never;
-    }
-
-    pub fn getFieldGenInfo(
-        self: @This(),
-        name: []const u8,
-        typ_decls: okc.HashMap(Name, okc.Item.TypDecl.GenInfo),
-    ) okc.Item.TypDecl.Field.GenInfo {
-        std.log.debug("get field `{s}` of `{f}`", .{ name, self });
-        return if (self == .name)
-            typ_decls.get(self.name).?.fields.get(name).?
-        else if (std.mem.eql(u8, name, "ptr")) .{
-            .typ = .{ .slice = .{
-                .typ = self.slice.typ,
-                .mutable = self.slice.mutable,
-                .sized = false,
-            } },
-            .index = 0,
-        } else .{
-            .typ = .{ .prime = .u64 },
-            .index = 1,
-        };
     }
 
     pub fn solve(self: @This(), gpa: std.mem.Allocator, arena: *std.heap.ArenaAllocator) error{OutOfMemory}!@This() {
@@ -292,15 +272,16 @@ pub const Typ = union(enum) {
             }
             return b;
         }
-        if (a == .slice and b == .ptr and b.ptr.typ.* == .array and
-            a.slice.mutable == b.ptr.mutable)
-        {
-            if (a.slice.typ != b.ptr.typ.array.typ and
-                a.slice.typ.unifyOrNull(b.ptr.typ.array.typ.*, mode) == null)
-            {
-                return null;
+        if (a == .slice and b == .ptr) {
+            const bnorm = b.ptr.typ.normalise();
+            if (bnorm == .array and a.slice.mutable == b.ptr.mutable) {
+                if (a.slice.typ != bnorm.array.typ and
+                    a.slice.typ.unifyOrNull(bnorm.array.typ.*, mode) == null)
+                {
+                    return null;
+                }
+                return a;
             }
-            return a;
         }
         if (a == .int and b.isNumber()) {
             return b;

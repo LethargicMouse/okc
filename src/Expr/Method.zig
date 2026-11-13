@@ -46,20 +46,26 @@ pub fn check(self: *@This(), hint: okc.Typ, ctx: okc.Expr.Check) !okc.Expr.Info 
             .mutable = false,
         };
     }
-    var first: ?okc.Expr.Info.Located = null;
+    var first: ?okc.Expr.Checked = null;
     if (caller.typ == .typ) {
         caller.typ = .{ .name = .{ .name = self.expr.kind.vari.name } };
     } else {
         first = .{
-            .bare = caller,
-            .location = self.expr.location,
+            .info = caller,
+            .expr = &self.expr,
         };
     }
+    // now can mutate caller, first does not depend on it
+    if (caller.typ == .ptr) {
+        caller.typ = caller.typ.ptr.typ.*;
+    }
     const callee = try self.vari.checkIn(caller.typ, self.name_location, .constant, ctx);
-    self.caller = caller.typ.name;
+    if (callee.typ != .err) {
+        self.caller = caller.typ.name;
+    }
     const info_call: okc.Expr.Call.Info = .{
         .location = self.name_location,
-        .typ = callee.typ,
+        .callee_typ = callee.typ,
         .args = self.args,
         .context = self.context,
         .maybe_first = first,

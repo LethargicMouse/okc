@@ -27,22 +27,43 @@ pub fn parseBody(ctx: *okc.Parser) ![]Field {
 }
 
 pub fn gen(self: @This(), ctx: *okc.Codegen) !okc.Val.Typed {
-    if (self.typ == .name) {
-        try okc.Item.TypDecl.genNamed(self.typ.name, ctx);
+    std.log.debug("gen expr struct of type `{f}`", .{self.typ});
+    var typ = try self.typ.solve(ctx.gpa, ctx.arena);
+    typ = try self.typ.resolve(.{
+        .gpa = ctx.gpa,
+        .arena = ctx.arena,
+        .map = ctx.resolve_map,
+    });
+    if (typ == .name) {
+        try okc.Item.TypDecl.genNamed(typ.name, ctx);
     }
     var res = okc.Val.Typed{
-        .typ = self.typ,
+        .typ = typ,
         .bare = .undef,
     };
-    if (self.typ == .name) {
-        for (ctx.typ_decls.get(self.typ.name).?.default_fields) |field| {
-            const typ_val = try field.expr.gen(ctx);
+    if (typ == .name) {
+        for (ctx.typ_decls.get(typ.name).?.default_fields) |field| {
+            var typ_val = try field.expr.gen(ctx);
+            if (field.typ == .slice and typ_val.typ == .ptr) {
+                typ_val = try okc.Expr.Array.castToSlice(
+                    typ_val.typ.ptr.typ.array,
+                    typ_val.bare,
+                    ctx,
+                );
+            }
             try res.genIV(typ_val, field.index, ctx);
         }
     }
     for (self.fields) |field| {
-        const typ_val = try field.expr.gen(ctx);
-        const info = self.typ.getFieldGenInfo(field.name, ctx.typ_decls);
+        var typ_val = try field.expr.gen(ctx);
+        const info = try okc.Item.TypDecl.Field.GenInfo.get(typ, field.name, ctx);
+        if (info.typ == .slice and typ_val.typ == .ptr) {
+            typ_val = try okc.Expr.Array.castToSlice(
+                typ_val.typ.ptr.typ.array,
+                typ_val.bare,
+                ctx,
+            );
+        }
         try res.genIV(typ_val, info.index, ctx);
     }
     return res;
@@ -62,7 +83,7 @@ pub fn genConst(self: @This(), ctx: *okc.Codegen) !okc.Typ {
             }
         }
         for (self.fields) |field| {
-            const info = self.typ.getFieldGenInfo(field.name, ctx.typ_decls);
+            const info = try okc.Item.TypDecl.Field.GenInfo.get(self.typ, field.name, ctx);
             fields[info.index] = field.expr;
         }
         try ctx.buffer.print(ctx.gpa, "\n  ", .{});
@@ -120,13 +141,14 @@ fn checkSlice(
             if (was_ptr) |_| {
                 ctx.failer.newFieldSecond(field.location, field.name);
             }
-            const expected = okc.Typ{ .ptr = .{
+            const expected = okc.Typ{ .slice = .{
                 .typ = slice.typ,
                 .mutable = slice.mutable,
+                .sized = false,
             } };
             const info = try field.expr.check(.{ .typ = expected }, ctx);
             const typ = info.typ.unify(expected, field.expr.location, ctx.failer);
-            was_ptr = if (typ == .ptr) typ.ptr.typ else try okc.Typ.memo.box(.err, ctx.arena);
+            was_ptr = if (typ == .slice) typ.slice.typ else try okc.Typ.memo.box(.err, ctx.arena);
         } else if (std.mem.eql(u8, field.name, "len")) {
             if (was_len) {
                 ctx.failer.newFieldSecond(field.location, field.name);
